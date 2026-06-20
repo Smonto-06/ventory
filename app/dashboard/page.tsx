@@ -4,11 +4,11 @@ import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
 
 function fmt(n: number) {
-  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+  return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 }
 
 function fmtTime(d: Date) {
-  return new Date(d).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+  return new Date(d).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -84,7 +84,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-xl font-bold text-gray-900">Panel Principal</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          {now.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          {now.toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
       </div>
 
@@ -107,6 +107,12 @@ export default async function DashboardPage() {
               <p className="text-xs text-gray-500 mt-1">
                 Apertura: {fmt(openingBalance)} · Total esperado: {fmt(openingBalance + cashTotal)}
               </p>
+              <a
+                href="/dashboard/cash-register/close"
+                className="inline-block mt-2 text-xs font-medium text-red-500 hover:text-red-600 hover:underline"
+              >
+                Cerrar caja →
+              </a>
             </>
           ) : (
             <>
@@ -115,6 +121,12 @@ export default async function DashboardPage() {
                 <p className="text-sm font-semibold text-gray-600">Cerrada</p>
               </div>
               <p className="text-xs text-gray-500 mt-1">No hay caja activa</p>
+              <a
+                href="/dashboard/cash-register/open"
+                className="inline-block mt-2 text-xs font-medium text-green-600 hover:text-green-700 hover:underline"
+              >
+                Abrir caja →
+              </a>
             </>
           )}
         </div>
@@ -127,7 +139,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <a
           href="/dashboard/pos"
           className="flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-3 transition-colors"
@@ -135,6 +147,23 @@ export default async function DashboardPage() {
           <span className="text-xl">🛒</span>
           <span className="font-semibold text-sm">Ir al POS</span>
         </a>
+        {activeCashSession ? (
+          <a
+            href="/dashboard/cash-register/close"
+            className="flex items-center gap-3 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl px-4 py-3 transition-colors"
+          >
+            <span className="text-xl">🔐</span>
+            <span className="font-semibold text-sm text-red-700">Cerrar caja</span>
+          </a>
+        ) : (
+          <a
+            href="/dashboard/cash-register/open"
+            className="flex items-center gap-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-xl px-4 py-3 transition-colors"
+          >
+            <span className="text-xl">🏦</span>
+            <span className="font-semibold text-sm text-green-700">Abrir caja</span>
+          </a>
+        )}
         <a
           href="/dashboard/products"
           className="flex items-center gap-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 transition-colors"

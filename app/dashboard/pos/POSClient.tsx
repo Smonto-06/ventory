@@ -76,7 +76,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 }
 
 function fmt(n: number) {
-  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+  return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -270,10 +270,10 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
             Debes abrir una caja antes de registrar ventas.
           </p>
           <a
-            href="/dashboard"
-            className="inline-block px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+            href="/dashboard/cash-register/open"
+            className="inline-block px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700"
           >
-            Volver al inicio
+            Abrir caja ahora →
           </a>
         </div>
       </div>
@@ -541,7 +541,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
                 <h3 className="font-bold text-lg text-gray-800">Venta registrada</h3>
                 <p className="text-2xl font-bold text-blue-600 mt-1">{receipt.folio}</p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {new Date(receipt.createdAt).toLocaleString('es-MX')}
+                  {new Date(receipt.createdAt).toLocaleString('es-CO')}
                 </p>
               </div>
 

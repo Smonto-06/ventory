@@ -39,11 +39,11 @@ const PAYMENT_LABELS: Record<string, string> = {
 }
 
 function fmt(n: number) {
-  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+  return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 }
 
 function fmtDate(d: string) {
-  return new Date(d).toLocaleString('es-MX', {
+  return new Date(d).toLocaleString('es-CO', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })

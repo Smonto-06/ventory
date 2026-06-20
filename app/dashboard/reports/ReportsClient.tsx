@@ -21,7 +21,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 }
 
 function fmt(n: number) {
-  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+  return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 }
 
 function todayISO() {
