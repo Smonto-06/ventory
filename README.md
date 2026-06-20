@@ -1,36 +1,145 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ventory POS
 
-## Getting Started
+Sistema de punto de venta e inventario para PyMEs latinoamericanas. Construido con Next.js 14, PostgreSQL, y Prisma ORM.
 
-First, run the development server:
+## Stack tecnológico
+
+| Capa | Tecnología |
+|------|-----------|
+| Frontend / Backend | Next.js 14 (App Router) + TypeScript |
+| Estilos | Tailwind CSS |
+| Base de datos | PostgreSQL 16 |
+| ORM | Prisma 5 |
+| Autenticación | NextAuth.js v4 (multi-tenant por `businessId`) |
+| Hosting | Railway |
+| CI/CD | GitHub Actions |
+| Monitoreo | Sentry + Uptime Kuma |
+| Almacenamiento | Cloudflare R2 |
+
+## Requisitos previos
+
+- Node.js 20+
+- PostgreSQL 16 corriendo localmente **o** una instancia en Railway
+- npm 10+
+
+## Configuración local
 
 ```bash
+# 1. Clonar el repositorio
+git clone <repo-url>
+cd ventory
+
+# 2. Instalar dependencias
+npm install
+
+# 3. Copiar variables de entorno
+cp .env.example .env.local
+
+# 4. Editar .env.local con tus credenciales reales (ver sección abajo)
+
+# 5. Ejecutar migraciones de base de datos
+npm run db:migrate
+
+# 6. (Opcional) Abrir Prisma Studio para inspeccionar la DB
+npm run db:studio
+
+# 7. Iniciar servidor de desarrollo
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+El servidor estará disponible en [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variables de entorno
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copia `.env.example` a `.env.local` y completa los valores:
 
-## Learn More
+```env
+# Base de datos
+DATABASE_URL=postgresql://ventory:ventory_dev@localhost:5432/ventory_dev
 
-To learn more about Next.js, take a look at the following resources:
+# NextAuth
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=<genera con: openssl rand -base64 32>
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Las demás variables (Sentry, R2, Railway) son opcionales en desarrollo local.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts disponibles
 
-## Deploy on Vercel
+| Comando | Descripción |
+|---------|-------------|
+| `npm run dev` | Servidor de desarrollo con hot-reload |
+| `npm run build` | Build de producción |
+| `npm run start` | Iniciar build de producción |
+| `npm run lint` | Verificar estilo de código con ESLint |
+| `npm run type-check` | Verificar tipos con TypeScript |
+| `npm test` | Ejecutar suite de pruebas |
+| `npm run db:generate` | Generar cliente Prisma |
+| `npm run db:migrate` | Ejecutar migraciones pendientes |
+| `npm run db:push` | Push de schema sin migración (solo dev) |
+| `npm run db:studio` | Abrir Prisma Studio |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Estructura del proyecto
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+ventory/
+├── app/                    # Next.js App Router
+│   ├── api/               # API Routes
+│   │   └── auth/          # NextAuth endpoints
+│   ├── dashboard/         # Dashboard de caja y reportes
+│   ├── login/             # Pantalla de login
+│   ├── register/          # Registro de negocio
+│   └── layout.tsx
+├── lib/
+│   ├── auth.ts            # Configuración de NextAuth
+│   ├── db.ts              # Singleton de PrismaClient
+│   └── types.ts           # Tipos globales y extensiones de NextAuth
+├── prisma/
+│   ├── schema.prisma      # Modelos de base de datos
+│   └── migrations/        # Historial de migraciones SQL
+├── .env.example           # Plantilla de variables de entorno
+└── .github/workflows/     # CI/CD (lint, test, deploy)
+```
+
+## Modelos de base de datos
+
+El schema incluye los modelos principales del ciclo de venta:
+
+- **`businesses`** — Negocio (tenant raíz)
+- **`branches`** — Sucursales del negocio
+- **`users`** — Usuarios con roles (`ADMIN`, `SUPERVISOR`, `CASHIER`, `SELLER`)
+- **`products`** — Catálogo de productos con SKU, precio y tasa de impuesto
+- **`categories`** — Categorías de productos por negocio
+- **`inventory`** — Stock por producto y sucursal
+- **`inventory_movements`** — Auditoría de cada cambio de inventario
+- **`sales`** — Ventas con folio único por sucursal
+- **`sale_items`** — Líneas de cada venta
+- **`cash_sessions`** — Sesiones de caja (apertura → cierre)
+- **`audit_logs`** — Log de acciones sensibles
+
+## Flujo de caja (ciclo principal)
+
+```
+Login → Abrir sesión de caja → Registrar venta → Actualizar inventario → Cerrar caja → Logout
+```
+
+Cada venta ejecuta una transacción atómica que:
+1. Crea el registro de venta + líneas
+2. Decrementa inventario por producto
+3. Registra el movimiento de inventario
+4. Asocia la venta a la sesión de caja activa
+
+## Deploy
+
+El proyecto se despliega automáticamente en Railway:
+
+- **Staging**: push a `main` → GitHub Actions → Railway staging
+- **Producción**: workflow manual con confirmación `deploy`
+
+Ver `.github/workflows/` para la configuración completa.
+
+## Contribuir
+
+1. Crear branch desde `develop`
+2. Abrir PR hacia `develop` (CI corre automáticamente)
+3. Revisión y merge → deploy automático a staging

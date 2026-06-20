@@ -1,0 +1,365 @@
+// Ventory POS — Prisma Schema
+// PostgreSQL + multi-tenant by businessId
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  CASHIER
+  SELLER
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  MIXED
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum MovementType {
+  SALE        // decremented by a sale
+  RETURN      // incremented by a return/refund
+  ADJUSTMENT  // manual stock correction
+  PURCHASE    // stock received from supplier
+}
+
+// ─── Core Models ────────────────────────────────────────────────────────────
+
+model Business {
+  id           String    @id @default(cuid())
+  name         String
+  slug         String    @unique
+  taxId        String?
+  phone        String?
+  address      String?
+  currency     String    @default("MXN")
+  locale       String    @default("es-MX")
+  isActive     Boolean   @default(true)
+
+  branches     Branch[]
+  users        User[]
+  products     Product[]
+  categories   Category[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("businesses")
+}
+
+model Branch {
+  id           String    @id @default(cuid())
+  name         String
+  address      String?
+  phone        String?
+  isActive     Boolean   @default(true)
+
+  businessId   String
+  business     Business  @relation(fields: [businessId], references: [id])
+
+  users        User[]
+  inventory    Inventory[]
+  sales        Sale[]
+  cashSessions CashSession[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("branches")
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  password       String
+  name           String?
+  role           UserRole     @default(CASHIER)
+  pin            String?
+  isActive       Boolean      @default(true)
+  failedAttempts Int          @default(0)
+  lockedAt       DateTime?
+
+  businessId     String
+  business       Business     @relation(fields: [businessId], references: [id])
+
+  branchId       String?
+  branch         Branch?      @relation(fields: [branchId], references: [id])
+
+  accounts       Account[]
+  sessions       Session[]
+  sales          Sale[]
+  cashSessions   CashSession[]
+  inventoryMovements InventoryMovement[]
+  auditLogs      AuditLog[]
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("users")
+}
+
+// ─── Products & Inventory ───────────────────────────────────────────────────
+
+model Category {
+  id           String    @id @default(cuid())
+  name         String
+  description  String?
+  isActive     Boolean   @default(true)
+
+  businessId   String
+  business     Business  @relation(fields: [businessId], references: [id])
+
+  products     Product[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([businessId, name])
+  @@map("categories")
+}
+
+model Product {
+  id            String        @id @default(cuid())
+  sku           String?
+  name          String
+  description   String?
+  barcode       String?
+  price         Decimal       @db.Decimal(12, 2)
+  cost          Decimal?      @db.Decimal(12, 2)
+  taxRate       Decimal       @default(0.16) @db.Decimal(5, 4)
+  imageUrl      String?
+  status        ProductStatus @default(ACTIVE)
+
+  businessId    String
+  business      Business      @relation(fields: [businessId], references: [id])
+
+  categoryId    String?
+  category      Category?     @relation(fields: [categoryId], references: [id])
+
+  inventory     Inventory[]
+  saleItems     SaleItem[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([businessId, sku])
+  @@index([businessId, status])
+  @@index([barcode])
+  @@map("products")
+}
+
+model Inventory {
+  id           String    @id @default(cuid())
+  quantity     Int       @default(0)
+  minStock     Int       @default(0)
+  maxStock     Int?
+
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+
+  branchId     String
+  branch       Branch    @relation(fields: [branchId], references: [id])
+
+  movements    InventoryMovement[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([productId, branchId])
+  @@map("inventory")
+}
+
+model InventoryMovement {
+  id           String       @id @default(cuid())
+  type         MovementType
+  quantity     Int
+  quantityBefore Int
+  quantityAfter  Int
+  reason       String?
+
+  inventoryId  String
+  inventory    Inventory    @relation(fields: [inventoryId], references: [id])
+
+  saleItemId   String?
+  saleItem     SaleItem?    @relation(fields: [saleItemId], references: [id])
+
+  createdById  String
+  createdBy    User         @relation(fields: [createdById], references: [id])
+
+  createdAt    DateTime     @default(now())
+
+  @@index([inventoryId, createdAt])
+  @@map("inventory_movements")
+}
+
+// ─── Sales ──────────────────────────────────────────────────────────────────
+
+model Sale {
+  id             String        @id @default(cuid())
+  folio          String
+  status         SaleStatus    @default(COMPLETED)
+  subtotal       Decimal       @db.Decimal(12, 2)
+  taxAmount      Decimal       @db.Decimal(12, 2)
+  discountAmount Decimal       @default(0) @db.Decimal(12, 2)
+  total          Decimal       @db.Decimal(12, 2)
+  paymentMethod  PaymentMethod @default(CASH)
+  amountPaid     Decimal       @db.Decimal(12, 2)
+  changeGiven    Decimal       @default(0) @db.Decimal(12, 2)
+  notes          String?
+
+  branchId       String
+  branch         Branch        @relation(fields: [branchId], references: [id])
+
+  cashierId      String
+  cashier        User          @relation(fields: [cashierId], references: [id])
+
+  cashSessionId  String
+  cashSession    CashSession   @relation(fields: [cashSessionId], references: [id])
+
+  items          SaleItem[]
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([branchId, folio])
+  @@index([branchId, createdAt])
+  @@index([cashSessionId])
+  @@map("sales")
+}
+
+model SaleItem {
+  id           String    @id @default(cuid())
+  quantity     Int
+  unitPrice    Decimal   @db.Decimal(12, 2)
+  taxRate      Decimal   @db.Decimal(5, 4)
+  taxAmount    Decimal   @db.Decimal(12, 2)
+  subtotal     Decimal   @db.Decimal(12, 2)
+  total        Decimal   @db.Decimal(12, 2)
+
+  saleId       String
+  sale         Sale      @relation(fields: [saleId], references: [id])
+
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+
+  movements    InventoryMovement[]
+
+  @@map("sale_items")
+}
+
+// ─── Cash Register ──────────────────────────────────────────────────────────
+
+model CashSession {
+  id              String            @id @default(cuid())
+  status          CashSessionStatus @default(OPEN)
+  openingBalance  Decimal           @db.Decimal(12, 2)
+  closingBalance  Decimal?          @db.Decimal(12, 2)
+  expectedBalance Decimal?          @db.Decimal(12, 2)
+  difference      Decimal?          @db.Decimal(12, 2)
+  notes           String?
+  openedAt        DateTime          @default(now())
+  closedAt        DateTime?
+
+  branchId        String
+  branch          Branch            @relation(fields: [branchId], references: [id])
+
+  openedById      String
+  openedBy        User              @relation(fields: [openedById], references: [id])
+
+  sales           Sale[]
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([branchId, status])
+  @@map("cash_sessions")
+}
+
+// ─── Audit ──────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  entity     String
+  entityId   String
+  payload    Json?
+  ipAddress  String?
+  userAgent  String?
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+
+  createdAt  DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+
+// ─── NextAuth.js Adapter Tables ─────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
