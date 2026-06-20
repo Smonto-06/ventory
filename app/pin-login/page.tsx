@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, RefObject } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -11,17 +11,19 @@ export default function PinLoginPage() {
   const [step, setStep] = useState<'business' | 'pin'>('business')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const pinRefs = [
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
+  const pinRefs: RefObject<HTMLInputElement>[] = [
+    useRef<HTMLInputElement>(null) as RefObject<HTMLInputElement>,
+    useRef<HTMLInputElement>(null) as RefObject<HTMLInputElement>,
+    useRef<HTMLInputElement>(null) as RefObject<HTMLInputElement>,
+    useRef<HTMLInputElement>(null) as RefObject<HTMLInputElement>,
   ]
 
   useEffect(() => {
     if (step === 'pin') {
       pinRefs[0].current?.focus()
     }
+    // pinRefs is stable (refs array doesn't change identity on re-render)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
 
   function handlePinChange(index: number, value: string) {
