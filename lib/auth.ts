@@ -1,13 +1,22 @@
-import { NextAuthOptions } from 'next-auth'
+import { NextAuthOptions, User } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import bcrypt from 'bcryptjs'
+import { UserRole } from '@prisma/client'
 import { db } from './db'
 
 const LOCK_DURATION_MS = 15 * 60 * 1000 // 15 minutes
 const MAX_FAILED_ATTEMPTS = 5
 
+interface VentoryUser extends User {
+  role: UserRole
+  businessId: string
+  businessName: string
+  businessSlug: string
+}
+
 export const authOptions: NextAuthOptions = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   adapter: PrismaAdapter(db) as any,
   session: {
     strategy: 'jwt',
@@ -39,14 +48,12 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Credenciales inválidas')
         }
 
-        // Check if account is locked
         if (user.lockedAt) {
           const lockExpires = new Date(user.lockedAt.getTime() + LOCK_DURATION_MS)
           if (new Date() < lockExpires) {
             const minutesLeft = Math.ceil((lockExpires.getTime() - Date.now()) / 60000)
             throw new Error(`Cuenta bloqueada. Intenta en ${minutesLeft} minutos.`)
           } else {
-            // Lock expired — reset
             await db.user.update({
               where: { id: user.id },
               data: { failedAttempts: 0, lockedAt: null },
@@ -76,7 +83,6 @@ export const authOptions: NextAuthOptions = {
           throw new Error(`Credenciales inválidas. ${remaining} intento(s) restante(s).`)
         }
 
-        // Successful login — reset failed attempts
         await db.user.update({
           where: { id: user.id },
           data: { failedAttempts: 0, lockedAt: null },
@@ -90,25 +96,26 @@ export const authOptions: NextAuthOptions = {
           businessId: user.businessId,
           businessName: user.business.name,
           businessSlug: user.business.slug,
-        }
+        } satisfies VentoryUser
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
-        token.role = (user as any).role
-        token.businessId = (user as any).businessId
-        token.businessName = (user as any).businessName
-        token.businessSlug = (user as any).businessSlug
+        const v = user as VentoryUser
+        token.id = v.id
+        token.role = v.role
+        token.businessId = v.businessId
+        token.businessName = v.businessName
+        token.businessSlug = v.businessSlug
       }
       return token
     },
     async session({ session, token }) {
       if (token) {
         session.user.id = token.id as string
-        session.user.role = token.role as any
+        session.user.role = token.role as UserRole
         session.user.businessId = token.businessId as string
         session.user.businessName = token.businessName as string
         session.user.businessSlug = token.businessSlug as string
