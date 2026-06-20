@@ -67,6 +67,26 @@ export default async function DashboardPage() {
             </dl>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <a
+              href="/dashboard/pos"
+              className="flex items-center gap-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl p-5 transition-colors"
+            >
+              <span className="text-3xl">🛒</span>
+              <div>
+                <p className="font-bold text-lg">Punto de Venta</p>
+                <p className="text-blue-200 text-sm">Registrar ventas y cobros</p>
+              </div>
+            </a>
+            <div className="flex items-center gap-4 bg-gray-100 rounded-xl p-5 opacity-60 cursor-not-allowed">
+              <span className="text-3xl">📦</span>
+              <div>
+                <p className="font-bold text-lg text-gray-700">Inventario</p>
+                <p className="text-gray-400 text-sm">Próximamente</p>
+              </div>
+            </div>
+          </div>
+
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
             <p className="text-amber-800 text-sm font-medium">
               ✓ Multi-tenant activo — todos los datos están aislados por businessId: <code className="font-mono">{session.user.businessId}</code>

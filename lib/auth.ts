@@ -11,6 +11,7 @@ const MAX_FAILED_ATTEMPTS = 5
 interface VentoryUser extends User {
   role: UserRole
   businessId: string
+  branchId?: string
   businessName: string
   businessSlug: string
 }
@@ -94,6 +95,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           role: user.role,
           businessId: user.businessId,
+          branchId: user.branchId ?? undefined,
           businessName: user.business.name,
           businessSlug: user.business.slug,
         } satisfies VentoryUser
@@ -107,6 +109,7 @@ export const authOptions: NextAuthOptions = {
         token.id = v.id
         token.role = v.role
         token.businessId = v.businessId
+        token.branchId = v.branchId
         token.businessName = v.businessName
         token.businessSlug = v.businessSlug
       }
@@ -117,6 +120,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string
         session.user.role = token.role as UserRole
         session.user.businessId = token.businessId as string
+        session.user.branchId = token.branchId as string | undefined
         session.user.businessName = token.businessName as string
         session.user.businessSlug = token.businessSlug as string
       }
