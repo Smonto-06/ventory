@@ -9,10 +9,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy-staging:
-    name: Deploy to Staging
+  migrate-and-seed:
+    name: Migrate DB + Seed Pilot Data
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     environment: staging
 
     steps:
@@ -37,38 +37,19 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway (Staging)
-        run: railway up --service ventory-staging --detach
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
-
-      - name: Seed pilot data
+      - name: Seed pilot data (idempotent upserts)
         run: npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
 
-      - name: Build & upload source maps to Sentry
-        run: npm run build
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
-          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL_STAGING }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET_STAGING }}
-          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL_STAGING }}
-          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.SENTRY_DSN_STAGING }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: ventory-staging
-          NODE_ENV: production
-
-      - name: Deployment summary
+      - name: Migration + seed succeeded
         if: success()
-        run: |
-          echo "✅ Staging deployment successful"
-          echo "URL: ${{ secrets.NEXT_PUBLIC_APP_URL_STAGING }}"
+        run: echo "✅ DB migrated and pilot data seeded"
 
-      - name: Deployment failed
+      - name: Migration or seed failed
         if: failure()
-        run: echo "❌ Staging deployment failed — check Railway logs"
+        run: echo "❌ DB migration/seed failed — check logs"
+
+  # Note: App deployment is handled automatically by Vercel
+  # Vercel watches the master/main branch and auto-deploys on every push.
+  # vercel.json defines the build command: prisma generate + migrate deploy + next build
