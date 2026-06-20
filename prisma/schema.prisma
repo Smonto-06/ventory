@@ -68,6 +68,7 @@ model Business {
   locale             String    @default("es-MX")
   isActive           Boolean   @default(true)
   allowNegativeStock Boolean   @default(false)
+  barcodeEnabled     Boolean   @default(true)
 
   branches     Branch[]
   users        User[]

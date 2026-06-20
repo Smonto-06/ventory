@@ -4,259 +4,204 @@ import bcrypt from 'bcryptjs'
 const db = new PrismaClient()
 
 async function main() {
-  console.log('Seeding database...')
+  console.log('Seeding pilot data...')
 
-  // ── Negocio 1: Tienda La Esperanza ─────────────────────────────────────────
-  const business1 = await db.business.upsert({
-    where: { slug: 'la-esperanza' },
+  // ── Negocio 1: Minimercado JM ───────────────────────────────────────────────
+  const jm = await db.business.upsert({
+    where: { slug: 'minimercado-jm' },
     update: {},
-    create: { name: 'Tienda La Esperanza', slug: 'la-esperanza' },
+    create: {
+      name: 'Minimercado JM',
+      slug: 'minimercado-jm',
+      currency: 'COP',
+      locale: 'es-CO',
+      barcodeEnabled: true,
+    },
   })
 
   await db.user.upsert({
-    where: { email: 'admin@laesperanza.com' },
+    where: { email: 'bibiana.jm@ventory.co' },
     update: {},
     create: {
-      email: 'admin@laesperanza.com',
-      password: await bcrypt.hash('Admin1234!', 12),
-      name: 'María González',
+      email: 'bibiana.jm@ventory.co',
+      password: await bcrypt.hash('VentoryJM2026', 12),
+      name: 'Bibiana',
       role: 'ADMIN',
-      businessId: business1.id,
+      businessId: jm.id,
     },
   })
 
-  await db.user.upsert({
-    where: { email: 'cajero@laesperanza.com' },
+  const branchJM = await db.branch.upsert({
+    where: { id: `branch-seed-${jm.id}` },
     update: {},
     create: {
-      email: 'cajero@laesperanza.com',
-      password: await bcrypt.hash('Cajero1234!', 12),
-      name: 'Carlos Ruiz',
-      role: 'CASHIER',
-      pin: await bcrypt.hash('1234', 12),
-      businessId: business1.id,
-    },
-  })
-
-  // Branch for business 1
-  const branch1 = await db.branch.upsert({
-    where: { id: `branch-seed-${business1.id}` },
-    update: {},
-    create: {
-      id: `branch-seed-${business1.id}`,
+      id: `branch-seed-${jm.id}`,
       name: 'Sucursal Principal',
-      businessId: business1.id,
+      businessId: jm.id,
     },
   })
 
-  // Categories for business 1
   const catBebidas = await db.category.upsert({
-    where: { businessId_name: { businessId: business1.id, name: 'Bebidas' } },
+    where: { businessId_name: { businessId: jm.id, name: 'Bebidas' } },
     update: {},
-    create: { name: 'Bebidas', businessId: business1.id },
+    create: { name: 'Bebidas', businessId: jm.id },
   })
-  const catAlimentos = await db.category.upsert({
-    where: { businessId_name: { businessId: business1.id, name: 'Alimentos' } },
+  const catLacteos = await db.category.upsert({
+    where: { businessId_name: { businessId: jm.id, name: 'Lácteos' } },
     update: {},
-    create: { name: 'Alimentos', businessId: business1.id },
+    create: { name: 'Lácteos', businessId: jm.id },
   })
-  const catLimpieza = await db.category.upsert({
-    where: { businessId_name: { businessId: business1.id, name: 'Limpieza' } },
+  const catEnlatados = await db.category.upsert({
+    where: { businessId_name: { businessId: jm.id, name: 'Enlatados' } },
     update: {},
-    create: { name: 'Limpieza', businessId: business1.id },
+    create: { name: 'Enlatados', businessId: jm.id },
+  })
+  const catSnacks = await db.category.upsert({
+    where: { businessId_name: { businessId: jm.id, name: 'Snacks' } },
+    update: {},
+    create: { name: 'Snacks', businessId: jm.id },
+  })
+  const catAseo = await db.category.upsert({
+    where: { businessId_name: { businessId: jm.id, name: 'Aseo' } },
+    update: {},
+    create: { name: 'Aseo', businessId: jm.id },
+  })
+  const catGranos = await db.category.upsert({
+    where: { businessId_name: { businessId: jm.id, name: 'Granos' } },
+    update: {},
+    create: { name: 'Granos', businessId: jm.id },
   })
 
-  // 10 sample products for business 1
-  const products = [
-    {
-      sku: 'BEB001',
-      name: 'Coca Cola 600ml',
-      barcode: '7501055300105',
-      price: 18.5,
-      cost: 12.0,
-      unitOfMeasure: 'pieza',
-      supplier: 'Distribuidor ARCA',
-      categoryId: catBebidas.id,
-      stock: 120,
-      minStock: 24,
-    },
-    {
-      sku: 'BEB002',
-      name: 'Agua Ciel 1L',
-      barcode: '7501055308279',
-      price: 14.0,
-      cost: 8.5,
-      unitOfMeasure: 'pieza',
-      supplier: 'Distribuidor ARCA',
-      categoryId: catBebidas.id,
-      stock: 200,
-      minStock: 48,
-    },
-    {
-      sku: 'BEB003',
-      name: 'Jugo Del Valle 1L Naranja',
-      barcode: '7503008007116',
-      price: 26.0,
-      cost: 18.0,
-      unitOfMeasure: 'pieza',
-      supplier: 'Distribuidor ARCA',
-      categoryId: catBebidas.id,
-      stock: 60,
-      minStock: 12,
-    },
-    {
-      sku: 'ALI001',
-      name: 'Sabritas Adobadas 45g',
-      barcode: '7501012551408',
-      price: 17.0,
-      cost: 11.0,
-      unitOfMeasure: 'bolsa',
-      supplier: 'PepsiCo México',
-      categoryId: catAlimentos.id,
-      stock: 80,
-      minStock: 20,
-    },
-    {
-      sku: 'ALI002',
-      name: 'Marinela Gansito 52g',
-      barcode: '7501000653117',
-      price: 15.0,
-      cost: 9.5,
-      unitOfMeasure: 'pieza',
-      supplier: 'Grupo Bimbo',
-      categoryId: catAlimentos.id,
-      stock: 48,
-      minStock: 12,
-    },
-    {
-      sku: 'ALI003',
-      name: 'Bimbo Blanco 680g',
-      barcode: '7501000541000',
-      price: 52.0,
-      cost: 38.0,
-      unitOfMeasure: 'pieza',
-      supplier: 'Grupo Bimbo',
-      categoryId: catAlimentos.id,
-      stock: 30,
-      minStock: 6,
-    },
-    {
-      sku: 'ALI004',
-      name: 'Arroz SuMesa 1kg',
-      barcode: '7506195610038',
-      price: 28.0,
-      cost: 20.0,
-      unitOfMeasure: 'kg',
-      supplier: 'Distribuidora Granos',
-      categoryId: catAlimentos.id,
-      stock: 50,
-      minStock: 10,
-    },
-    {
-      sku: 'ALI005',
-      name: 'Frijoles La Sierra 560g',
-      barcode: '7501025410037',
-      price: 32.0,
-      cost: 22.0,
-      unitOfMeasure: 'lata',
-      supplier: 'Distribuidora Granos',
-      categoryId: catAlimentos.id,
-      stock: 40,
-      minStock: 8,
-    },
-    {
-      sku: 'LIM001',
-      name: 'Jabón Roma 500g',
-      barcode: '7501025112344',
-      price: 22.0,
-      cost: 14.0,
-      unitOfMeasure: 'pieza',
-      supplier: 'Henkel México',
-      categoryId: catLimpieza.id,
-      stock: 36,
-      minStock: 6,
-    },
-    {
-      sku: 'LIM002',
-      name: 'Pinol Multiusos 828ml',
-      barcode: '7501025100990',
-      price: 38.0,
-      cost: 26.0,
-      unitOfMeasure: 'pieza',
-      supplier: 'SC Johnson',
-      categoryId: catLimpieza.id,
-      stock: 24,
-      minStock: 4,
-    },
+  const jmProducts = [
+    { sku: 'BEB001', name: 'Agua Cristal 600ml',         barcode: '7702001000016', price: 1800,  cost: 1100, categoryId: catBebidas.id,   stock: 120, minStock: 24 },
+    { sku: 'BEB002', name: 'Coca Cola 400ml',             barcode: '7702001000023', price: 2500,  cost: 1600, categoryId: catBebidas.id,   stock: 96,  minStock: 24 },
+    { sku: 'LAC001', name: 'Leche Entera Parmalat 1L',    barcode: '7702001000030', price: 4200,  cost: 3100, categoryId: catLacteos.id,   stock: 60,  minStock: 12 },
+    { sku: 'LAC002', name: 'Yogurt Alpina Fresa 150g',    barcode: '7702001000047', price: 2200,  cost: 1500, categoryId: catLacteos.id,   stock: 48,  minStock: 12 },
+    { sku: 'ENL001', name: 'Atún Van Camps 170g',         barcode: '7702001000054', price: 5800,  cost: 4200, categoryId: catEnlatados.id, stock: 36,  minStock: 6  },
+    { sku: 'ENL002', name: 'Sardinas Diva 170g',          barcode: '7702001000061', price: 4500,  cost: 3100, categoryId: catEnlatados.id, stock: 24,  minStock: 6  },
+    { sku: 'SNK001', name: 'Papas Margarita Natural 30g', barcode: '7702001000078', price: 1500,  cost: 900,  categoryId: catSnacks.id,    stock: 80,  minStock: 20 },
+    { sku: 'SNK002', name: 'Chitos Rizados 40g',          barcode: '7702001000085', price: 1500,  cost: 900,  categoryId: catSnacks.id,    stock: 60,  minStock: 20 },
+    { sku: 'ASE001', name: 'Jabón Protex 125g',           barcode: '7702001000092', price: 3800,  cost: 2600, categoryId: catAseo.id,      stock: 30,  minStock: 6  },
+    { sku: 'GRA001', name: 'Arroz Diana 1kg',             barcode: '7702001000108', price: 5200,  cost: 3800, categoryId: catGranos.id,    stock: 50,  minStock: 10 },
   ]
 
-  for (const p of products) {
-    const { stock, minStock: minStk, ...productData } = p
+  for (const p of jmProducts) {
+    const { stock, minStock, ...data } = p
     const product = await db.product.upsert({
-      where: { businessId_sku: { businessId: business1.id, sku: productData.sku } },
+      where: { businessId_sku: { businessId: jm.id, sku: data.sku } },
       update: {},
-      create: {
-        ...productData,
-        taxRate: 0.16,
-        businessId: business1.id,
-      },
+      create: { ...data, taxRate: 0.19, businessId: jm.id },
     })
-
     await db.inventory.upsert({
-      where: { productId_branchId: { productId: product.id, branchId: branch1.id } },
+      where: { productId_branchId: { productId: product.id, branchId: branchJM.id } },
       update: {},
-      create: {
-        productId: product.id,
-        branchId: branch1.id,
-        quantity: stock,
-        minStock: minStk,
-      },
+      create: { productId: product.id, branchId: branchJM.id, quantity: stock, minStock },
     })
   }
 
-  // ── Negocio 2: Minimercado El Sol ──────────────────────────────────────────
-  const business2 = await db.business.upsert({
-    where: { slug: 'minimercado-el-sol' },
+  // ── Negocio 2: Bora y Bora ─────────────────────────────────────────────────
+  const bb = await db.business.upsert({
+    where: { slug: 'bora-y-bora' },
     update: {},
-    create: { name: 'Minimercado El Sol', slug: 'minimercado-el-sol' },
+    create: {
+      name: 'Bora y Bora',
+      slug: 'bora-y-bora',
+      currency: 'COP',
+      locale: 'es-CO',
+      barcodeEnabled: false,
+    },
   })
 
   await db.user.upsert({
-    where: { email: 'admin@elsol.com' },
+    where: { email: 'mar_u_79@hotmail.com' },
     update: {},
     create: {
-      email: 'admin@elsol.com',
-      password: await bcrypt.hash('Admin1234!', 12),
-      name: 'Pedro Martínez',
+      email: 'mar_u_79@hotmail.com',
+      password: await bcrypt.hash('VentoryBB2026', 12),
+      name: 'Paula',
       role: 'ADMIN',
-      businessId: business2.id,
+      businessId: bb.id,
     },
   })
 
   await db.user.upsert({
-    where: { email: 'cajero@elsol.com' },
+    where: { email: 'sergiobetan650@hotmail.com' },
     update: {},
     create: {
-      email: 'cajero@elsol.com',
-      password: await bcrypt.hash('Cajero1234!', 12),
-      name: 'Ana López',
-      role: 'CASHIER',
-      pin: await bcrypt.hash('5678', 12),
-      businessId: business2.id,
+      email: 'sergiobetan650@hotmail.com',
+      password: await bcrypt.hash('VentoryBB2026', 12),
+      name: 'Sergio',
+      role: 'ADMIN',
+      businessId: bb.id,
     },
   })
 
-  console.log('✓ 2 negocios con aislamiento multi-tenant')
-  console.log(`  Negocio 1: ${business1.name} — sucursal: ${branch1.name}`)
-  console.log(`  Negocio 2: ${business2.name}`)
+  const branchBB = await db.branch.upsert({
+    where: { id: `branch-seed-${bb.id}` },
+    update: {},
+    create: {
+      id: `branch-seed-${bb.id}`,
+      name: 'Sucursal Principal',
+      businessId: bb.id,
+    },
+  })
+
+  const catRopaMujer = await db.category.upsert({
+    where: { businessId_name: { businessId: bb.id, name: 'Ropa Mujer' } },
+    update: {},
+    create: { name: 'Ropa Mujer', businessId: bb.id },
+  })
+  const catRopaHombre = await db.category.upsert({
+    where: { businessId_name: { businessId: bb.id, name: 'Ropa Hombre' } },
+    update: {},
+    create: { name: 'Ropa Hombre', businessId: bb.id },
+  })
+  const catAccesorios = await db.category.upsert({
+    where: { businessId_name: { businessId: bb.id, name: 'Accesorios' } },
+    update: {},
+    create: { name: 'Accesorios', businessId: bb.id },
+  })
+  const catCalzado = await db.category.upsert({
+    where: { businessId_name: { businessId: bb.id, name: 'Calzado' } },
+    update: {},
+    create: { name: 'Calzado', businessId: bb.id },
+  })
+
+  const bbProducts = [
+    { sku: 'RM001',  name: 'Blusa Casual Mujer S',     price: 45000,  cost: 22000, categoryId: catRopaMujer.id,  stock: 15, minStock: 3 },
+    { sku: 'RM002',  name: 'Jean Skinny Mujer 28',      price: 89000,  cost: 42000, categoryId: catRopaMujer.id,  stock: 10, minStock: 2 },
+    { sku: 'RM003',  name: 'Vestido Floral Mujer M',    price: 75000,  cost: 36000, categoryId: catRopaMujer.id,  stock: 8,  minStock: 2 },
+    { sku: 'RH001',  name: 'Camiseta Básica Hombre M',  price: 35000,  cost: 16000, categoryId: catRopaHombre.id, stock: 20, minStock: 4 },
+    { sku: 'RH002',  name: 'Jean Recto Hombre 32',      price: 95000,  cost: 46000, categoryId: catRopaHombre.id, stock: 10, minStock: 2 },
+    { sku: 'RH003',  name: 'Camisa Cuadros Hombre L',   price: 65000,  cost: 30000, categoryId: catRopaHombre.id, stock: 12, minStock: 3 },
+    { sku: 'ACC001', name: 'Cinturón Cuero Negro',       price: 28000,  cost: 12000, categoryId: catAccesorios.id, stock: 25, minStock: 5 },
+    { sku: 'ACC002', name: 'Gorro Tejido Unisex',        price: 22000,  cost: 9000,  categoryId: catAccesorios.id, stock: 18, minStock: 4 },
+    { sku: 'CAL001', name: 'Tenis Casual Mujer 37',      price: 120000, cost: 58000, categoryId: catCalzado.id,    stock: 6,  minStock: 2 },
+    { sku: 'CAL002', name: 'Zapato Sport Hombre 42',     price: 135000, cost: 64000, categoryId: catCalzado.id,    stock: 6,  minStock: 2 },
+  ]
+
+  for (const p of bbProducts) {
+    const { stock, minStock, ...data } = p
+    const product = await db.product.upsert({
+      where: { businessId_sku: { businessId: bb.id, sku: data.sku } },
+      update: {},
+      create: { ...data, taxRate: 0.19, businessId: bb.id },
+    })
+    await db.inventory.upsert({
+      where: { productId_branchId: { productId: product.id, branchId: branchBB.id } },
+      update: {},
+      create: { productId: product.id, branchId: branchBB.id, quantity: stock, minStock },
+    })
+  }
+
+  console.log('✓ 2 negocios piloto creados con aislamiento multi-tenant')
+  console.log(`  ${jm.name} — barcodeEnabled: true — 6 categorías, 10 productos`)
+  console.log(`  ${bb.name} — barcodeEnabled: false — 4 categorías, 10 productos`)
   console.log('')
-  console.log('✓ 3 categorías y 10 productos con inventario inicial (Negocio 1)')
-  console.log('')
-  console.log('Cuentas de prueba:')
-  console.log('  Negocio 1 — Admin:  admin@laesperanza.com / Admin1234!')
-  console.log('  Negocio 1 — Cajero: cajero@laesperanza.com / Cajero1234! (PIN 1234)')
-  console.log('  Negocio 2 — Admin:  admin@elsol.com / Admin1234!')
-  console.log('  Negocio 2 — Cajero: cajero@elsol.com / Cajero1234! (PIN 5678)')
+  console.log('Cuentas piloto:')
+  console.log('  Minimercado JM — Bibiana:  bibiana.jm@ventory.co / VentoryJM2026 (ADMIN)')
+  console.log('  Bora y Bora    — Paula:    mar_u_79@hotmail.com / VentoryBB2026 (ADMIN)')
+  console.log('  Bora y Bora    — Sergio:   sergiobetan650@hotmail.com / VentoryBB2026 (ADMIN)')
 }
 
 main()

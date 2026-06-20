@@ -2,7 +2,7 @@ name: Deploy → Staging
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
 
 concurrency:
   group: deploy-staging
@@ -44,6 +44,11 @@ jobs:
         run: railway up --service ventory-staging --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+
+      - name: Seed pilot data
+        run: npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
 
       - name: Build & upload source maps to Sentry
         run: npm run build
