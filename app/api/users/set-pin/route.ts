@@ -5,6 +5,8 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 const setPinSchema = z.object({
   userId: z.string().optional(),
   pin: z.string().length(4, 'PIN debe ser de 4 dígitos').regex(/^\d+$/, 'PIN solo debe contener números'),

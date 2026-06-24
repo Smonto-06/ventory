@@ -5,6 +5,8 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { PaymentMethod, CashSessionStatus, MovementType } from '@prisma/client'
 
+export const dynamic = 'force-dynamic'
+
 const ItemSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().int().positive(),

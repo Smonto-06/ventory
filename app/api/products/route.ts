@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
+
 const createProductSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido').max(200),
   description: z.string().max(1000).optional(),
