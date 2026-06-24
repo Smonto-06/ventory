@@ -50,6 +50,30 @@ jobs:
         if: failure()
         run: echo "❌ DB migration/seed failed — check logs"
 
-  # Note: App deployment is handled automatically by Vercel
-  # Vercel watches the master/main branch and auto-deploys on every push.
-  # vercel.json defines the build command: prisma generate + migrate deploy + next build
+  deploy-to-railway:
+    name: Deploy App to Railway Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    needs: migrate-and-seed
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway (Staging)
+        run: railway up --service ventory-staging --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+
+      - name: Staging deployment summary
+        if: success()
+        run: |
+          echo "✅ STAGING deployment triggered"
+          echo "URL: ${{ secrets.NEXTAUTH_URL_STAGING }}"
+
+      - name: Staging deployment failed
+        if: failure()
+        run: echo "❌ STAGING deployment FAILED"
