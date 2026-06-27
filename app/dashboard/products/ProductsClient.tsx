@@ -266,7 +266,7 @@ export default function ProductsClient() {
                           </button>
                           <button
                             onClick={() => handleArchive(p)}
-                            className="text-xs text-gray-400 hover:text-red-600 font-medium"
+                            className="text-xs text-gray-500 hover:text-red-600 font-medium"
                           >
                             Archivar
                           </button>
@@ -428,7 +428,7 @@ export default function ProductsClient() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancelar
                 </button>

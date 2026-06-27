@@ -470,7 +470,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
                     className={`py-1.5 text-xs font-medium rounded-lg transition-colors ${
                       paymentMethod === m
                         ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
                     {PAYMENT_LABELS[m]}

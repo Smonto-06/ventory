@@ -137,7 +137,7 @@ export default function SalesClient() {
               key={f}
               onClick={() => setFilter(f)}
               className={`px-3 py-2 font-medium transition-colors ${
-                filter === f ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                filter === f ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
               }`}
             >
               {f === 'today' ? 'Hoy' : f === 'week' ? 'Esta semana' : 'Rango'}
@@ -203,7 +203,7 @@ export default function SalesClient() {
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => openDetail(sale)}
-                        className="text-xs text-blue-600 hover:underline font-medium"
+                        className="text-xs text-blue-600 hover:underline font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled={detailLoading}
                       >
                         Detalle
