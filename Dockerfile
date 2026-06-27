@@ -7,17 +7,19 @@ RUN npm ci
 FROM node:20-alpine AS builder
 RUN apk add --no-cache openssl
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-# Build args baked in at build time (required for NEXT_PUBLIC_ vars and Next.js build)
+# Declare build args before COPY so arg changes don't invalidate the COPY layer cache
 ARG NEXT_PUBLIC_APP_URL
 ARG DATABASE_URL
 ARG NEXTAUTH_URL
 ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
 ENV DATABASE_URL=${DATABASE_URL}
 ENV NEXTAUTH_URL=${NEXTAUTH_URL}
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
 RUN npx prisma generate
 RUN npm run build
+# Guarantee /app/public exists in this layer (fixes BuildKit cache checksum error)
+RUN mkdir -p /app/public
 
 FROM node:20-alpine AS runner
 LABEL org.opencontainers.image.source="https://github.com/Smonto-06/ventory"
