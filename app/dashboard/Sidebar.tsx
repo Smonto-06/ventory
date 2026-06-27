@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
+import VentoryLogo from '@/components/VentoryLogo'
 
 interface SidebarProps {
   userName: string
@@ -36,8 +37,8 @@ export default function Sidebar({ userName, businessName, role }: SidebarProps) 
     <aside className="w-56 bg-white border-r border-gray-200 flex flex-col shrink-0">
       {/* Brand */}
       <div className="px-4 py-5 border-b border-gray-100">
-        <p className="text-lg font-bold text-blue-600 leading-none">Ventory</p>
-        <p className="text-xs text-gray-500 mt-1 truncate">{businessName}</p>
+        <VentoryLogo iconSize={28} />
+        <p className="text-xs text-gray-500 mt-2 truncate">{businessName}</p>
       </div>
 
       {/* Nav */}

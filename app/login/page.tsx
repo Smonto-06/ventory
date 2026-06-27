@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import VentoryLogo from '@/components/VentoryLogo'
 
 function LoginContent() {
   const router = useRouter()
@@ -42,9 +43,12 @@ function LoginContent() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="max-w-md w-full">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Ventory</h1>
-          <p className="text-gray-500 mt-1">Sistema de Punto de Venta</p>
+        <div className="flex flex-col items-center mb-8 gap-3">
+          <VentoryLogo variant="icon" iconSize={56} />
+          <div className="text-center">
+            <VentoryLogo variant="wordmark" />
+            <p className="text-gray-500 mt-1 text-sm">Sistema de Punto de Venta</p>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
