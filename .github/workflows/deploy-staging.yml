@@ -56,25 +56,73 @@ jobs:
     timeout-minutes: 20
     environment: staging
     needs: migrate-and-seed
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Deploy to Railway (Staging)
-        run: railway up --service ventory-staging --detach
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID_STAGING }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET_STAGING }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL_STAGING }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL_STAGING }}
+
+      - name: Update Railway service to use Docker image
+        run: |
+          RESPONSE=$(curl -s -X POST https://backboard.railway.app/graphql/v2 \
+            -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN_STAGING }}" \
+            -H "Content-Type: application/json" \
+            -d '{"query": "mutation { serviceConnect(id: \"84ddb7de-0b80-4653-8f26-521bc9f2dfd2\", input: { image: \"ghcr.io/${{ github.repository }}:staging\" }) { id name } }"}')
+          echo "Railway API response: $RESPONSE"
+          if echo "$RESPONSE" | grep -q '"errors"'; then
+            echo "❌ Railway API error — check token and service ID"
+            exit 1
+          fi
+          echo "✅ Railway service updated to use Docker image"
+
+      - name: Wait for Railway deployment to complete
+        run: |
+          echo "Waiting 60s for Railway to pull and start the container..."
+          sleep 60
+          for i in {1..12}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+              "https://ventory-staging-production.up.railway.app/api/health")
+            echo "Health check attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Staging is healthy at https://ventory-staging-production.up.railway.app"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "❌ Health check timed out after 3 minutes"
+          exit 1
 
       - name: Staging deployment summary
         if: success()
         run: |
-          echo "✅ STAGING deployment triggered"
+          echo "✅ STAGING deployment complete"
           echo "URL: ${{ secrets.NEXTAUTH_URL_STAGING }}"
 
       - name: Staging deployment failed
         if: failure()
-        run: echo "❌ STAGING deployment FAILED"
+        run: echo "❌ STAGING deployment FAILED — check logs above"
