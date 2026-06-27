@@ -401,14 +401,14 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => updateQty(ci.product.id, ci.quantity - 1)}
-                        className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 text-xs"
+                        className="w-6 h-6 flex items-center justify-center rounded bg-blue-600 hover:bg-blue-700 text-white text-xs"
                       >
                         −
                       </button>
-                      <span className="w-8 text-center text-sm font-medium">{ci.quantity}</span>
+                      <span className="w-8 text-center text-sm font-medium text-gray-900">{ci.quantity}</span>
                       <button
                         onClick={() => updateQty(ci.product.id, ci.quantity + 1)}
-                        className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 text-xs"
+                        className="w-6 h-6 flex items-center justify-center rounded bg-blue-600 hover:bg-blue-700 text-white text-xs"
                       >
                         +
                       </button>
