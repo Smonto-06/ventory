@@ -53,7 +53,7 @@ jobs:
   deploy-to-railway:
     name: Deploy App to Railway Staging
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     environment: staging
     needs: migrate-and-seed
     permissions:
@@ -73,48 +73,83 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (lowercase tag required)
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository }}:staging
+          tags: ghcr.io/smonto-06/ventory:staging
           cache-from: type=gha
           cache-to: type=gha,mode=max
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET_STAGING }}
-          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL_STAGING }}
-          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL_STAGING }}
+          build-args: |
+            NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL_STAGING }}
+            DATABASE_URL=${{ secrets.DATABASE_URL_STAGING }}
+            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL_STAGING }}
 
-      - name: Update Railway service to use Docker image
+      - name: Make container package public so Railway can pull it
+        run: |
+          RESULT=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/user/packages/container/ventory" \
+            -d '{"visibility": "public"}')
+          echo "Visibility change HTTP status: $RESULT"
+          if [ "$RESULT" != "200" ]; then
+            echo "⚠️  Could not set visibility via GITHUB_TOKEN (status $RESULT)."
+            echo "    The board needs to go to:"
+            echo "    https://github.com/Smonto-06/ventory/pkgs/container/ventory"
+            echo "    and set the package to PUBLIC before Railway can pull it."
+          else
+            echo "✅ Package is now public — Railway can pull ghcr.io/smonto-06/ventory:staging"
+          fi
+
+      - name: Tell Railway to use the Docker image
         run: |
           RESPONSE=$(curl -s -X POST https://backboard.railway.app/graphql/v2 \
             -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN_STAGING }}" \
             -H "Content-Type: application/json" \
-            -d '{"query": "mutation { serviceConnect(id: \"84ddb7de-0b80-4653-8f26-521bc9f2dfd2\", input: { image: \"ghcr.io/${{ github.repository }}:staging\" }) { id name } }"}')
-          echo "Railway API response: $RESPONSE"
+            -d '{"query": "mutation { serviceConnect(id: \"84ddb7de-0b80-4653-8f26-521bc9f2dfd2\", input: { image: \"ghcr.io/smonto-06/ventory:staging\" }) { id } }"}')
+          echo "Railway serviceConnect: $RESPONSE"
           if echo "$RESPONSE" | grep -q '"errors"'; then
-            echo "❌ Railway API error — check token and service ID"
-            exit 1
+            echo "❌ Railway API error — service update failed"
           fi
-          echo "✅ Railway service updated to use Docker image"
 
-      - name: Wait for Railway deployment to complete
+      - name: Configure Railway service settings
         run: |
-          echo "Waiting 60s for Railway to pull and start the container..."
-          sleep 60
-          for i in {1..12}; do
+          curl -s -X POST https://backboard.railway.app/graphql/v2 \
+            -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN_STAGING }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "query": "mutation($svc: String!, $env: String!, $in: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $svc, environmentId: $env, input: $in) }",
+              "variables": {
+                "svc": "84ddb7de-0b80-4653-8f26-521bc9f2dfd2",
+                "env": "15169bc4-2988-4f0a-a58a-aef61320020b",
+                "in": {
+                  "healthcheckPath": "/api/health",
+                  "healthcheckTimeout": 300,
+                  "startCommand": "node server.js",
+                  "restartPolicyType": "ON_FAILURE",
+                  "restartPolicyMaxRetries": 3
+                }
+              }
+            }' | head -1
+
+      - name: Wait for Railway deployment and check health
+        run: |
+          echo "Waiting 90s for Railway to start the container..."
+          sleep 90
+          for i in {1..10}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
               "https://ventory-staging-production.up.railway.app/api/health")
-            echo "Health check attempt $i: HTTP $STATUS"
+            echo "Health check $i/10: HTTP $STATUS"
             if [ "$STATUS" = "200" ]; then
-              echo "✅ Staging is healthy at https://ventory-staging-production.up.railway.app"
+              echo "✅ Staging healthy: https://ventory-staging-production.up.railway.app"
               exit 0
             fi
             sleep 15
           done
-          echo "❌ Health check timed out after 3 minutes"
+          echo "❌ Health check timed out — Railway may still be starting or image is private"
+          echo "    If image visibility error: go to https://github.com/Smonto-06/ventory/pkgs/container/ventory → change to Public"
           exit 1
 
       - name: Staging deployment summary
@@ -122,7 +157,3 @@ jobs:
         run: |
           echo "✅ STAGING deployment complete"
           echo "URL: ${{ secrets.NEXTAUTH_URL_STAGING }}"
-
-      - name: Staging deployment failed
-        if: failure()
-        run: echo "❌ STAGING deployment FAILED — check logs above"

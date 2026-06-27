@@ -9,6 +9,13 @@ RUN apk add --no-cache openssl
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Build args baked in at build time (required for NEXT_PUBLIC_ vars and Next.js build)
+ARG NEXT_PUBLIC_APP_URL
+ARG DATABASE_URL
+ARG NEXTAUTH_URL
+ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+ENV DATABASE_URL=${DATABASE_URL}
+ENV NEXTAUTH_URL=${NEXTAUTH_URL}
 RUN npx prisma generate
 RUN npm run build
 
@@ -28,4 +35,4 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+CMD ["node", "server.js"]
