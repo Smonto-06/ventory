@@ -5,8 +5,6 @@ import bcrypt from 'bcryptjs'
 import { UserRole } from '@prisma/client'
 import { db } from './db'
 
-const LOCK_DURATION_MS = 15 * 60 * 1000 // 15 minutes
-const MAX_FAILED_ATTEMPTS = 5
 
 interface VentoryUser extends User {
   role: UserRole
@@ -46,48 +44,14 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (!user) {
-          throw new Error('Credenciales inválidas')
-        }
-
-        if (user.lockedAt) {
-          const lockExpires = new Date(user.lockedAt.getTime() + LOCK_DURATION_MS)
-          if (new Date() < lockExpires) {
-            const minutesLeft = Math.ceil((lockExpires.getTime() - Date.now()) / 60000)
-            throw new Error(`Cuenta bloqueada. Intenta en ${minutesLeft} minutos.`)
-          } else {
-            await db.user.update({
-              where: { id: user.id },
-              data: { failedAttempts: 0, lockedAt: null },
-            })
-          }
+          throw new Error('Correo o contraseña incorrectos')
         }
 
         const passwordValid = await bcrypt.compare(credentials.password, user.password)
 
         if (!passwordValid) {
-          const newAttempts = user.failedAttempts + 1
-          const shouldLock = newAttempts >= MAX_FAILED_ATTEMPTS
-
-          await db.user.update({
-            where: { id: user.id },
-            data: {
-              failedAttempts: newAttempts,
-              lockedAt: shouldLock ? new Date() : null,
-            },
-          })
-
-          if (shouldLock) {
-            throw new Error('Cuenta bloqueada por 15 minutos tras 5 intentos fallidos.')
-          }
-
-          const remaining = MAX_FAILED_ATTEMPTS - newAttempts
-          throw new Error(`Credenciales inválidas. ${remaining} intento(s) restante(s).`)
+          throw new Error('Correo o contraseña incorrectos')
         }
-
-        await db.user.update({
-          where: { id: user.id },
-          data: { failedAttempts: 0, lockedAt: null },
-        })
 
         return {
           id: user.id,
