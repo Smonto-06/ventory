@@ -32,7 +32,10 @@ export default function VentoryLogo({ variant = 'full', iconSize = 32 }: Ventory
 
   if (variant === 'wordmark') {
     return (
-      <span className="text-2xl font-bold tracking-tight">
+      <span
+        className="text-2xl font-bold tracking-tight"
+        style={{ fontFamily: 'var(--font-brand), sans-serif' }}
+      >
         <span className="text-blue-600">V</span>
         <span className="text-gray-900">entory</span>
       </span>
@@ -42,7 +45,10 @@ export default function VentoryLogo({ variant = 'full', iconSize = 32 }: Ventory
   return (
     <div className="flex items-center gap-2.5">
       <VentoryIcon size={iconSize} />
-      <span className="text-xl font-bold tracking-tight leading-none">
+      <span
+        className="text-xl font-bold tracking-tight leading-none"
+        style={{ fontFamily: 'var(--font-brand), sans-serif' }}
+      >
         <span className="text-blue-600">V</span>
         <span className="text-gray-900">entory</span>
       </span>
