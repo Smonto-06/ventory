@@ -24,6 +24,7 @@ body {
   input::placeholder,
   textarea::placeholder {
     color: #6b7280; /* gray-500 — WCAG AA (4.61:1 on white) */
+    opacity: 1;     /* override Tailwind preflight opacity: 0.5 */
   }
 }
 
