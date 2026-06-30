@@ -97,6 +97,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
   const [error, setError] = useState<string | null>(null)
 
   const [receipt, setReceipt] = useState<SaleReceipt | null>(null)
+  const [posTab, setPosTab] = useState<'products' | 'cart'>('products')
 
   const searchRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -297,9 +298,34 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
         </div>
       </header>
 
+      {/* Mobile tab bar */}
+      <div className="lg:hidden flex border-b border-gray-200 bg-white shrink-0">
+        <button
+          onClick={() => setPosTab('products')}
+          className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+            posTab === 'products' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'
+          }`}
+        >
+          Productos
+        </button>
+        <button
+          onClick={() => setPosTab('cart')}
+          className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+            posTab === 'cart' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'
+          }`}
+        >
+          Carrito
+          {cart.length > 0 && (
+            <span className="ml-1.5 bg-blue-600 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
+              {cart.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       <div className="flex flex-1 overflow-hidden">
         {/* Left: product search + grid */}
-        <div className="flex flex-col flex-1 min-w-0 p-4 gap-3">
+        <div className={`flex-col flex-1 min-w-0 p-4 gap-3 ${posTab === 'cart' ? 'hidden lg:flex' : 'flex'}`}>
           {/* Search */}
           <div className="relative">
             <input
@@ -307,6 +333,13 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && products.length === 1) {
+                  addToCart(products[0])
+                  setSearch('')
+                  setProducts([])
+                }
+              }}
               placeholder="Buscar por nombre, SKU o código de barras..."
               className="w-full pl-4 pr-10 py-3 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               autoFocus
@@ -364,7 +397,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
         </div>
 
         {/* Right: cart + payment */}
-        <div className="w-80 lg:w-96 bg-white border-l border-gray-200 flex flex-col shrink-0">
+        <div className={`${posTab === 'products' ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 xl:w-96 bg-white border-l border-gray-200 flex-col shrink-0`}>
           {/* Cart header */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-semibold text-gray-800">
@@ -398,14 +431,14 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => updateQty(ci.product.id, ci.quantity - 1)}
-                        className="w-6 h-6 flex items-center justify-center rounded bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm touch-manipulation"
                       >
                         −
                       </button>
                       <span className="w-8 text-center text-sm font-medium text-gray-900">{ci.quantity}</span>
                       <button
                         onClick={() => updateQty(ci.product.id, ci.quantity + 1)}
-                        className="w-6 h-6 flex items-center justify-center rounded bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm touch-manipulation"
                       >
                         +
                       </button>
@@ -519,7 +552,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
             <button
               onClick={handleSale}
               disabled={submitting || cart.length === 0}
-              className="w-full py-3 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full py-4 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation"
             >
               {submitting ? 'Procesando...' : `Cobrar ${cart.length > 0 ? fmt(total) : ''}`}
             </button>

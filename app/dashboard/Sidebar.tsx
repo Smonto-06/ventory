@@ -8,6 +8,7 @@ interface SidebarProps {
   userName: string
   businessName: string
   role: string
+  onClose?: () => void
 }
 
 const NAV_ITEMS = [
@@ -25,7 +26,7 @@ const ROLE_LABELS: Record<string, string> = {
   SELLER: 'Vendedor',
 }
 
-export default function Sidebar({ userName, businessName, role }: SidebarProps) {
+export default function Sidebar({ userName, businessName, role, onClose }: SidebarProps) {
   const pathname = usePathname()
 
   function isActive(item: (typeof NAV_ITEMS)[0]) {
@@ -34,12 +35,23 @@ export default function Sidebar({ userName, businessName, role }: SidebarProps) 
   }
 
   return (
-    <aside className="w-56 bg-white border-r border-gray-200 flex flex-col shrink-0">
+    <aside className="w-64 h-full bg-white border-r border-gray-200 flex flex-col shrink-0">
       {/* Brand */}
-      <div className="px-4 py-5 border-b border-gray-100">
+      <div className="px-4 py-5 border-b border-gray-100 flex items-center justify-between">
         <VentoryLogo iconSize={28} />
-        <p className="text-xs text-gray-500 mt-2 truncate">{businessName}</p>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="lg:hidden p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
+            aria-label="Cerrar menú"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
+      <p className="text-xs text-gray-500 px-4 pt-2 pb-0 truncate">{businessName}</p>
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
@@ -49,7 +61,8 @@ export default function Sidebar({ userName, businessName, role }: SidebarProps) 
             <a
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              onClick={onClose}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 active
                   ? 'bg-blue-50 text-blue-700'
                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
