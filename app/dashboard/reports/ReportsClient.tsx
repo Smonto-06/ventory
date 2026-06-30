@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { fmt } from '@/lib/format'
 
 interface HourData { hour: number; total: number; count: number }
 interface TopProduct { name: string; quantity: number; revenue: number }
@@ -18,10 +19,6 @@ const PAYMENT_LABELS: Record<string, string> = {
   CARD: 'Tarjeta',
   TRANSFER: 'Transferencia',
   MIXED: 'Mixto',
-}
-
-function fmt(n: number) {
-  return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 }
 
 function todayISO() {

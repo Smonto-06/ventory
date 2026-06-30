@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { fmt } from '@/lib/format'
 
 interface Category {
   id: string
@@ -23,10 +24,6 @@ interface Product {
   stock: number
   minStock: number
   createdAt: string
-}
-
-function fmt(n: number) {
-  return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 }
 
 const EMPTY_FORM = {

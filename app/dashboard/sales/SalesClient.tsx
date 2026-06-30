@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { fmt } from '@/lib/format'
 
 interface SaleItem {
   id: string
@@ -36,10 +37,6 @@ const PAYMENT_LABELS: Record<string, string> = {
   CARD: 'Tarjeta',
   TRANSFER: 'Transferencia',
   MIXED: 'Mixto',
-}
-
-function fmt(n: number) {
-  return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 }
 
 function fmtDate(d: string) {

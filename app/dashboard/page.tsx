@@ -3,9 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
 
-function fmt(n: number) {
-  return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
-}
+import { fmt } from '@/lib/format'
 
 function fmtTime(d: Date) {
   return new Date(d).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
