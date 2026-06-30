@@ -134,7 +134,7 @@ export default function CloseCashRegisterPage() {
           </h2>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Apertura</span>
-            <span className="font-medium">{fmt(session.openingBalance)}</span>
+            <span className="font-medium text-gray-900">{fmt(session.openingBalance)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Ventas del turno</span>
@@ -252,7 +252,7 @@ export default function CloseCashRegisterPage() {
             <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-500">Monto contado</span>
-                <span className="font-semibold">{fmt(counted)}</span>
+                <span className="font-semibold text-gray-900">{fmt(counted)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Diferencia</span>
