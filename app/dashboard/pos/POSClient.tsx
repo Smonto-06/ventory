@@ -228,7 +228,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
     }
     setSelectedMethods(prev => {
       const next = new Set(prev)
-      removing ? next.delete(m) : next.add(m)
+      if (removing) { next.delete(m) } else { next.add(m) }
       return next
     })
   }
