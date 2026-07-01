@@ -139,14 +139,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'El descuento no puede superar el total' }, { status: 400 })
     }
 
-    if (paymentMethod === 'CASH' && amountPaid < total) {
+    if (amountPaid < total) {
       return NextResponse.json(
         { error: `Monto insuficiente. Total: $${total.toFixed(2)}, Recibido: $${amountPaid.toFixed(2)}` },
         { status: 400 }
       )
     }
 
-    const changeGiven = paymentMethod === 'CASH' ? round2(amountPaid - total) : 0
+    const changeGiven = round2(Math.max(0, amountPaid - total))
 
     // Atomic transaction: create sale + decrement inventory + create movements
     const sale = await db.$transaction(async (tx) => {
