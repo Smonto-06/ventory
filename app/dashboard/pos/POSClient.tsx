@@ -32,6 +32,14 @@ interface CashSession {
   openedBy: { id: string; name: string | null; email: string }
 }
 
+interface CustomerResult {
+  id: string
+  name: string
+  phone: string | null
+  email: string | null
+  document: string | null
+}
+
 interface SaleReceipt {
   id: string
   folio: string
@@ -46,6 +54,7 @@ interface SaleReceipt {
   createdAt: string
   branch: { name: string }
   cashier: { name: string | null }
+  customer?: { id: string; name: string } | null
   items: Array<{
     id: string
     productId: string
@@ -105,8 +114,15 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
   const [padMode, setPadMode] = useState<'qty' | 'price' | 'disc'>('qty')
   const [padInput, setPadInput] = useState('')
 
+  const [customerId, setCustomerId] = useState<string | null>(null)
+  const [customerName, setCustomerName] = useState('')
+  const [customerQuery, setCustomerQuery] = useState('')
+  const [customerResults, setCustomerResults] = useState<CustomerResult[]>([])
+  const [customerSearching, setCustomerSearching] = useState(false)
+
   const searchRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const customerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Fetch active cash session on mount ────────────────────────────────────
 
@@ -192,6 +208,57 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
     setSelectedItemId(null)
     setPadInput('')
     setShowPaymentScreen(false)
+    setCustomerId(null)
+    setCustomerName('')
+    setCustomerQuery('')
+    setCustomerResults([])
+  }
+
+  function handleCustomerSearch(q: string) {
+    setCustomerQuery(q)
+    setCustomerId(null)
+    setCustomerName('')
+    if (customerDebounceRef.current) clearTimeout(customerDebounceRef.current)
+    if (!q.trim() || q.length < 2) {
+      setCustomerResults([])
+      return
+    }
+    customerDebounceRef.current = setTimeout(async () => {
+      setCustomerSearching(true)
+      try {
+        const res = await fetch(`/api/customers?q=${encodeURIComponent(q)}`)
+        const data = await res.json()
+        setCustomerResults(data.customers ?? [])
+      } catch {
+        setCustomerResults([])
+      } finally {
+        setCustomerSearching(false)
+      }
+    }, 300)
+  }
+
+  function selectCustomer(c: CustomerResult) {
+    setCustomerId(c.id)
+    setCustomerName(c.name)
+    setCustomerQuery(c.name)
+    setCustomerResults([])
+  }
+
+  async function createAndSelectCustomer(name: string) {
+    if (!name.trim()) return
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok && data.customer) {
+        selectCustomer(data.customer)
+      }
+    } catch {
+      // ignore — customer assignment is optional
+    }
   }
 
   function applyPadInput() {
@@ -315,6 +382,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
           amountPaid: paymentMethod === 'CASH' ? payAmountPaid : total,
           discountAmount: discount,
           notes: notes || undefined,
+          customerId: customerId || undefined,
         }),
       })
 
@@ -631,12 +699,12 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
         </div>
       </div>
 
-      {/* Payment screen overlay — designed to fit without scrolling */}
+      {/* Payment screen overlay */}
       {showPaymentScreen && (
         <div className="absolute inset-0 bg-white z-10 flex flex-col overflow-hidden">
 
-          {/* Header — compact */}
-          <div className="shrink-0 border-b border-gray-100 px-4 py-2 flex items-center justify-between">
+          {/* Header */}
+          <div className="shrink-0 border-b border-gray-100 px-4 py-2.5 flex items-center justify-between">
             <button
               onClick={() => setShowPaymentScreen(false)}
               className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 touch-manipulation"
@@ -647,34 +715,34 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               Volver
             </button>
             <span className="text-sm font-semibold text-gray-700">Cobro</span>
-            <div className="w-12" />
+            <div className="w-14" />
           </div>
 
-          {/* Body — flex column, fills height without scroll */}
-          <div className="flex-1 flex flex-col px-4 pt-3 pb-2 gap-3 min-h-0">
+          {/* Scrollable body */}
+          <div className="flex-1 flex flex-col px-4 pt-3 pb-2 gap-2.5 overflow-y-auto">
 
-            {/* Total + payment method row */}
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-400 uppercase tracking-widest leading-none mb-1">Total</p>
-                <p className="text-2xl font-bold text-gray-900 leading-none">{fmt(total)}</p>
-                {discount > 0 && <p className="text-xs text-green-600 mt-0.5">Desc. {fmt(discount)}</p>}
-              </div>
-              <div className="flex gap-1.5">
-                {(['CASH', 'CARD', 'TRANSFER', 'MIXED'] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => { setPaymentMethod(m); setPayAmountInput('') }}
-                    className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors touch-manipulation ${
-                      paymentMethod === m
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {m === 'CASH' ? 'Efectivo' : m === 'CARD' ? 'Tarjeta' : m === 'TRANSFER' ? 'Trans.' : 'Mixto'}
-                  </button>
-                ))}
-              </div>
+            {/* Total — large and prominent */}
+            <div className="text-center py-1">
+              <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">Total a cobrar</p>
+              <p className="text-4xl font-bold text-gray-900 leading-none">{fmt(total)}</p>
+              {discount > 0 && <p className="text-xs text-green-600 mt-1">Descuento: {fmt(discount)}</p>}
+            </div>
+
+            {/* Payment method row — full width, tall buttons */}
+            <div className="grid grid-cols-4 gap-2">
+              {(['CASH', 'CARD', 'TRANSFER', 'MIXED'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => { setPaymentMethod(m); setPayAmountInput('') }}
+                  className={`py-3 text-sm font-semibold rounded-xl transition-colors touch-manipulation ${
+                    paymentMethod === m
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 active:bg-gray-300'
+                  }`}
+                >
+                  {m === 'CASH' ? 'Efectivo' : m === 'CARD' ? 'Tarjeta' : m === 'TRANSFER' ? 'Trans.' : 'Mixto'}
+                </button>
+              ))}
             </div>
 
             {/* Cash section */}
@@ -682,19 +750,19 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               <>
                 {/* Received + Change side by side */}
                 <div className="flex gap-2">
-                  <div className="flex-1 bg-gray-900 rounded-xl px-3 py-2.5 flex flex-col">
-                    <span className="text-gray-500 text-xs">Recibido</span>
-                    <span className="text-white font-mono font-bold text-lg leading-tight">
+                  <div className="flex-1 bg-gray-900 rounded-xl px-3 py-3 flex flex-col">
+                    <span className="text-gray-500 text-xs mb-0.5">Recibido</span>
+                    <span className="text-white font-mono font-bold text-xl leading-tight">
                       {payAmountPaid > 0 ? fmt(payAmountPaid) : '$ —'}
                     </span>
                   </div>
-                  <div className={`flex-1 rounded-xl px-3 py-2.5 flex flex-col ${
+                  <div className={`flex-1 rounded-xl px-3 py-3 flex flex-col ${
                     payAmountPaid === 0 ? 'bg-gray-50' : change >= 0 ? 'bg-green-50' : 'bg-red-50'
                   }`}>
-                    <span className={`text-xs ${payAmountPaid === 0 ? 'text-gray-400' : change >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {payAmountPaid === 0 ? 'Cambio' : change >= 0 ? 'Cambio' : 'Falta'}
+                    <span className={`text-xs mb-0.5 ${payAmountPaid === 0 ? 'text-gray-400' : change >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {change < 0 && payAmountPaid > 0 ? 'Falta' : 'Cambio'}
                     </span>
-                    <span className={`font-bold text-lg leading-tight ${
+                    <span className={`font-bold text-xl leading-tight ${
                       payAmountPaid === 0 ? 'text-gray-300' : change >= 0 ? 'text-green-700' : 'text-red-600'
                     }`}>
                       {payAmountPaid === 0 ? '$ —' : fmt(Math.abs(change))}
@@ -702,27 +770,26 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
                   </div>
                 </div>
 
-                {/* Colombian denomination grid: 4 cols × 3 rows */}
-                {/* Row 1-2: bills, Row 3: coins + utility buttons */}
+                {/* Denomination grid — 4 cols, tall square-ish buttons */}
                 <div className="grid grid-cols-4 gap-1.5">
                   {([100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100] as const).map((d) => (
                     <button
                       key={d}
                       onClick={() => setPayAmountInput(p => String((parseInt(p) || 0) + d))}
-                      className="py-2.5 text-xs font-bold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-800 touch-manipulation transition-colors select-none"
+                      className="h-14 text-sm font-bold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-800 touch-manipulation transition-colors select-none"
                     >
                       {d >= 1000 ? `${d / 1000}k` : d}
                     </button>
                   ))}
                   <button
                     onClick={() => setPayAmountInput(String(Math.round(total)))}
-                    className="py-2.5 text-xs font-bold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 touch-manipulation transition-colors select-none"
+                    className="h-14 text-sm font-bold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 touch-manipulation transition-colors select-none"
                   >
                     Exacto
                   </button>
                   <button
                     onClick={() => setPayAmountInput('')}
-                    className="py-2.5 text-xs font-bold rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 active:bg-gray-300 touch-manipulation transition-colors select-none"
+                    className="h-14 text-sm font-bold rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 active:bg-gray-300 touch-manipulation transition-colors select-none"
                   >
                     ⌫
                   </button>
@@ -730,8 +797,48 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </>
             )}
 
-            {/* Spacer */}
-            <div className="flex-1 min-h-0" />
+            {/* Customer search */}
+            <div className="relative">
+              {customerId ? (
+                <div className="flex items-center gap-2 border border-blue-200 bg-blue-50 rounded-xl px-3 py-2.5">
+                  <span className="text-sm text-blue-800 font-medium flex-1 truncate">👤 {customerName}</span>
+                  <button
+                    onClick={() => { setCustomerId(null); setCustomerName(''); setCustomerQuery('') }}
+                    className="text-blue-400 hover:text-blue-600 text-sm font-bold touch-manipulation"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={customerQuery}
+                  onChange={(e) => handleCustomerSearch(e.target.value)}
+                  placeholder="Buscar o crear cliente (opcional)..."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+              {!customerId && (customerResults.length > 0 || (customerQuery.length >= 2 && !customerSearching)) && (
+                <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-xl mt-1 shadow-lg z-20 max-h-36 overflow-y-auto">
+                  {customerResults.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => selectCustomer(c)}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between touch-manipulation"
+                    >
+                      <span className="font-medium text-gray-800">{c.name}</span>
+                      {c.phone && <span className="text-gray-400 text-xs">{c.phone}</span>}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => createAndSelectCustomer(customerQuery)}
+                    className="w-full px-3 py-2.5 text-left text-sm text-blue-600 hover:bg-blue-50 border-t border-gray-100 font-medium touch-manipulation"
+                  >
+                    + Crear &quot;{customerQuery}&quot;
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Notes */}
             <input
@@ -777,10 +884,18 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </div>
 
               {/* Branch + cashier */}
-              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 text-xs text-gray-500 flex justify-between">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-3 text-xs text-gray-500 flex justify-between">
                 <span>Sucursal: <b className="text-gray-700">{receipt.branch?.name}</b></span>
                 <span>Cajero: <b className="text-gray-700">{receipt.cashier?.name ?? '-'}</b></span>
               </div>
+
+              {/* Customer */}
+              {receipt.customer && (
+                <div className="bg-blue-50 rounded-xl px-4 py-3 mb-3 text-xs text-blue-700 flex items-center gap-2">
+                  <span>👤</span>
+                  <span>Cliente: <b>{receipt.customer.name}</b></span>
+                </div>
+              )}
 
               {/* Items */}
               <div className="space-y-1.5 mb-4">

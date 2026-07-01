@@ -20,6 +20,7 @@ const CreateSaleSchema = z.object({
   amountPaid: z.number().nonnegative(),
   discountAmount: z.number().nonnegative().default(0),
   notes: z.string().optional(),
+  customerId: z.string().optional(),
 })
 
 function round2(n: number): number {
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
-  const { cashSessionId, items, paymentMethod, amountPaid, discountAmount, notes } = parsed.data
+  const { cashSessionId, items, paymentMethod, amountPaid, discountAmount, notes, customerId } = parsed.data
   const businessId = session.user.businessId
   const cashierId = session.user.id
 
@@ -168,6 +169,7 @@ export async function POST(req: NextRequest) {
           branchId,
           cashierId,
           cashSessionId,
+          customerId: customerId || undefined,
         },
       })
 
@@ -224,6 +226,7 @@ export async function POST(req: NextRequest) {
           items: { include: { product: { select: { id: true, name: true, sku: true } } } },
           cashier: { select: { id: true, name: true } },
           branch: { select: { id: true, name: true } },
+          customer: { select: { id: true, name: true } },
         },
       })
     })
@@ -250,6 +253,7 @@ export async function POST(req: NextRequest) {
       total: Number(sale!.total),
       amountPaid: Number(sale!.amountPaid),
       changeGiven: Number(sale!.changeGiven),
+      customer: sale!.customer ?? null,
       items: sale!.items.map((i) => ({
         ...i,
         unitPrice: Number(i.unitPrice),

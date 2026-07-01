@@ -74,6 +74,7 @@ model Business {
   users        User[]
   products     Product[]
   categories   Category[]
+  customers    Customer[]
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -255,6 +256,9 @@ model Sale {
   cashSessionId  String
   cashSession    CashSession   @relation(fields: [cashSessionId], references: [id])
 
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id])
+
   items          SaleItem[]
 
   createdAt      DateTime      @default(now())
@@ -337,6 +341,28 @@ model CashMovement {
 
   @@index([cashSessionId])
   @@map("cash_movements")
+}
+
+// ─── Customers ──────────────────────────────────────────────────────────────
+
+model Customer {
+  id         String   @id @default(cuid())
+  name       String
+  phone      String?
+  email      String?
+  document   String?
+  notes      String?
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  sales      Sale[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([businessId, name])
+  @@map("customers")
 }
 
 // ─── Audit ──────────────────────────────────────────────────────────────────
