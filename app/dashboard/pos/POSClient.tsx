@@ -98,7 +98,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
 
   const [cart, setCart] = useState<CartItem[]>([])
 
-  const [selectedMethods, setSelectedMethods] = useState<Set<'CASH' | 'TRANSFER' | 'CARD'>>(new Set<'CASH' | 'TRANSFER' | 'CARD'>(['CASH']))
+  const [activeMethod, setActiveMethod] = useState<'CASH' | 'TRANSFER' | 'CARD'>('CASH')
   const [payAmountInput, setPayAmountInput] = useState('')   // cash amount
   const [transferAmount, setTransferAmount] = useState('')
   const [cardAmount, setCardAmount] = useState('')
@@ -205,7 +205,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
     setPayAmountInput('')
     setTransferAmount('')
     setCardAmount('')
-    setSelectedMethods(new Set<'CASH' | 'TRANSFER' | 'CARD'>(['CASH']))
+    setActiveMethod('CASH')
     setDiscountAmount('')
     setNotes('')
     setError(null)
@@ -216,21 +216,6 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
     setCustomerName('')
     setCustomerQuery('')
     setCustomerResults([])
-  }
-
-  function toggleMethod(m: 'CASH' | 'TRANSFER' | 'CARD') {
-    const removing = selectedMethods.has(m)
-    if (removing && selectedMethods.size === 1) return // keep at least one
-    if (removing) {
-      if (m === 'CASH') setPayAmountInput('')
-      if (m === 'TRANSFER') setTransferAmount('')
-      if (m === 'CARD') setCardAmount('')
-    }
-    setSelectedMethods(prev => {
-      const next = new Set(prev)
-      if (removing) { next.delete(m) } else { next.add(m) }
-      return next
-    })
   }
 
   function handleCustomerSearch(q: string) {
@@ -312,13 +297,24 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
 
       if (showPaymentScreen) {
-        // Payment screen keyboard: digits go to payAmountInput, Enter finalizes
         if (e.key >= '0' && e.key <= '9') {
           e.preventDefault()
-          setPayAmountInput((p) => (p.length < 12 ? p + e.key : p))
+          if (activeMethod === 'CASH') {
+            setPayAmountInput((p) => (p.length < 12 ? p + e.key : p))
+          } else if (activeMethod === 'TRANSFER') {
+            setTransferAmount((p) => (p.length < 12 ? p + e.key : p))
+          } else {
+            setCardAmount((p) => (p.length < 12 ? p + e.key : p))
+          }
         } else if (e.key === 'Backspace') {
           e.preventDefault()
-          setPayAmountInput((p) => p.slice(0, -1))
+          if (activeMethod === 'CASH') {
+            setPayAmountInput((p) => p.slice(0, -1))
+          } else if (activeMethod === 'TRANSFER') {
+            setTransferAmount((p) => p.slice(0, -1))
+          } else {
+            setCardAmount((p) => p.slice(0, -1))
+          }
         } else if (e.key === 'Enter') {
           e.preventDefault()
           handleSaleRef.current()
@@ -363,7 +359,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [showPaymentScreen, padMode, padInput, selectedItemId]) // fresh closure on every change
+  }, [showPaymentScreen, padMode, padInput, selectedItemId, activeMethod]) // fresh closure on every change
 
   // ── Totals ────────────────────────────────────────────────────────────────
 
@@ -371,15 +367,13 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
   const discount = parseFloat(discountAmount) || 0
   const total = Math.round((subtotal - discount) * 100) / 100
 
-  const cashPaid = selectedMethods.has('CASH') ? (parseFloat(payAmountInput) || 0) : 0
-  const transferPaid = selectedMethods.has('TRANSFER') ? (parseFloat(transferAmount) || 0) : 0
-  const cardPaid = selectedMethods.has('CARD') ? (parseFloat(cardAmount) || 0) : 0
+  const cashPaid = parseFloat(payAmountInput) || 0
+  const transferPaid = parseFloat(transferAmount) || 0
+  const cardPaid = parseFloat(cardAmount) || 0
   const totalPaid = cashPaid + transferPaid + cardPaid
   const remainingForCash = Math.max(0, total - transferPaid - cardPaid)
-  const change = selectedMethods.has('CASH')
-    ? Math.round((cashPaid - remainingForCash) * 100) / 100
-    : 0
-  const canFinalize = selectedMethods.has('CASH') ? cashPaid >= remainingForCash : true
+  const change = cashPaid > 0 ? Math.round((cashPaid - remainingForCash) * 100) / 100 : 0
+  const canFinalize = cashPaid > 0 ? cashPaid >= remainingForCash : totalPaid >= total
 
   // ── Submit sale ───────────────────────────────────────────────────────────
 
@@ -405,8 +399,12 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
             quantity: ci.quantity,
             unitPrice: ci.priceOverride ?? ci.product.price,
           })),
-          paymentMethod: selectedMethods.size === 1 ? Array.from(selectedMethods)[0] : 'MIXED',
-          amountPaid: selectedMethods.has('CASH') ? Math.max(totalPaid, total) : total,
+          paymentMethod: (cashPaid > 0 && transferPaid === 0 && cardPaid === 0) ? 'CASH'
+            : (transferPaid > 0 && cashPaid === 0 && cardPaid === 0) ? 'TRANSFER'
+            : (cardPaid > 0 && cashPaid === 0 && transferPaid === 0) ? 'CARD'
+            : (cashPaid > 0 || transferPaid > 0 || cardPaid > 0) ? 'MIXED'
+            : activeMethod,
+          amountPaid: cashPaid > 0 ? Math.max(totalPaid, total) : total,
           discountAmount: discount,
           notes: notes || undefined,
           customerId: customerId || undefined,
@@ -715,7 +713,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
             {/* Cobrar → opens payment screen */}
             <div className="px-3 pb-3">
               <button
-                onClick={() => { setShowPaymentScreen(true); setPayAmountInput(''); setTransferAmount(''); setCardAmount(''); setError(null) }}
+                onClick={() => { setShowPaymentScreen(true); setPayAmountInput(''); setTransferAmount(''); setCardAmount(''); setActiveMethod('CASH'); setError(null) }}
                 disabled={cart.length === 0}
                 className="w-full py-3 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation"
               >
@@ -755,75 +753,48 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               {discount > 0 && <p className="text-xs text-green-600 mt-1">Descuento: {fmt(discount)}</p>}
             </div>
 
-            {/* Payment method toggles — Efectivo | Transferencia | Tarjeta */}
+            {/* Payment method selectors — tap one to enter its amount */}
             <div className="grid grid-cols-3 gap-2">
               {([
                 { key: 'CASH', label: 'Efectivo', icon: '💵' },
                 { key: 'TRANSFER', label: 'Transferencia', icon: '📲' },
                 { key: 'CARD', label: 'Tarjeta', icon: '💳' },
-              ] as const).map(({ key, label, icon }) => (
-                <button
-                  key={key}
-                  onClick={() => toggleMethod(key)}
-                  className={`py-3 text-sm font-semibold rounded-xl transition-colors touch-manipulation flex flex-col items-center gap-0.5 ${
-                    selectedMethods.has(key)
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 active:bg-gray-300'
-                  }`}
-                >
-                  <span className="text-base leading-none">{icon}</span>
-                  <span className="text-xs">{label}</span>
-                </button>
-              ))}
+              ] as const).map(({ key, label, icon }) => {
+                const amt = key === 'CASH' ? cashPaid : key === 'TRANSFER' ? transferPaid : cardPaid
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setActiveMethod(key)}
+                    className={`py-3 text-sm font-semibold rounded-xl transition-colors touch-manipulation flex flex-col items-center gap-0.5 ${
+                      activeMethod === key
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : amt > 0
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 active:bg-gray-300'
+                    }`}
+                  >
+                    <span className="text-base leading-none">{icon}</span>
+                    <span className="text-xs">{label}</span>
+                    {amt > 0 && activeMethod !== key && (
+                      <span className="text-xs font-bold">{fmt(amt)}</span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
 
-            {/* Transfer + Card amount inputs */}
-            {(selectedMethods.has('TRANSFER') || selectedMethods.has('CARD')) && (
-              <div className="space-y-2">
-                {selectedMethods.has('TRANSFER') && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-gray-500 w-28 shrink-0">📲 Transferencia</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={transferAmount}
-                      onChange={(e) => setTransferAmount(e.target.value)}
-                      placeholder={`${Math.max(0, total - cardPaid)}`}
-                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-right font-mono"
-                    />
-                  </div>
-                )}
-                {selectedMethods.has('CARD') && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-gray-500 w-28 shrink-0">💳 Tarjeta</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={cardAmount}
-                      onChange={(e) => setCardAmount(e.target.value)}
-                      placeholder={`${Math.max(0, total - transferPaid)}`}
-                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-right font-mono"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Cash section */}
-            {selectedMethods.has('CASH') && (
+            {/* Cash input section */}
+            {activeMethod === 'CASH' && (
               <>
-                {/* When combined: show remaining to cover in cash */}
-                {selectedMethods.size > 1 && (transferPaid > 0 || cardPaid > 0) && (
+                {(transferPaid > 0 || cardPaid > 0) && (
                   <div className="bg-gray-50 rounded-xl px-3 py-2 flex justify-between items-center text-xs">
                     <span className="text-gray-500">Restante en efectivo</span>
                     <span className="font-bold text-gray-800">{fmt(remainingForCash)}</span>
                   </div>
                 )}
-
-                {/* Received + Change */}
                 <div className="flex gap-2">
                   <div className="flex-1 bg-gray-900 rounded-xl px-3 py-3 flex flex-col">
-                    <span className="text-gray-500 text-xs mb-0.5">💵 Efectivo</span>
+                    <span className="text-gray-500 text-xs mb-0.5">💵 Efectivo recibido</span>
                     <span className="text-white font-mono font-bold text-xl leading-tight">
                       {cashPaid > 0 ? fmt(cashPaid) : '$ —'}
                     </span>
@@ -841,8 +812,6 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
                     </span>
                   </div>
                 </div>
-
-                {/* Denomination grid */}
                 <div className="grid grid-cols-4 gap-1.5">
                   {([100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100] as const).map((d) => (
                     <button
@@ -869,21 +838,76 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </>
             )}
 
-            {/* Summary when no cash (transfer/card only) */}
-            {!selectedMethods.has('CASH') && (
-              <div className={`rounded-xl px-3 py-3 text-center ${
-                totalPaid >= total ? 'bg-green-50' : totalPaid > 0 ? 'bg-yellow-50' : 'bg-gray-50'
-              }`}>
-                <span className={`text-sm font-medium ${
-                  totalPaid >= total ? 'text-green-700' : totalPaid > 0 ? 'text-yellow-700' : 'text-gray-400'
-                }`}>
-                  {totalPaid >= total
-                    ? `✓ Cubierto — ${fmt(totalPaid)}`
-                    : totalPaid > 0
-                    ? `Falta: ${fmt(total - totalPaid)}`
-                    : 'Ingresa los montos arriba'}
-                </span>
-              </div>
+            {/* Transfer / Card input section */}
+            {(activeMethod === 'TRANSFER' || activeMethod === 'CARD') && (
+              <>
+                <div className="bg-gray-900 rounded-xl px-4 py-4 flex flex-col">
+                  <span className="text-gray-500 text-xs mb-1">
+                    {activeMethod === 'TRANSFER' ? '📲 Transferencia' : '💳 Tarjeta'}
+                  </span>
+                  <span className="text-white font-mono font-bold text-2xl leading-tight">
+                    {(activeMethod === 'TRANSFER' ? transferPaid : cardPaid) > 0
+                      ? fmt(activeMethod === 'TRANSFER' ? transferPaid : cardPaid)
+                      : '$ —'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['7','8','9','4','5','6','1','2','3'] as const).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        if (activeMethod === 'TRANSFER') {
+                          setTransferAmount(p => p.length < 12 ? p + key : p)
+                        } else {
+                          setCardAmount(p => p.length < 12 ? p + key : p)
+                        }
+                      }}
+                      className="h-14 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-800 font-bold text-lg touch-manipulation transition-colors select-none"
+                    >
+                      {key}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => {
+                      const remaining = activeMethod === 'TRANSFER'
+                        ? Math.max(0, total - cashPaid - cardPaid)
+                        : Math.max(0, total - cashPaid - transferPaid)
+                      if (activeMethod === 'TRANSFER') {
+                        setTransferAmount(String(Math.round(remaining)))
+                      } else {
+                        setCardAmount(String(Math.round(remaining)))
+                      }
+                    }}
+                    className="h-14 flex items-center justify-center rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 font-bold text-sm touch-manipulation transition-colors select-none"
+                  >
+                    Exacto
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (activeMethod === 'TRANSFER') {
+                        setTransferAmount(p => p.length < 12 ? p + '0' : p)
+                      } else {
+                        setCardAmount(p => p.length < 12 ? p + '0' : p)
+                      }
+                    }}
+                    className="h-14 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-800 font-bold text-lg touch-manipulation transition-colors select-none"
+                  >
+                    0
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (activeMethod === 'TRANSFER') {
+                        setTransferAmount(p => p.slice(0, -1))
+                      } else {
+                        setCardAmount(p => p.slice(0, -1))
+                      }
+                    }}
+                    className="h-14 flex items-center justify-center rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 active:bg-gray-300 font-bold text-lg touch-manipulation transition-colors select-none"
+                  >
+                    ⌫
+                  </button>
+                </div>
+              </>
             )}
 
             {/* Customer search */}
