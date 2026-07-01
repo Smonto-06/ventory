@@ -120,13 +120,7 @@ function LoginContent() {
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-gray-100 space-y-3">
-            <Link
-              href="/pin-login"
-              className="block text-center py-2 text-sm text-gray-600 hover:text-blue-600 transition-colors"
-            >
-              Cajero: acceso rápido con PIN
-            </Link>
+          <div className="mt-6 pt-6 border-t border-gray-100">
             <p className="text-center text-sm text-gray-500">
               ¿No tienes cuenta?{' '}
               <Link href="/register" className="text-blue-600 hover:underline font-medium">
