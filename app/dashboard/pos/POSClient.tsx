@@ -90,7 +90,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
   const [cart, setCart] = useState<CartItem[]>([])
 
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'>('CASH')
-  const [amountPaid, setAmountPaid] = useState('')
+  const [payAmountInput, setPayAmountInput] = useState('')
   const [discountAmount, setDiscountAmount] = useState('')
   const [notes, setNotes] = useState('')
 
@@ -99,6 +99,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
 
   const [receipt, setReceipt] = useState<SaleReceipt | null>(null)
   const [posTab, setPosTab] = useState<'products' | 'cart'>('products')
+  const [showPaymentScreen, setShowPaymentScreen] = useState(false)
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [padMode, setPadMode] = useState<'qty' | 'price' | 'disc'>('qty')
@@ -183,13 +184,14 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
 
   function clearCart() {
     setCart([])
-    setAmountPaid('')
+    setPayAmountInput('')
     setDiscountAmount('')
     setNotes('')
     setError(null)
     setPaymentMethod('CASH')
     setSelectedItemId(null)
     setPadInput('')
+    setShowPaymentScreen(false)
   }
 
   function applyPadInput() {
@@ -215,11 +217,32 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
 
   // ── Physical keyboard numpad handler ─────────────────────────────────────
 
+  const handleSaleRef = useRef(handleSale)
+  useEffect(() => { handleSaleRef.current = handleSale })
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
 
+      if (showPaymentScreen) {
+        // Payment screen keyboard: digits go to payAmountInput, Enter finalizes
+        if (e.key >= '0' && e.key <= '9') {
+          e.preventDefault()
+          setPayAmountInput((p) => (p.length < 12 ? p + e.key : p))
+        } else if (e.key === 'Backspace') {
+          e.preventDefault()
+          setPayAmountInput((p) => p.slice(0, -1))
+        } else if (e.key === 'Enter') {
+          e.preventDefault()
+          handleSaleRef.current()
+        } else if (e.key === 'Escape') {
+          setShowPaymentScreen(false)
+        }
+        return
+      }
+
+      // Cart numpad keyboard
       if (e.key >= '0' && e.key <= '9') {
         e.preventDefault()
         setPadInput((p) => (p.length < 10 ? p + e.key : p))
@@ -254,28 +277,23 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [padMode, padInput, selectedItemId]) // fresh closure on every change
+  }, [showPaymentScreen, padMode, padInput, selectedItemId]) // fresh closure on every change
 
   // ── Totals ────────────────────────────────────────────────────────────────
 
   const subtotal = cart.reduce((s, ci) => s + (ci.priceOverride ?? ci.product.price) * ci.quantity, 0)
-  const taxAmount = cart.reduce(
-    (s, ci) =>
-      s + Math.round((ci.priceOverride ?? ci.product.price) * ci.quantity * ci.product.taxRate * 100) / 100,
-    0
-  )
   const discount = parseFloat(discountAmount) || 0
-  const total = Math.round((subtotal + taxAmount - discount) * 100) / 100
-  const paid = parseFloat(amountPaid) || 0
-  const change = paymentMethod === 'CASH' ? Math.round((paid - total) * 100) / 100 : 0
+  const total = Math.round((subtotal - discount) * 100) / 100
+  const payAmountPaid = parseFloat(payAmountInput) || 0
+  const change = paymentMethod === 'CASH' ? Math.round((payAmountPaid - total) * 100) / 100 : 0
 
   // ── Submit sale ───────────────────────────────────────────────────────────
 
   async function handleSale() {
     if (!cashSession) return
     if (cart.length === 0) { setError('Agrega al menos un producto al carrito.'); return }
-    if (paymentMethod === 'CASH' && paid < total) {
-      setError(`Monto insuficiente. Total: ${fmt(total)}, Recibido: ${fmt(paid)}`)
+    if (paymentMethod === 'CASH' && payAmountPaid < total) {
+      setError(`Monto insuficiente. Total: ${fmt(total)}, Recibido: ${fmt(payAmountPaid)}`)
       return
     }
 
@@ -294,7 +312,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
             unitPrice: ci.priceOverride ?? ci.product.price,
           })),
           paymentMethod,
-          amountPaid: paymentMethod === 'CASH' ? paid : total,
+          amountPaid: paymentMethod === 'CASH' ? payAmountPaid : total,
           discountAmount: discount,
           notes: notes || undefined,
         }),
@@ -353,7 +371,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
   // ── Render: POS ───────────────────────────────────────────────────────────
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
+    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden relative">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -527,13 +545,13 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
             )}
           </div>
 
-          {/* Fixed bottom: numpad + payment + cobrar */}
+          {/* Fixed bottom: totals + numpad + cobrar */}
           <div className="shrink-0 border-t border-gray-200">
 
             {/* Totals row */}
             <div className="px-4 py-2 flex items-center justify-between">
               <span className="text-xs text-gray-400">
-                {discount > 0 && `Desc. ${fmt(discount)} · `}IVA {fmt(taxAmount)}
+                {discount > 0 ? `Desc. ${fmt(discount)}` : 'Sin descuento'}
               </span>
               <span className="font-bold text-base text-gray-900">{fmt(total)}</span>
             </div>
@@ -589,7 +607,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
             </div>
 
             {/* Apply button */}
-            <div className="px-3 mt-1">
+            <div className="px-3 mt-1 mb-2">
               <button
                 onClick={applyPadInput}
                 disabled={!padInput || (padMode !== 'disc' && !selectedItemId)}
@@ -599,70 +617,148 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </button>
             </div>
 
-            {/* Payment method */}
-            <div className="px-3 mt-2">
-              <div className="grid grid-cols-4 gap-1">
-                {(['CASH', 'CARD', 'TRANSFER', 'MIXED'] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setPaymentMethod(m)}
-                    className={`py-2 text-xs font-medium rounded-lg transition-colors touch-manipulation ${
-                      paymentMethod === m
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {PAYMENT_LABELS[m]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Cash received + change */}
-            {paymentMethod === 'CASH' && (
-              <div className="px-3 mt-2 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-gray-500 shrink-0">Recibido $</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                    placeholder={String(Math.round(total))}
-                    className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                {paid > 0 && (
-                  <div className="flex justify-between text-sm font-semibold bg-green-50 rounded-lg px-3 py-1.5">
-                    <span className="text-green-700">Cambio</span>
-                    <span className={change < 0 ? 'text-red-600' : 'text-green-700'}>
-                      {fmt(Math.max(change, 0))}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Error */}
-            {error && (
-              <div className="px-3 mt-2">
-                <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
-              </div>
-            )}
-
-            {/* Cobrar */}
-            <div className="px-3 mt-2 pb-3">
+            {/* Cobrar → opens payment screen */}
+            <div className="px-3 pb-3">
               <button
-                onClick={handleSale}
-                disabled={submitting || cart.length === 0}
+                onClick={() => { setShowPaymentScreen(true); setPayAmountInput(''); setError(null) }}
+                disabled={cart.length === 0}
                 className="w-full py-3 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation"
               >
-                {submitting ? 'Procesando...' : `Cobrar ${cart.length > 0 ? fmt(total) : ''}`}
+                {`Cobrar ${cart.length > 0 ? fmt(total) : ''}`}
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Payment screen overlay */}
+      {showPaymentScreen && (
+        <div className="absolute inset-0 bg-white z-10 flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
+            <button
+              onClick={() => setShowPaymentScreen(false)}
+              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-800 touch-manipulation"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M19 12H5M12 5l-7 7 7 7"/>
+              </svg>
+              Volver al carrito
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-sm mx-auto px-4 py-5 space-y-4">
+
+              {/* Total display */}
+              <div className="text-center py-4">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Total a cobrar</p>
+                <p className="text-4xl font-bold text-gray-900">{fmt(total)}</p>
+                {discount > 0 && (
+                  <p className="text-xs text-green-600 mt-1">Incluye descuento de {fmt(discount)}</p>
+                )}
+              </div>
+
+              {/* Payment method */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Método de pago</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['CASH', 'CARD', 'TRANSFER', 'MIXED'] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => { setPaymentMethod(m); setPayAmountInput('') }}
+                      className={`py-3 text-sm font-semibold rounded-xl transition-colors touch-manipulation ${
+                        paymentMethod === m
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {PAYMENT_LABELS[m]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Efectivo: amount input + numpad */}
+              {paymentMethod === 'CASH' && (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Cantidad recibida</p>
+
+                  {/* Display */}
+                  <div className="bg-gray-900 rounded-xl px-5 py-4 flex items-center justify-between">
+                    <span className="text-gray-400 text-sm">$</span>
+                    <span className="text-white font-mono text-2xl font-bold tracking-wider">
+                      {payAmountInput
+                        ? new Intl.NumberFormat('es-CO').format(parseInt(payAmountInput, 10))
+                        : '0'}
+                    </span>
+                  </div>
+
+                  {/* Numpad */}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(['7','8','9','4','5','6','1','2','3','⌫','0','00'] as const).map((key) => (
+                      <button
+                        key={key}
+                        onClick={() => {
+                          if (key === '⌫') {
+                            setPayAmountInput((p) => p.slice(0, -1))
+                          } else {
+                            setPayAmountInput((p) => p.length < 12 ? p + key : p)
+                          }
+                        }}
+                        className="h-12 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-800 font-semibold text-base touch-manipulation transition-colors select-none"
+                      >
+                        {key}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Change display */}
+                  {payAmountPaid > 0 && (
+                    <div className={`rounded-xl px-5 py-3 flex items-center justify-between ${
+                      change >= 0 ? 'bg-green-50' : 'bg-red-50'
+                    }`}>
+                      <span className={`text-sm font-semibold ${change >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {change >= 0 ? 'Cambio a devolver' : 'Falta'}
+                      </span>
+                      <span className={`text-xl font-bold ${change >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {fmt(Math.abs(change))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Notes */}
+              <div>
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Notas opcionales..."
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Error */}
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">{error}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Finalizar — fixed at bottom */}
+          <div className="shrink-0 px-4 pb-6 pt-3 bg-white border-t border-gray-100">
+            <button
+              onClick={handleSale}
+              disabled={submitting || (paymentMethod === 'CASH' && payAmountPaid < total)}
+              className="w-full py-4 bg-green-600 text-white font-bold text-base rounded-2xl hover:bg-green-700 active:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation shadow-sm"
+            >
+              {submitting ? 'Procesando...' : `✓ Finalizar venta · ${fmt(total)}`}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Receipt modal */}
       {receipt && (
@@ -699,12 +795,6 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
 
               {/* Totals */}
               <div className="border-t border-gray-100 pt-3 space-y-1 text-sm">
-                <div className="flex justify-between text-gray-500">
-                  <span>Subtotal</span><span>{fmt(receipt.subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-gray-500">
-                  <span>IVA</span><span>{fmt(receipt.taxAmount)}</span>
-                </div>
                 {receipt.discountAmount > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>Descuento</span><span>− {fmt(receipt.discountAmount)}</span>
