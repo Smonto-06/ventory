@@ -910,6 +910,33 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </>
             )}
 
+            {/* Running payment summary — always visible when any amount entered */}
+            {totalPaid > 0 && (
+              <div className="bg-gray-800 rounded-xl px-4 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-xs mb-0.5">Total recibido</p>
+                  <p className="text-white font-mono font-bold text-base">{fmt(totalPaid)}</p>
+                </div>
+                {cashPaid > 0 ? (
+                  <div className="text-right">
+                    <p className={`text-xs mb-0.5 ${change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {change < 0 ? 'Falta' : 'Cambio'}
+                    </p>
+                    <p className={`font-mono font-bold text-base ${change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {fmt(Math.abs(change))}
+                    </p>
+                  </div>
+                ) : totalPaid >= total ? (
+                  <p className="text-green-400 font-bold text-sm">✓ Cubierto</p>
+                ) : (
+                  <div className="text-right">
+                    <p className="text-yellow-400 text-xs mb-0.5">Falta</p>
+                    <p className="text-yellow-400 font-mono font-bold text-base">{fmt(total - totalPaid)}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Customer search */}
             <div className="relative">
               {customerId ? (
