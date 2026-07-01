@@ -1142,7 +1142,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
                     <span className="text-gray-600">
                       {item.product.name} × {item.quantity}
                     </span>
-                    <span className="font-medium">{fmt(item.total)}</span>
+                    <span className="font-medium text-gray-900">{fmt(item.total)}</span>
                   </div>
                 ))}
               </div>
@@ -1155,7 +1155,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-base">
-                  <span>Total</span><span>{fmt(receipt.total)}</span>
+                  <span className="text-blue-600">Total</span><span className="text-gray-900">{fmt(receipt.total)}</span>
                 </div>
                 <div className="flex justify-between text-gray-500 mt-2 pt-2 border-t border-gray-100">
                   <span>Método: {PAYMENT_LABELS[receipt.paymentMethod] ?? receipt.paymentMethod}</span>
