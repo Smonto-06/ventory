@@ -20,6 +20,7 @@ interface Product {
 interface CartItem {
   product: Product
   quantity: number
+  priceOverride?: number
 }
 
 interface CashSession {
@@ -98,6 +99,10 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
 
   const [receipt, setReceipt] = useState<SaleReceipt | null>(null)
   const [posTab, setPosTab] = useState<'products' | 'cart'>('products')
+
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [padMode, setPadMode] = useState<'qty' | 'price' | 'disc'>('qty')
+  const [padInput, setPadInput] = useState('')
 
   const searchRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -183,13 +188,80 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
     setNotes('')
     setError(null)
     setPaymentMethod('CASH')
+    setSelectedItemId(null)
+    setPadInput('')
   }
+
+  function applyPadInput() {
+    const raw = padInput.trim()
+    if (!raw) return
+    const val = Math.round(parseFloat(raw))
+    if (isNaN(val)) { setPadInput(''); return }
+    if (padMode === 'qty' && selectedItemId) {
+      updateQty(selectedItemId, Math.max(1, val))
+    } else if (padMode === 'price' && selectedItemId) {
+      setCart((prev) =>
+        prev.map((ci) =>
+          ci.product.id === selectedItemId
+            ? { ...ci, priceOverride: val > 0 ? val : undefined }
+            : ci
+        )
+      )
+    } else if (padMode === 'disc') {
+      setDiscountAmount(val > 0 ? String(val) : '')
+    }
+    setPadInput('')
+  }
+
+  // ── Physical keyboard numpad handler ─────────────────────────────────────
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault()
+        setPadInput((p) => (p.length < 10 ? p + e.key : p))
+      } else if (e.key === 'Backspace') {
+        e.preventDefault()
+        setPadInput((p) => p.slice(0, -1))
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        const val = Math.round(parseFloat(padInput))
+        if (!padInput.trim() || isNaN(val)) { setPadInput(''); return }
+        if (padMode === 'qty' && selectedItemId) {
+          updateQty(selectedItemId, Math.max(1, val))
+        } else if (padMode === 'price' && selectedItemId) {
+          setCart((prev) =>
+            prev.map((ci) =>
+              ci.product.id === selectedItemId
+                ? { ...ci, priceOverride: val > 0 ? val : undefined }
+                : ci
+            )
+          )
+        } else if (padMode === 'disc') {
+          setDiscountAmount(val > 0 ? String(val) : '')
+        }
+        setPadInput('')
+      } else if (e.key.toLowerCase() === 'q') {
+        setPadMode('qty'); setPadInput('')
+      } else if (e.key.toLowerCase() === 'p') {
+        setPadMode('price'); setPadInput('')
+      } else if (e.key.toLowerCase() === 'd') {
+        setPadMode('disc'); setPadInput('')
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [padMode, padInput, selectedItemId]) // fresh closure on every change
 
   // ── Totals ────────────────────────────────────────────────────────────────
 
-  const subtotal = cart.reduce((s, ci) => s + ci.product.price * ci.quantity, 0)
+  const subtotal = cart.reduce((s, ci) => s + (ci.priceOverride ?? ci.product.price) * ci.quantity, 0)
   const taxAmount = cart.reduce(
-    (s, ci) => s + Math.round(ci.product.price * ci.quantity * ci.product.taxRate * 100) / 100,
+    (s, ci) =>
+      s + Math.round((ci.priceOverride ?? ci.product.price) * ci.quantity * ci.product.taxRate * 100) / 100,
     0
   )
   const discount = parseFloat(discountAmount) || 0
@@ -219,7 +291,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
           items: cart.map((ci) => ({
             productId: ci.product.id,
             quantity: ci.quantity,
-            unitPrice: ci.product.price,
+            unitPrice: ci.priceOverride ?? ci.product.price,
           })),
           paymentMethod,
           amountPaid: paymentMethod === 'CASH' ? paid : total,
@@ -396,111 +468,148 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
           </div>
         </div>
 
-        {/* Right: cart + payment */}
+        {/* Right: cart + numpad + payment */}
         <div className={`${posTab === 'products' ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 xl:w-96 bg-white border-l border-gray-200 flex-col shrink-0`}>
+
           {/* Cart header */}
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-800">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
+            <h2 className="font-semibold text-gray-800 text-sm">
               Carrito {cart.length > 0 && <span className="text-blue-600">({cart.length})</span>}
             </h2>
             {cart.length > 0 && (
-              <button onClick={clearCart} className="text-xs text-red-500 hover:text-red-700">
+              <button onClick={clearCart} className="text-xs text-red-500 hover:text-red-700 touch-manipulation">
                 Limpiar
               </button>
             )}
           </div>
 
-          {/* Cart items */}
-          <div className="flex-1 overflow-y-auto px-4 py-2">
+          {/* Cart items — scrollable */}
+          <div className="flex-1 overflow-y-auto min-h-0 px-3 py-2">
             {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-32 text-gray-300">
-                <span className="text-3xl mb-2">🛒</span>
+              <div className="flex flex-col items-center justify-center h-full min-h-[64px] text-gray-300">
+                <span className="text-3xl mb-1">🛒</span>
                 <span className="text-xs">El carrito está vacío</span>
               </div>
             ) : (
-              <div className="space-y-2">
-                {cart.map((ci) => (
-                  <div
-                    key={ci.product.id}
-                    className="flex items-center gap-2 py-2 border-b border-gray-50"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-gray-800 truncate">{ci.product.name}</p>
-                      <p className="text-xs text-gray-400">{fmt(ci.product.price)} c/u</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => updateQty(ci.product.id, ci.quantity - 1)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm touch-manipulation"
-                      >
-                        −
-                      </button>
-                      <span className="w-8 text-center text-sm font-medium text-gray-900">{ci.quantity}</span>
-                      <button
-                        onClick={() => updateQty(ci.product.id, ci.quantity + 1)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm touch-manipulation"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <span className="w-20 text-right text-xs font-semibold text-gray-700">
-                      {fmt(ci.product.price * ci.quantity)}
-                    </span>
-                  </div>
-                ))}
+              <div className="space-y-1">
+                {cart.map((ci) => {
+                  const effPrice = ci.priceOverride ?? ci.product.price
+                  const isSelected = selectedItemId === ci.product.id
+                  return (
+                    <button
+                      key={ci.product.id}
+                      onClick={() => {
+                        setSelectedItemId(isSelected ? null : ci.product.id)
+                        setPadMode('qty')
+                        setPadInput('')
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors touch-manipulation ${
+                        isSelected ? 'bg-blue-50 ring-1 ring-blue-400' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-900 truncate">{ci.product.name}</p>
+                        <p className={`text-xs ${ci.priceOverride ? 'text-orange-500 font-medium' : 'text-gray-400'}`}>
+                          {fmt(effPrice)} c/u
+                          {ci.priceOverride && (
+                            <span className="ml-1 text-gray-300 line-through text-xs">{fmt(ci.product.price)}</span>
+                          )}
+                        </p>
+                      </div>
+                      <span className="text-xs font-bold text-blue-600 shrink-0">×{ci.quantity}</span>
+                      <span className="text-xs font-semibold text-gray-800 w-16 text-right shrink-0">
+                        {fmt(effPrice * ci.quantity)}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
 
-          {/* Totals + payment */}
-          <div className="border-t border-gray-200 px-4 py-3 space-y-3">
-            {/* Totals */}
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between text-gray-500">
-                <span>Subtotal</span>
-                <span>{fmt(subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-gray-500">
-                <span>IVA</span>
-                <span>{fmt(taxAmount)}</span>
-              </div>
-              {discount > 0 && (
-                <div className="flex justify-between text-green-600">
-                  <span>Descuento</span>
-                  <span>− {fmt(discount)}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold text-base text-gray-900 pt-1 border-t border-gray-100">
-                <span>Total</span>
-                <span>{fmt(total)}</span>
-              </div>
+          {/* Fixed bottom: numpad + payment + cobrar */}
+          <div className="shrink-0 border-t border-gray-200">
+
+            {/* Totals row */}
+            <div className="px-4 py-2 flex items-center justify-between">
+              <span className="text-xs text-gray-400">
+                {discount > 0 && `Desc. ${fmt(discount)} · `}IVA {fmt(taxAmount)}
+              </span>
+              <span className="font-bold text-base text-gray-900">{fmt(total)}</span>
             </div>
 
-            {/* Discount */}
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500 shrink-0">Descuento $</label>
-              <input
-                type="number"
-                min="0"
-                value={discountAmount}
-                onChange={(e) => setDiscountAmount(e.target.value)}
-                placeholder="0.00"
-                className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
+            {/* Mode tabs */}
+            <div className="flex gap-1 px-3 pb-2">
+              {(['qty', 'price', 'disc'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => { setPadMode(m); setPadInput('') }}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors touch-manipulation ${
+                    padMode === m
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {m === 'qty' ? 'CANT.' : m === 'price' ? 'PRECIO' : 'DESC.'}
+                </button>
+              ))}
+            </div>
+
+            {/* Numpad display */}
+            <div className="mx-3 mb-2 bg-gray-900 rounded-lg px-4 py-2 flex items-center justify-between">
+              <span className="text-xs text-gray-500">
+                {padMode === 'qty'
+                  ? selectedItemId ? 'Cantidad' : 'Sel. ítem ↑'
+                  : padMode === 'price'
+                  ? selectedItemId ? 'Precio' : 'Sel. ítem ↑'
+                  : 'Descuento'}
+              </span>
+              <span className="text-white font-mono text-lg font-bold tracking-wider">
+                {padInput || '0'}
+              </span>
+            </div>
+
+            {/* Numpad grid */}
+            <div className="grid grid-cols-3 gap-1 px-3">
+              {(['7','8','9','4','5','6','1','2','3','⌫','0','00'] as const).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    if (key === '⌫') {
+                      setPadInput((p) => p.slice(0, -1))
+                    } else {
+                      setPadInput((p) => p.length < 10 ? p + key : p)
+                    }
+                  }}
+                  className="h-10 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-800 font-semibold text-sm touch-manipulation transition-colors select-none"
+                >
+                  {key}
+                </button>
+              ))}
+            </div>
+
+            {/* Apply button */}
+            <div className="px-3 mt-1">
+              <button
+                onClick={applyPadInput}
+                disabled={!padInput || (padMode !== 'disc' && !selectedItemId)}
+                className="w-full h-10 bg-green-600 hover:bg-green-700 active:bg-green-800 disabled:bg-gray-100 disabled:text-gray-400 text-white font-bold text-sm rounded-lg touch-manipulation transition-colors"
+              >
+                ✓ Aplicar
+              </button>
             </div>
 
             {/* Payment method */}
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Método de pago</p>
-              <div className="grid grid-cols-2 gap-1">
+            <div className="px-3 mt-2">
+              <div className="grid grid-cols-4 gap-1">
                 {(['CASH', 'CARD', 'TRANSFER', 'MIXED'] as const).map((m) => (
                   <button
                     key={m}
                     onClick={() => setPaymentMethod(m)}
-                    className={`py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    className={`py-2 text-xs font-medium rounded-lg transition-colors touch-manipulation ${
                       paymentMethod === m
                         ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
                     {PAYMENT_LABELS[m]}
@@ -509,22 +618,22 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </div>
             </div>
 
-            {/* Cash fields */}
+            {/* Cash received + change */}
             {paymentMethod === 'CASH' && (
-              <div className="space-y-2">
+              <div className="px-3 mt-2 space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-gray-500 shrink-0 w-20">Recibido $</label>
+                  <label className="text-xs text-gray-500 shrink-0">Recibido $</label>
                   <input
                     type="number"
                     min="0"
                     value={amountPaid}
                     onChange={(e) => setAmountPaid(e.target.value)}
-                    placeholder={total.toFixed(2)}
-                    className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder={String(Math.round(total))}
+                    className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 {paid > 0 && (
-                  <div className="flex justify-between text-sm font-semibold bg-green-50 rounded-lg px-3 py-2">
+                  <div className="flex justify-between text-sm font-semibold bg-green-50 rounded-lg px-3 py-1.5">
                     <span className="text-green-700">Cambio</span>
                     <span className={change < 0 ? 'text-red-600' : 'text-green-700'}>
                       {fmt(Math.max(change, 0))}
@@ -534,28 +643,23 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </div>
             )}
 
-            {/* Notes */}
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Notas opcionales..."
-              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-
             {/* Error */}
             {error && (
-              <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+              <div className="px-3 mt-2">
+                <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+              </div>
             )}
 
-            {/* Submit */}
-            <button
-              onClick={handleSale}
-              disabled={submitting || cart.length === 0}
-              className="w-full py-4 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation"
-            >
-              {submitting ? 'Procesando...' : `Cobrar ${cart.length > 0 ? fmt(total) : ''}`}
-            </button>
+            {/* Cobrar */}
+            <div className="px-3 mt-2 pb-3">
+              <button
+                onClick={handleSale}
+                disabled={submitting || cart.length === 0}
+                className="w-full py-3 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation"
+              >
+                {submitting ? 'Procesando...' : `Cobrar ${cart.length > 0 ? fmt(total) : ''}`}
+              </button>
+            </div>
           </div>
         </div>
       </div>
