@@ -38,6 +38,8 @@ interface CustomerResult {
   phone: string | null
   email: string | null
   document: string | null
+  address: string | null
+  balance?: number | string
 }
 
 interface SaleReceipt {
@@ -84,6 +86,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   CARD: 'Tarjeta',
   TRANSFER: 'Transferencia',
   MIXED: 'Mixto',
+  CREDIT: 'Crédito',
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -98,7 +101,7 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
 
   const [cart, setCart] = useState<CartItem[]>([])
 
-  const [activeMethod, setActiveMethod] = useState<'CASH' | 'TRANSFER' | 'CARD'>('CASH')
+  const [activeMethod, setActiveMethod] = useState<'CASH' | 'TRANSFER' | 'CARD' | 'CREDIT'>('CASH')
   const [payAmountInput, setPayAmountInput] = useState('')   // cash amount
   const [transferAmount, setTransferAmount] = useState('')
   const [cardAmount, setCardAmount] = useState('')
@@ -118,13 +121,22 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
 
   const [customerId, setCustomerId] = useState<string | null>(null)
   const [customerName, setCustomerName] = useState('')
-  const [customerQuery, setCustomerQuery] = useState('')
-  const [customerResults, setCustomerResults] = useState<CustomerResult[]>([])
-  const [customerSearching, setCustomerSearching] = useState(false)
+
+  // ── Customer screen overlay ───────────────────────────────────────────────
+  const [showCustomerScreen, setShowCustomerScreen] = useState(false)
+  const [customerScreenView, setCustomerScreenView] = useState<'list' | 'new'>('list')
+  const [allCustomers, setAllCustomers] = useState<CustomerResult[]>([])
+  const [customerScreenQuery, setCustomerScreenQuery] = useState('')
+  const [customerScreenLoading, setCustomerScreenLoading] = useState(false)
+  const [newCustName, setNewCustName] = useState('')
+  const [newCustPhone, setNewCustPhone] = useState('')
+  const [newCustEmail, setNewCustEmail] = useState('')
+  const [newCustDocument, setNewCustDocument] = useState('')
+  const [newCustAddress, setNewCustAddress] = useState('')
+  const [newCustSaving, setNewCustSaving] = useState(false)
 
   const searchRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const customerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Fetch active cash session on mount ────────────────────────────────────
 
@@ -214,54 +226,67 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
     setShowPaymentScreen(false)
     setCustomerId(null)
     setCustomerName('')
-    setCustomerQuery('')
-    setCustomerResults([])
-  }
-
-  function handleCustomerSearch(q: string) {
-    setCustomerQuery(q)
-    setCustomerId(null)
-    setCustomerName('')
-    if (customerDebounceRef.current) clearTimeout(customerDebounceRef.current)
-    if (!q.trim() || q.length < 2) {
-      setCustomerResults([])
-      return
-    }
-    customerDebounceRef.current = setTimeout(async () => {
-      setCustomerSearching(true)
-      try {
-        const res = await fetch(`/api/customers?q=${encodeURIComponent(q)}`)
-        const data = await res.json()
-        setCustomerResults(data.customers ?? [])
-      } catch {
-        setCustomerResults([])
-      } finally {
-        setCustomerSearching(false)
-      }
-    }, 300)
+    setShowCustomerScreen(false)
+    setCustomerScreenView('list')
+    setCustomerScreenQuery('')
   }
 
   function selectCustomer(c: CustomerResult) {
     setCustomerId(c.id)
     setCustomerName(c.name)
-    setCustomerQuery(c.name)
-    setCustomerResults([])
   }
 
-  async function createAndSelectCustomer(name: string) {
-    if (!name.trim()) return
+  async function openCustomerScreen() {
+    setShowCustomerScreen(true)
+    setCustomerScreenView('list')
+    setCustomerScreenQuery('')
+    setCustomerScreenLoading(true)
+    try {
+      const res = await fetch('/api/customers')
+      const data = await res.json()
+      setAllCustomers(data.customers ?? [])
+    } catch {
+      setAllCustomers([])
+    } finally {
+      setCustomerScreenLoading(false)
+    }
+  }
+
+  function closeCustomerScreen() {
+    setShowCustomerScreen(false)
+    setCustomerScreenView('list')
+    setCustomerScreenQuery('')
+    setNewCustName('')
+    setNewCustPhone('')
+    setNewCustEmail('')
+    setNewCustDocument('')
+    setNewCustAddress('')
+  }
+
+  async function saveNewCustomer() {
+    if (!newCustName.trim() || newCustSaving) return
+    setNewCustSaving(true)
     try {
       const res = await fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({
+          name: newCustName.trim(),
+          phone: newCustPhone.trim() || undefined,
+          email: newCustEmail.trim() || undefined,
+          document: newCustDocument.trim() || undefined,
+          address: newCustAddress.trim() || undefined,
+        }),
       })
       const data = await res.json()
       if (res.ok && data.customer) {
         selectCustomer(data.customer)
+        closeCustomerScreen()
       }
     } catch {
-      // ignore — customer assignment is optional
+      // ignore
+    } finally {
+      setNewCustSaving(false)
     }
   }
 
@@ -373,7 +398,9 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
   const totalPaid = cashPaid + transferPaid + cardPaid
   const remainingForCash = Math.max(0, total - transferPaid - cardPaid)
   const change = cashPaid > 0 ? Math.round((cashPaid - remainingForCash) * 100) / 100 : 0
-  const canFinalize = cashPaid > 0 ? cashPaid >= remainingForCash : totalPaid >= total
+  const canFinalize = activeMethod === 'CREDIT'
+    ? !!customerId
+    : cashPaid > 0 ? cashPaid >= remainingForCash : totalPaid >= total
 
   // ── Submit sale ───────────────────────────────────────────────────────────
 
@@ -381,7 +408,11 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
     if (!cashSession) return
     if (cart.length === 0) { setError('Agrega al menos un producto al carrito.'); return }
     if (!canFinalize) {
-      setError(`Monto insuficiente. Total: ${fmt(total)}, Recibido: ${fmt(totalPaid)}`)
+      if (activeMethod === 'CREDIT') {
+        setError('Selecciona un cliente para procesar el pago a crédito.')
+      } else {
+        setError(`Monto insuficiente. Total: ${fmt(total)}, Recibido: ${fmt(totalPaid)}`)
+      }
       return
     }
 
@@ -399,12 +430,13 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
             quantity: ci.quantity,
             unitPrice: ci.priceOverride ?? ci.product.price,
           })),
-          paymentMethod: (cashPaid > 0 && transferPaid === 0 && cardPaid === 0) ? 'CASH'
+          paymentMethod: activeMethod === 'CREDIT' ? 'CREDIT'
+            : (cashPaid > 0 && transferPaid === 0 && cardPaid === 0) ? 'CASH'
             : (transferPaid > 0 && cashPaid === 0 && cardPaid === 0) ? 'TRANSFER'
             : (cardPaid > 0 && cashPaid === 0 && transferPaid === 0) ? 'CARD'
             : (cashPaid > 0 || transferPaid > 0 || cardPaid > 0) ? 'MIXED'
             : activeMethod,
-          amountPaid: cashPaid > 0 ? Math.max(totalPaid, total) : total,
+          amountPaid: activeMethod === 'CREDIT' ? 0 : (cashPaid > 0 ? Math.max(totalPaid, total) : total),
           discountAmount: discount,
           notes: notes || undefined,
           customerId: customerId || undefined,
@@ -710,10 +742,33 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </button>
             </div>
 
-            {/* Cobrar → opens payment screen */}
-            <div className="px-3 pb-3">
+            {/* Cliente button */}
+            <div className="px-3 pb-1">
               <button
-                onClick={() => { setShowPaymentScreen(true); setPayAmountInput(''); setTransferAmount(''); setCardAmount(''); setActiveMethod('CASH'); setError(null) }}
+                onClick={openCustomerScreen}
+                className={`w-full py-2 rounded-xl text-sm font-medium touch-manipulation transition-colors flex items-center justify-between px-3 ${
+                  customerId
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                    : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                <span>👤 {customerId ? customerName : 'Agregar cliente (opcional)'}</span>
+                {customerId && (
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); setCustomerId(null); setCustomerName('') }}
+                    className="text-blue-400 hover:text-blue-700 font-bold text-base leading-none"
+                  >
+                    ✕
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Cobrar → opens payment screen */}
+            <div className="px-3 pb-3 pt-1">
+              <button
+                onClick={() => { setShowPaymentScreen(true); setPayAmountInput(''); setTransferAmount(''); setCardAmount(''); setActiveMethod(customerId ? activeMethod : 'CASH'); setError(null) }}
                 disabled={cart.length === 0}
                 className="w-full py-3 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation"
               >
@@ -757,20 +812,21 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
             </div>
 
             {/* Payment method selectors — tap one to enter its amount */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {([
                 { key: 'CASH', label: 'Efectivo', icon: '💵' },
-                { key: 'TRANSFER', label: 'Transferencia', icon: '📲' },
+                { key: 'TRANSFER', label: 'Transf.', icon: '📲' },
                 { key: 'CARD', label: 'Tarjeta', icon: '💳' },
+                { key: 'CREDIT', label: 'Crédito', icon: '🏦' },
               ] as const).map(({ key, label, icon }) => {
-                const amt = key === 'CASH' ? cashPaid : key === 'TRANSFER' ? transferPaid : cardPaid
+                const amt = key === 'CASH' ? cashPaid : key === 'TRANSFER' ? transferPaid : key === 'CARD' ? cardPaid : 0
                 return (
                   <button
                     key={key}
                     onClick={() => setActiveMethod(key)}
-                    className={`py-3 text-sm font-semibold rounded-xl transition-colors touch-manipulation flex flex-col items-center gap-0.5 ${
+                    className={`py-2.5 text-sm font-semibold rounded-xl transition-colors touch-manipulation flex flex-col items-center gap-0.5 ${
                       activeMethod === key
-                        ? 'bg-blue-600 text-white shadow-sm'
+                        ? key === 'CREDIT' ? 'bg-amber-500 text-white shadow-sm' : 'bg-blue-600 text-white shadow-sm'
                         : amt > 0
                         ? 'bg-blue-50 text-blue-700 border border-blue-200'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200 active:bg-gray-300'
@@ -913,6 +969,34 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </>
             )}
 
+            {/* Credit section — customer required, no amount input */}
+            {activeMethod === 'CREDIT' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-4 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-amber-800 font-semibold text-sm">🏦 Pago a crédito</span>
+                  <span className="text-amber-700 font-bold text-sm font-mono">{fmt(total)}</span>
+                </div>
+                <p className="text-xs text-amber-600 leading-snug">El valor se agregará a la cuenta del cliente. Selecciona un cliente para continuar.</p>
+                {customerId && (
+                  <div className="flex items-center gap-2 bg-amber-100 rounded-lg px-3 py-2">
+                    <span className="text-amber-800 text-sm font-medium flex-1 truncate">👤 {customerName}</span>
+                    <button
+                      onClick={() => { setCustomerId(null); setCustomerName('') }}
+                      className="text-amber-500 hover:text-amber-700 font-bold touch-manipulation"
+                    >✕</button>
+                  </div>
+                )}
+                <button
+                  onClick={openCustomerScreen}
+                  className={`w-full py-2.5 rounded-xl text-sm font-medium touch-manipulation transition-colors ${
+                    customerId ? 'bg-amber-200 text-amber-800 hover:bg-amber-300' : 'bg-amber-500 text-white hover:bg-amber-600'
+                  }`}
+                >
+                  {customerId ? 'Cambiar cliente' : '+ Seleccionar cliente'}
+                </button>
+              </div>
+            )}
+
             {/* Running payment summary — always visible when any amount entered */}
             {totalPaid > 0 && (
               <div className="bg-gray-800 rounded-xl px-4 py-3 flex items-center justify-between">
@@ -940,48 +1024,26 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </div>
             )}
 
-            {/* Customer search */}
-            <div className="relative">
-              {customerId ? (
-                <div className="flex items-center gap-2 border border-blue-200 bg-blue-50 rounded-xl px-3 py-2.5">
-                  <span className="text-sm text-blue-800 font-medium flex-1 truncate">👤 {customerName}</span>
-                  <button
-                    onClick={() => { setCustomerId(null); setCustomerName(''); setCustomerQuery('') }}
-                    className="text-blue-400 hover:text-blue-600 text-sm font-bold touch-manipulation"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ) : (
-                <input
-                  type="text"
-                  value={customerQuery}
-                  onChange={(e) => handleCustomerSearch(e.target.value)}
-                  placeholder="Buscar o crear cliente (opcional)..."
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
-              {!customerId && (customerResults.length > 0 || (customerQuery.length >= 2 && !customerSearching)) && (
-                <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-xl mt-1 shadow-lg z-20 max-h-36 overflow-y-auto">
-                  {customerResults.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => selectCustomer(c)}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between touch-manipulation"
-                    >
-                      <span className="font-medium text-gray-800">{c.name}</span>
-                      {c.phone && <span className="text-gray-400 text-xs">{c.phone}</span>}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => createAndSelectCustomer(customerQuery)}
-                    className="w-full px-3 py-2.5 text-left text-sm text-blue-600 hover:bg-blue-50 border-t border-gray-100 font-medium touch-manipulation"
-                  >
-                    + Crear &quot;{customerQuery}&quot;
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Cliente button — only show for non-CREDIT methods (CREDIT has its own section above) */}
+            {activeMethod !== 'CREDIT' && (
+              <button
+                onClick={openCustomerScreen}
+                className={`w-full py-2.5 rounded-xl text-sm font-medium touch-manipulation transition-colors flex items-center justify-between px-3 ${
+                  customerId
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                    : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                <span>👤 {customerId ? customerName : 'Agregar cliente (opcional)'}</span>
+                {customerId && (
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); setCustomerId(null); setCustomerName('') }}
+                    className="text-blue-400 hover:text-blue-700 font-bold text-base leading-none"
+                  >✕</span>
+                )}
+              </button>
+            )}
 
             {/* Notes */}
             <input
@@ -1111,6 +1173,161 @@ export default function POSClient({ userName, businessName, branchId }: POSClien
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Customer screen overlay */}
+      {showCustomerScreen && (
+        <div className="fixed inset-0 bg-white z-50 flex flex-col">
+          {/* Header */}
+          <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+            <button
+              onClick={closeCustomerScreen}
+              className="text-gray-500 hover:text-gray-800 touch-manipulation p-1 -ml-1"
+            >
+              ← Volver
+            </button>
+            <h2 className="font-bold text-gray-800 text-base flex-1">
+              {customerScreenView === 'new' ? 'Nuevo cliente' : 'Clientes'}
+            </h2>
+            {customerScreenView === 'list' && (
+              <button
+                onClick={() => setCustomerScreenView('new')}
+                className="text-sm font-medium text-blue-600 hover:text-blue-800 touch-manipulation"
+              >
+                + Nuevo
+              </button>
+            )}
+          </div>
+
+          {customerScreenView === 'list' ? (
+            <>
+              {/* Search bar */}
+              <div className="shrink-0 px-4 py-2 border-b border-gray-100">
+                <input
+                  type="text"
+                  value={customerScreenQuery}
+                  onChange={(e) => setCustomerScreenQuery(e.target.value)}
+                  placeholder="Buscar por nombre, teléfono, documento..."
+                  autoFocus
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              {/* List */}
+              <div className="flex-1 overflow-y-auto">
+                {customerScreenLoading ? (
+                  <p className="text-center text-gray-400 text-sm py-10">Cargando...</p>
+                ) : (() => {
+                  const q = customerScreenQuery.trim().toLowerCase()
+                  const filtered = q
+                    ? allCustomers.filter(c =>
+                        c.name.toLowerCase().includes(q) ||
+                        (c.phone ?? '').includes(q) ||
+                        (c.document ?? '').toLowerCase().includes(q)
+                      )
+                    : allCustomers
+                  return filtered.length === 0 ? (
+                    <div className="text-center py-10">
+                      <p className="text-gray-400 text-sm mb-3">No se encontraron clientes</p>
+                      <button
+                        onClick={() => setCustomerScreenView('new')}
+                        className="text-blue-600 text-sm font-medium hover:text-blue-800"
+                      >
+                        + Crear nuevo cliente
+                      </button>
+                    </div>
+                  ) : (
+                    filtered.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => { selectCustomer(c); closeCustomerScreen() }}
+                        className="w-full px-4 py-3.5 text-left border-b border-gray-50 hover:bg-gray-50 active:bg-gray-100 touch-manipulation"
+                      >
+                        <p className="font-semibold text-gray-800 text-sm">{c.name}</p>
+                        <div className="flex gap-3 mt-0.5">
+                          {c.phone && <span className="text-xs text-gray-400">{c.phone}</span>}
+                          {c.document && <span className="text-xs text-gray-400">{c.document}</span>}
+                          {c.balance !== undefined && Number(c.balance) > 0 && (
+                            <span className="text-xs text-amber-600 font-medium">Saldo: {fmt(Number(c.balance))}</span>
+                          )}
+                        </div>
+                      </button>
+                    ))
+                  )
+                })()}
+              </div>
+            </>
+          ) : (
+            /* New customer form */
+            <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Nombre *</label>
+                <input
+                  type="text"
+                  value={newCustName}
+                  onChange={(e) => setNewCustName(e.target.value)}
+                  placeholder="Nombre completo"
+                  autoFocus
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Documento</label>
+                <input
+                  type="text"
+                  value={newCustDocument}
+                  onChange={(e) => setNewCustDocument(e.target.value)}
+                  placeholder="CC, NIT, etc."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Teléfono</label>
+                <input
+                  type="tel"
+                  value={newCustPhone}
+                  onChange={(e) => setNewCustPhone(e.target.value)}
+                  placeholder="300 123 4567"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Correo electrónico</label>
+                <input
+                  type="email"
+                  value={newCustEmail}
+                  onChange={(e) => setNewCustEmail(e.target.value)}
+                  placeholder="correo@ejemplo.com"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Dirección</label>
+                <input
+                  type="text"
+                  value={newCustAddress}
+                  onChange={(e) => setNewCustAddress(e.target.value)}
+                  placeholder="Calle, barrio, ciudad"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => setCustomerScreenView('list')}
+                  className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 touch-manipulation"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveNewCustomer}
+                  disabled={!newCustName.trim() || newCustSaving}
+                  className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+                >
+                  {newCustSaving ? 'Guardando...' : 'Guardar cliente'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
