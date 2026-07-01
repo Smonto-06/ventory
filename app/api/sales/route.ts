@@ -115,26 +115,21 @@ export async function POST(req: NextRequest) {
 
     // Calculate totals using product tax rates
     let subtotal = 0
-    let totalTax = 0
     const itemsWithTotals = items.map((item) => {
-      const product = productMap.get(item.productId)!
-      const taxRate = Number(product.taxRate)
       const itemSubtotal = round2(item.unitPrice * item.quantity)
-      const itemTax = round2(itemSubtotal * taxRate)
       subtotal = round2(subtotal + itemSubtotal)
-      totalTax = round2(totalTax + itemTax)
       return {
         productId: item.productId,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        taxRate,
-        taxAmount: itemTax,
+        taxRate: 0,
+        taxAmount: 0,
         subtotal: itemSubtotal,
-        total: round2(itemSubtotal + itemTax),
+        total: itemSubtotal,
       }
     })
 
-    const total = round2(subtotal + totalTax - discountAmount)
+    const total = round2(subtotal - discountAmount)
     if (total < 0) {
       return NextResponse.json({ error: 'El descuento no puede superar el total' }, { status: 400 })
     }
@@ -168,7 +163,7 @@ export async function POST(req: NextRequest) {
           folio,
           status: 'COMPLETED',
           subtotal,
-          taxAmount: totalTax,
+          taxAmount: 0,
           discountAmount,
           total,
           paymentMethod,
