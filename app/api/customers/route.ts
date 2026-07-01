@@ -27,8 +27,8 @@ export async function GET(req: NextRequest) {
           }
         : {}),
     },
-    select: { id: true, name: true, phone: true, email: true, document: true },
-    take: 10,
+    select: { id: true, name: true, phone: true, email: true, document: true, address: true, balance: true },
+    take: q.trim() ? 10 : 100,
     orderBy: { name: 'asc' },
   })
 
@@ -40,6 +40,7 @@ const CreateCustomerSchema = z.object({
   phone: z.string().optional(),
   email: z.string().optional(),
   document: z.string().optional(),
+  address: z.string().optional(),
   notes: z.string().optional(),
 })
 
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
-  const { name, phone, email, document, notes } = parsed.data
+  const { name, phone, email, document, address, notes } = parsed.data
 
   const customer = await db.customer.create({
     data: {
@@ -70,10 +71,11 @@ export async function POST(req: NextRequest) {
       phone: phone || null,
       email: email || null,
       document: document || null,
+      address: address || null,
       notes: notes || null,
       businessId,
     },
-    select: { id: true, name: true, phone: true, email: true, document: true },
+    select: { id: true, name: true, phone: true, email: true, document: true, address: true, balance: true },
   })
 
   return NextResponse.json({ customer }, { status: 201 })

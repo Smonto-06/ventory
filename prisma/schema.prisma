@@ -36,6 +36,7 @@ enum PaymentMethod {
   CARD
   TRANSFER
   MIXED
+  CREDIT
 }
 
 enum CashSessionStatus {
@@ -351,7 +352,9 @@ model Customer {
   phone      String?
   email      String?
   document   String?
+  address    String?
   notes      String?
+  balance    Decimal  @default(0) @db.Decimal(12, 2)
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])

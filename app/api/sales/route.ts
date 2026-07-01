@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { PaymentMethod, CashSessionStatus, MovementType } from '@prisma/client'
+import { CashSessionStatus, MovementType } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +16,7 @@ const ItemSchema = z.object({
 const CreateSaleSchema = z.object({
   cashSessionId: z.string().min(1),
   items: z.array(ItemSchema).min(1),
-  paymentMethod: z.nativeEnum(PaymentMethod).default('CASH'),
+  paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'MIXED', 'CREDIT']).default('CASH'),
   amountPaid: z.number().nonnegative(),
   discountAmount: z.number().nonnegative().default(0),
   notes: z.string().optional(),
@@ -139,14 +139,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'El descuento no puede superar el total' }, { status: 400 })
     }
 
-    if (amountPaid < total) {
+    // CREDIT sales go to the customer's account — no cash collected now
+    if (paymentMethod === 'CREDIT') {
+      if (!customerId) {
+        return NextResponse.json(
+          { error: 'El pago a crédito requiere seleccionar un cliente.' },
+          { status: 400 }
+        )
+      }
+    } else if (amountPaid < total) {
       return NextResponse.json(
         { error: `Monto insuficiente. Total: $${total.toFixed(2)}, Recibido: $${amountPaid.toFixed(2)}` },
         { status: 400 }
       )
     }
 
-    const changeGiven = round2(Math.max(0, amountPaid - total))
+    const changeGiven = paymentMethod === 'CREDIT' ? 0 : round2(Math.max(0, amountPaid - total))
+    const effectiveAmountPaid = paymentMethod === 'CREDIT' ? total : amountPaid
 
     // Atomic transaction: create sale + decrement inventory + create movements
     const sale = await db.$transaction(async (tx) => {
@@ -163,7 +172,7 @@ export async function POST(req: NextRequest) {
           discountAmount,
           total,
           paymentMethod,
-          amountPaid,
+          amountPaid: effectiveAmountPaid,
           changeGiven,
           notes,
           branchId,
@@ -217,6 +226,14 @@ export async function POST(req: NextRequest) {
             saleItemId: saleItem.id,
             createdById: cashierId,
           },
+        })
+      }
+
+      // For credit sales, add the total to the customer's outstanding balance
+      if (paymentMethod === 'CREDIT' && customerId) {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { balance: { increment: total } },
         })
       }
 
