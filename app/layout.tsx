@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans, Poppins } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -20,6 +20,13 @@ const jakartaSans = Plus_Jakarta_Sans({
   weight: ["600", "700", "800"],
   display: "swap",
 });
+// Tipografía del prototipo aprobado (docs/prototype)
+const poppins = Poppins({
+  subsets: ["latin"],
+  variable: "--font-poppins",
+  weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Ventory — Sistema POS",
@@ -34,7 +41,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${jakartaSans.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${jakartaSans.variable} ${poppins.variable} antialiased`}
       >
         <Providers>{children}</Providers>
       </body>

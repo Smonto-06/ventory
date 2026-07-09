@@ -8,7 +8,7 @@ export default withAuth(
 
     // Redirect authenticated users away from auth pages
     if (token && (pathname.startsWith('/login') || pathname.startsWith('/register') || pathname.startsWith('/pin-login'))) {
-      return NextResponse.redirect(new URL('/dashboard', req.url))
+      return NextResponse.redirect(new URL('/app', req.url))
     }
 
     return NextResponse.next()
