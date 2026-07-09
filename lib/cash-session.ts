@@ -33,3 +33,38 @@ export function requiresObservation(
 ): boolean {
   return Math.abs(difference) > threshold
 }
+
+export interface ShiftCloseCalculation {
+  openingBalance: number
+  /** Total de ventas del turno no anuladas (todos los métodos, como el prototipo) */
+  salesTotal: number
+  incomes: number
+  expenses: number
+  expectedBalance: number
+  countedBalance: number
+  difference: number
+}
+
+/**
+ * Cierre de turno según el prototipo:
+ * esperado = apertura + ventas del turno + ingresos − gastos
+ * diferencia = contado − esperado
+ */
+export function calculateShiftClose(
+  openingBalance: number,
+  salesTotal: number,
+  incomes: number,
+  expenses: number,
+  countedBalance: number,
+): ShiftCloseCalculation {
+  const expectedBalance = openingBalance + salesTotal + incomes - expenses
+  return {
+    openingBalance,
+    salesTotal,
+    incomes,
+    expenses,
+    expectedBalance,
+    countedBalance,
+    difference: countedBalance - expectedBalance,
+  }
+}

@@ -105,17 +105,69 @@ ventory/
 
 El schema incluye los modelos principales del ciclo de venta:
 
-- **`businesses`** — Negocio (tenant raíz)
+- **`businesses`** — Negocio (tenant raíz) con ajustes: moneda, IVA % incluido, apertura por defecto
 - **`branches`** — Sucursales del negocio
-- **`users`** — Usuarios con roles (`ADMIN`, `SUPERVISOR`, `CASHIER`, `SELLER`)
-- **`products`** — Catálogo de productos con SKU, precio y tasa de impuesto
-- **`categories`** — Categorías de productos por negocio
-- **`inventory`** — Stock por producto y sucursal
-- **`inventory_movements`** — Auditoría de cada cambio de inventario
-- **`sales`** — Ventas con folio único por sucursal
-- **`sale_items`** — Líneas de cada venta
-- **`cash_sessions`** — Sesiones de caja (apertura → cierre)
+- **`users`** — Usuarios con roles (`ADMIN`, `SUPERVISOR`, `CASHIER`, `SELLER`); solo el admin crea cuentas
+- **`products`** — Catálogo con SKU, código de barras, precio, costo y proveedor
+- **`categories`** — Categorías por negocio (solo eliminables sin productos)
+- **`suppliers`** — Proveedores
+- **`inventory`** — Stock por producto y sucursal (con stock mínimo y alerta)
+- **`inventory_movements`** — Auditoría de cada cambio de inventario (venta, compra, devolución, ajuste)
+- **`sales`** / **`sale_items`** — Ventas con folio `F-XXXXXX` por sucursal, descuento por ítem (%), descuento global ($ o %), costo snapshot y anulación
+- **`sale_payments`** — Cobro combinado (Efectivo + Tarjeta + Transferencia con montos, o Crédito exclusivo)
+- **`sale_returns`** / **`sale_return_items`** — Devoluciones y cambios por artículo
+- **`purchases`** / **`purchase_items`** / **`purchase_payments`** — Compras a proveedor (contado / transferencia / crédito con saldo pendiente y abonos)
+- **`customer_payments`** — Abonos de clientes con saldo de crédito
+- **`cash_sessions`** — Turnos de caja (apertura → cierre con arqueo y diferencia)
+- **`cash_movements`** — Ingresos/gastos de caja (base de caja, abonos, pagos a proveedor, devoluciones, anulaciones…)
+- **`held_sales`** / **`held_purchases`** — Ventas y compras en espera
 - **`audit_logs`** — Log de acciones sensibles
+
+## API principal
+
+| Recurso | Endpoints |
+|---------|-----------|
+| Autenticación | `POST /api/auth/register` (alta del negocio), NextAuth login, `POST /api/auth/pin-login` |
+| Usuarios | `GET/POST /api/users` · `PUT /api/users/[id]` (solo ADMIN; activar/desactivar, roles) |
+| Productos | `GET/POST /api/products` · `GET/PUT/DELETE /api/products/[id]` · `/api/products/search` |
+| Categorías | `GET/POST /api/categories` · `PUT/DELETE /api/categories/[id]` |
+| Proveedores | `GET/POST /api/suppliers` · `PUT/DELETE /api/suppliers/[id]` |
+| Compras | `GET/POST /api/purchases` · `POST /api/purchases/[id]/payments` (abono) |
+| Clientes | `GET/POST /api/customers` · `GET/PUT/DELETE /api/customers/[id]` · `POST /api/customers/[id]/payments` (abono de crédito) |
+| Ventas | `GET/POST /api/sales` · `POST /api/sales/[id]/return` (devolución/cambio) · `POST /api/sales/[id]/void` (anulación) |
+| Caja | `POST /api/cash-registers/open` · `GET /api/cash-registers/current` · `POST /api/cash-registers/[id]/close` (cierre + apertura del siguiente turno) · `GET /api/shifts` (historial) |
+| Movimientos | `GET/POST /api/cash-movements` (ingreso/gasto con descripción y comentario) |
+| Inventario | `POST /api/inventory/adjust` (conteo físico) · `POST /api/inventory/transfer` · `GET /api/inventory/low-stock` · `GET /api/inventory/movements` |
+| Esperas | `GET/POST /api/held-sales` · `DELETE /api/held-sales/[id]` · ídem `/api/held-purchases` |
+| Reportes | `GET /api/reports/daily?date=YYYY-MM-DD` (ventas por hora/método, top 5, utilidad) · `GET /api/dashboard` |
+| Ajustes | `GET/PUT /api/settings` (nombre, moneda, IVA %, apertura por defecto) |
+
+### Reglas de negocio (del prototipo, centralizadas en `lib/pos.ts`)
+
+- Dinero en **COP enteros**; IVA **incluido** en el precio (desglose informativo `total × pct / (100 + pct)`).
+- Descuento por artículo en % y descuento global en $ o % (excluyentes); el total nunca baja de 0.
+- **Cobro combinado**: cada método no-efectivo lleva monto y el restante se cobra en efectivo; cambio = recibido − restante. Crédito es exclusivo y suma al saldo del cliente.
+- **Saldo esperado de caja** = apertura + ventas del turno (no anuladas) + ingresos − gastos.
+- **Compra**: `stock += qty`, costo y precio nuevos, proveedor; contado → gasto de caja; crédito → saldo pendiente con abonos.
+- **Devolución** regresa stock y genera gasto de caja; **cambio** regresa stock y devuelve un crédito que se aplica como descuento en la nueva venta; **anulación** regresa el stock restante y genera gasto por lo no devuelto (si fue a crédito, revierte el saldo del cliente).
+- Toda operación que toca stock/caja/saldos es **transaccional** y queda auditada.
+
+### ¿Cómo se actualiza el inventario si Ventory corre en el navegador?
+
+El navegador nunca modifica el stock directamente: cada venta/compra/devolución es una
+petición a la API, y el servidor aplica el cambio dentro de una **transacción de
+PostgreSQL** (verifica stock disponible, descuenta, registra el movimiento y la venta
+como una sola unidad). Si dos cajeros venden al mismo tiempo, la base de datos
+serializa los cambios y no se pierde ninguna unidad; si no hay stock suficiente la API
+responde `422 INSUFFICIENT_STOCK`. Cada cambio queda en `inventory_movements` con
+antes/después, usuario y motivo.
+
+## Prototipo (especificación funcional)
+
+`docs/prototype/` contiene el prototipo HTML aprobado (`Ventory POS - Frontend completo.html`),
+su fuente (`Ventory POS.dc.html`) y el handoff (`HANDOFF-CLAUDE-CODE.md`). **Es la fuente de
+verdad de UI, flujos y cálculos**: el backend replica esas reglas y el frontend definitivo debe
+construirse 1:1 contra ese diseño.
 
 ## Flujo de caja (ciclo principal)
 
