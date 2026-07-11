@@ -20,6 +20,7 @@ jest.mock('@/lib/db', () => ({
     inventory: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     sale: { count: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
     saleItem: { create: jest.fn() },
+    salePayment: { create: jest.fn() },
     inventoryMovement: { create: jest.fn() },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
     $transaction: jest.fn(),
@@ -128,6 +129,7 @@ describe('POST /api/sales', () => {
           findUnique: jest.fn().mockResolvedValue(mockSaleResult),
         } as unknown as typeof db.sale,
         saleItem: { create: jest.fn().mockResolvedValue({ id: 'si-1' }) } as unknown as typeof db.saleItem,
+        salePayment: { create: jest.fn().mockResolvedValue({ id: 'sp-1' }) } as unknown as typeof db.salePayment,
         inventory: {
           findUnique: jest.fn().mockResolvedValue(mockInventory),
           update: jest.fn().mockResolvedValue({}),

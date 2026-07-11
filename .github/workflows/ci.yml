@@ -32,6 +32,7 @@ jobs:
         run: npx prisma generate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+          DIRECT_URL: ${{ secrets.DATABASE_URL_DEV }}
 
       - name: Lint
         run: npm run lint
@@ -43,6 +44,7 @@ jobs:
         run: npm run build
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+          DIRECT_URL: ${{ secrets.DATABASE_URL_DEV }}
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: ci-secret-not-real
           NEXT_PUBLIC_APP_URL: http://localhost:3000
@@ -83,16 +85,19 @@ jobs:
         run: npx prisma generate
         env:
           DATABASE_URL: postgresql://ventory:ventory_test@localhost:5432/ventory_test
+          DIRECT_URL: postgresql://ventory:ventory_test@localhost:5432/ventory_test
 
       - name: Run migrations
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://ventory:ventory_test@localhost:5432/ventory_test
+          DIRECT_URL: postgresql://ventory:ventory_test@localhost:5432/ventory_test
 
       - name: Run tests
         run: npm test -- --passWithNoTests
         env:
           DATABASE_URL: postgresql://ventory:ventory_test@localhost:5432/ventory_test
+          DIRECT_URL: postgresql://ventory:ventory_test@localhost:5432/ventory_test
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-secret-only
 
@@ -117,3 +122,4 @@ jobs:
         run: npx prisma validate
         env:
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+          DIRECT_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder

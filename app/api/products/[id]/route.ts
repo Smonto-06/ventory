@@ -16,8 +16,10 @@ const updateProductSchema = z.object({
   taxRate: z.number().min(0).max(1).optional(),
   unitOfMeasure: z.string().max(50).optional(),
   supplier: z.string().max(200).optional(),
+  imageUrl: z.string().nullable().optional(),
   categoryId: z.string().nullable().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  minStock: z.number().int().nonnegative().optional(),
 })
 
 type Params = { params: { id: string } }
@@ -84,7 +86,7 @@ export async function PATCH(request: Request, { params }: Params) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     }
 
-    const { price, cost, categoryId, ...rest } = parsed.data
+    const { price, cost, categoryId, minStock, ...rest } = parsed.data
 
     const effectivePrice = price ?? Number(existing.price)
     const effectiveCost = cost ?? (existing.cost ? Number(existing.cost) : undefined)
@@ -114,6 +116,14 @@ export async function PATCH(request: Request, { params }: Params) {
         inventory: { select: { quantity: true, minStock: true, branchId: true } },
       },
     })
+
+    // Stock mínimo vive en el inventario por sucursal
+    if (minStock !== undefined) {
+      await db.inventory.updateMany({
+        where: { productId: params.id },
+        data: { minStock },
+      })
+    }
 
     return NextResponse.json({
       product: {

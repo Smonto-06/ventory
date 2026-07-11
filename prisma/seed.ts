@@ -194,6 +194,31 @@ async function main() {
     })
   }
 
+  // Proveedores de ejemplo (Bora y Bora) para el módulo de compras
+  for (const name of ['Textiles del Valle', 'Calzado Bucaramanga', 'Accesorios Medellín']) {
+    await db.supplier.upsert({
+      where: { businessId_name: { businessId: bb.id, name } },
+      update: {},
+      create: { name, phone: '—', businessId: bb.id },
+    })
+  }
+
+  // Cliente de ejemplo con saldo de crédito para probar abonos
+  const existingClient = await db.customer.findFirst({
+    where: { businessId: bb.id, name: 'Samuel Montoya' },
+  })
+  if (!existingClient) {
+    await db.customer.create({
+      data: {
+        name: 'Samuel Montoya',
+        phone: '300 555 1234',
+        document: '1035443221',
+        balance: 0,
+        businessId: bb.id,
+      },
+    })
+  }
+
   console.log('✓ 2 negocios piloto creados con aislamiento multi-tenant')
   console.log(`  ${jm.name} — barcodeEnabled: true — 6 categorías, 10 productos`)
   console.log(`  ${bb.name} — barcodeEnabled: false — 4 categorías, 10 productos`)

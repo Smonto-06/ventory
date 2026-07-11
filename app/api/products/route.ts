@@ -16,6 +16,7 @@ const createProductSchema = z.object({
   taxRate: z.number().min(0).max(1).optional(),
   unitOfMeasure: z.string().max(50).optional(),
   supplier: z.string().max(200).optional(),
+  imageUrl: z.string().optional(),
   categoryId: z.string().optional(),
   // Initial stock (optional, requires branchId)
   branchId: z.string().optional(),
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     }
 
-    const { name, description, barcode, sku, price, cost, taxRate, unitOfMeasure, supplier, categoryId, branchId, initialStock, minStock } = parsed.data
+    const { name, description, barcode, sku, price, cost, taxRate, unitOfMeasure, supplier, imageUrl, categoryId, branchId, initialStock, minStock } = parsed.data
 
     if (cost !== undefined && cost > price) {
       return NextResponse.json({ error: 'El precio de venta debe ser mayor o igual al costo' }, { status: 400 })
@@ -132,6 +133,7 @@ export async function POST(request: Request) {
         taxRate: taxRate ?? 0.16,
         unitOfMeasure,
         supplier,
+        imageUrl,
         businessId: session.user.businessId,
         categoryId: categoryId ?? null,
         ...(branchId && {

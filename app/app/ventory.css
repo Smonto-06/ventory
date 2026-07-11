@@ -1,0 +1,138 @@
+/* Tema del prototipo Ventory (docs/prototype/Ventory POS.dc.html), scoping .vapp */
+
+.vapp {
+  --bg: #f6f8fb;
+  --surface: #ffffff;
+  --surface2: #f3f4fe;
+  --input: #f6f8fb;
+  --border: #b4b9e2;
+  --text: #0f172a;
+  --muted: #64748b;
+  --side-bg: #0f172a;
+  --side-border: #1e293b;
+  --side-text: #94a3b8;
+  --side-active-bg: rgba(99, 102, 241, 0.22);
+  --side-active-text: #ffffff;
+  --side-heading: #ffffff;
+
+  font-family: var(--font-poppins), 'Poppins', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+}
+
+.vapp[data-theme='dark'] {
+  --bg: #0b1120;
+  --surface: #1e293b;
+  --surface2: #1b2240;
+  --input: #0f172a;
+  --border: #3b3f63;
+  --text: #e5e9f0;
+  --muted: #a9b4c6;
+}
+
+.vapp *,
+.vapp *::before,
+.vapp *::after {
+  box-sizing: border-box;
+}
+
+.vapp input,
+.vapp button,
+.vapp textarea,
+.vapp select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.vapp button {
+  border: none;
+  background: none;
+}
+
+.vapp ::placeholder {
+  color: var(--muted);
+}
+
+.vapp input:focus,
+.vapp textarea:focus,
+.vapp select:focus {
+  outline: none;
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 4px #6366f11f;
+}
+
+.vapp ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.vapp ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+  border: 2px solid var(--bg);
+}
+
+@keyframes vpop {
+  from {
+    transform: scale(0.97);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes vfade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media print {
+  [data-no-print] {
+    display: none !important;
+  }
+  .vapp {
+    background: #fff;
+  }
+}
+
+/* Hovers comunes del prototipo (style-hover) */
+.v-hover-underline:hover {
+  text-decoration: underline;
+}
+.v-hover-danger:hover {
+  color: #c9433b !important;
+}
+.v-hover-primary:hover {
+  background: #4f46e5 !important;
+}
+.v-hover-bg:hover {
+  background: var(--bg) !important;
+}
+.v-hover-border:hover {
+  border-color: #6366f1 !important;
+  color: #6366f1 !important;
+}
+.v-hover-lift:hover {
+  border-color: #6366f1 !important;
+  box-shadow: 0 12px 28px -18px rgba(99, 102, 241, 0.5) !important;
+  transform: translateY(-2px);
+}
+.v-hover-row:hover {
+  background: var(--surface2) !important;
+}
+.v-hover-logout:hover {
+  color: #f87171 !important;
+}
+.v-hover-denom:hover {
+  background: #e2e8f0 !important;
+}
