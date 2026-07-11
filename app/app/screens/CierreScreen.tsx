@@ -57,11 +57,25 @@ export default function CierreScreen() {
           </div>
 
           {!s.turnoAbierto ? (
-            <div style={{ padding: '20px 0', color: 'var(--muted)', fontSize: 14.5 }}>
-              No hay un turno de caja abierto.{' '}
-              <button onClick={() => s.openModal('aperturaCaja')} className="v-hover-underline" style={{ color: '#6366F1', fontWeight: 700, cursor: 'pointer' }}>
-                Abrir caja
-              </button>
+            <div>
+              <div style={{ padding: '6px 0 20px', color: 'var(--muted)', fontSize: 14.5 }}>
+                No hay un turno de caja abierto. Para cerrar caja primero debes abrir un turno.
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => s.go('panel')}
+                  style={{ flex: 1, height: 50, borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
+                >
+                  ← Volver al panel
+                </button>
+                <button
+                  onClick={() => s.openModal('aperturaCaja')}
+                  className="v-hover-primary"
+                  style={{ flex: 1.4, height: 50, borderRadius: 12, background: '#6366F1', color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer', boxShadow: '0 10px 22px -12px #6366F1cc' }}
+                >
+                  Abrir caja
+                </button>
+              </div>
             </div>
           ) : (
             <>
