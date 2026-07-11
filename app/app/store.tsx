@@ -621,7 +621,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const finalizeSale = useCallback(async () => {
-    if (!cart.length || !data.cash.session) return
+    if (!cart.length) return
+    if (!data.cash.session) {
+      toast('No hay caja abierta. Abre un turno para poder vender.')
+      setModal('aperturaCaja')
+      return
+    }
     // Sólo un método no-efectivo sin split: se cobra el total exacto por ese método
     const nonCashSel = (['tarjeta', 'transferencia'] as const).filter((k) => pay[k])
     const singleSimple = !pay.credito && !pay.efectivo && nonCashSel.length === 1
@@ -651,11 +656,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       onError(e)
     }
-  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, buildSaleItems, matchCustomerId, afterSale, onError])
+  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, buildSaleItems, matchCustomerId, afterSale, toast, onError])
 
   const finalizeCredito = useCallback(
     async (customerId: string) => {
-      if (!cart.length || !data.cash.session) return
+      if (!cart.length) return
+      if (!data.cash.session) {
+        toast('No hay caja abierta. Abre un turno para poder vender.')
+        setModal('aperturaCaja')
+        return
+      }
       try {
         const r = await api.createSale({
           cashSessionId: data.cash.session.id,
@@ -671,7 +681,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         onError(e)
       }
     },
-    [cart, data.cash.session, discount, discountIsPct, note, buildSaleItems, afterSale, onError],
+    [cart, data.cash.session, discount, discountIsPct, note, buildSaleItems, afterSale, toast, onError],
   )
 
   // ─── Esperas de venta ─────────────────────────────────────────────────────
