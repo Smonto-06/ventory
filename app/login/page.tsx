@@ -13,13 +13,18 @@ function VLogo({ size = 58 }: { size?: number }) {
   return (
     <svg width={size} height={(size * 32) / 36} viewBox="0 0 36 32" fill="none">
       <defs>
-        <linearGradient id="vlogo-login" x1="6" y1="28" x2="32" y2="4" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#10B981" />
-          <stop offset="1" stopColor="#6366F1" />
+        <linearGradient id="vlogo-login-r" x1="31" y1="5" x2="15" y2="26" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#8B5CF6" />
+          <stop offset="1" stopColor="#4E6AF3" />
+        </linearGradient>
+        <linearGradient id="vlogo-login-l" x1="5" y1="8" x2="15" y2="26" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#1FE0A6" />
+          <stop offset="0.55" stopColor="#2CC8DB" />
+          <stop offset="1" stopColor="#3B9DF8" />
         </linearGradient>
       </defs>
-      <path d="M5 8L15 26" stroke="#10B981" strokeWidth="6.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M15 26L31 5" stroke="url(#vlogo-login)" strokeWidth="6.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15 26L31 5" stroke="url(#vlogo-login-r)" strokeWidth="6.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 8L15 26" stroke="url(#vlogo-login-l)" strokeOpacity="0.92" strokeWidth="6.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -72,9 +77,11 @@ function LoginContent() {
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'radial-gradient(1100px 620px at 50% -10%, #EEF0FE 0%, var(--bg) 60%)' }}>
         <div style={{ width: '100%', maxWidth: 420, animation: 'vfade .4s ease' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 30 }}>
-            <VLogo />
-            <div style={{ marginTop: 12, fontSize: 30, fontWeight: 700, letterSpacing: '-1px', color: 'var(--text)' }}>Ventory</div>
-            <div style={{ color: '#7A8091', fontSize: 14.5, marginTop: 2 }}>Sistema de Punto de Venta</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <VLogo size={52} />
+              <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-1px', color: '#111A34' }}>Ventory</div>
+            </div>
+            <div style={{ color: '#7A8091', fontSize: 14.5, marginTop: 8 }}>Sistema de Punto de Venta</div>
           </div>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: 30, boxShadow: '0 1px 2px rgba(16,20,30,.04),0 22px 44px -28px rgba(16,20,30,.22)' }}>
             <h1 style={{ margin: '0 0 22px', fontSize: 21, fontWeight: 700, letterSpacing: '-.3px' }}>Iniciar sesión</h1>
