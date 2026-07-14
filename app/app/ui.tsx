@@ -210,18 +210,24 @@ export function ModalTitle({ children, onClose }: { children: ReactNode; onClose
   )
 }
 
-// Logo Ventory (SVG del prototipo)
+// Logo Ventory oficial: chulo en V con trazo violeta→azul (largo) y
+// turquesa→azul (corto) que cruza al frente con transparencia
 export function VLogo({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={(size * 32) / 36} viewBox="0 0 36 32" fill="none">
       <defs>
-        <linearGradient id="vlogo" x1="6" y1="28" x2="32" y2="4" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#10B981" />
-          <stop offset="1" stopColor="#6366F1" />
+        <linearGradient id="vlogo-r" x1="31" y1="5" x2="15" y2="26" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#8B5CF6" />
+          <stop offset="1" stopColor="#4E6AF3" />
+        </linearGradient>
+        <linearGradient id="vlogo-l" x1="5" y1="8" x2="15" y2="26" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#1FE0A6" />
+          <stop offset="0.55" stopColor="#2CC8DB" />
+          <stop offset="1" stopColor="#3B9DF8" />
         </linearGradient>
       </defs>
-      <path d="M5 8L15 26" stroke="#10B981" strokeWidth="6.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M15 26L31 5" stroke="url(#vlogo)" strokeWidth="6.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15 26L31 5" stroke="url(#vlogo-r)" strokeWidth="6.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 8L15 26" stroke="url(#vlogo-l)" strokeOpacity="0.92" strokeWidth="6.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
