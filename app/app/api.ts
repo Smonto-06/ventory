@@ -393,4 +393,8 @@ export const api = {
 
   // Reportes
   dailyReport: (date: string) => get<DailyReport>(`/api/reports/daily?date=${date}`),
+
+  // Contacto (envío directo por correo desde el sistema)
+  sendContact: (data: { type: string; subject: string; message: string }) =>
+    post<{ ok: boolean }>('/api/contact', data),
 }
