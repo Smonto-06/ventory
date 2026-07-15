@@ -4,6 +4,7 @@
 // (docs/prototype/Ventory POS.dc.html). Los colores y radios son los del diseño aprobado.
 
 import { CSSProperties, ReactNode } from 'react'
+import NextImage from 'next/image'
 
 // Paleta de tintes para tiles de producto (por índice estable)
 export const TINTS: Array<[string, string]> = [
@@ -210,30 +211,16 @@ export function ModalTitle({ children, onClose }: { children: ReactNode; onClose
   )
 }
 
-// Logo Ventory oficial: chulo en V — trazo largo violeta, trazo corto
-// menta→cian que cruza al frente con banda translúcida y punta azul en el vértice
+// Logo Ventory oficial (archivo de marca en public/brand/, con fondo transparente)
 export function VLogo({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={(size * 32) / 38} viewBox="0 0 38 32" fill="none">
-      <defs>
-        <linearGradient id="vlogo-r" x1="31.6" y1="4.4" x2="16" y2="25.8" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#8D5CF7" />
-          <stop offset="1" stopColor="#6B3BEF" />
-        </linearGradient>
-        <linearGradient id="vlogo-la" x1="4.8" y1="7" x2="13" y2="20.5" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#2FE8A9" />
-          <stop offset="1" stopColor="#2AC6E8" />
-        </linearGradient>
-        <linearGradient id="vlogo-lb" x1="11.8" y1="18.4" x2="16.4" y2="26.4" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#3FC0EC" stopOpacity="0.62" />
-          <stop offset="0.7" stopColor="#4B85F2" stopOpacity="0.85" />
-          <stop offset="1" stopColor="#4E68F5" />
-        </linearGradient>
-      </defs>
-      <path d="M16 25.8L31.6 4.4" stroke="url(#vlogo-r)" strokeWidth="7.2" strokeLinecap="round" />
-      <path d="M4.8 7L12.4 19.5" stroke="url(#vlogo-la)" strokeWidth="7.2" strokeLinecap="round" />
-      <path d="M12.4 19.5L16.4 26.4" stroke="url(#vlogo-lb)" strokeWidth="7.2" strokeLinecap="round" />
-    </svg>
+    <NextImage
+      src="/brand/ventory-icon.png"
+      alt="Ventory"
+      width={size}
+      height={size}
+      style={{ display: 'block', objectFit: 'contain' }}
+    />
   )
 }
 
