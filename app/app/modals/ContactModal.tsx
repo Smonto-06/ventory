@@ -1,10 +1,12 @@
 'use client'
 
 // Modal Contáctanos — réplica 1:1 del prototipo (docs/prototype/Ventory POS.dc.html).
-// Abre el correo del usuario (mailto:) con el mensaje listo para ventorypos@gmail.com.
+// Envía el mensaje directamente por correo a ventorypos@gmail.com desde el sistema
+// (con Reply-To del usuario); si el correo no está configurado, cae al mailto clásico.
 
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
+import { api, ApiError } from '../api'
 import { Modal, saveBtnStyle } from '../ui'
 
 type ContactType = 'sugerencia' | 'error' | 'queja'
@@ -43,25 +45,39 @@ export default function ContactModal() {
   const [type, setType] = useState<ContactType>('sugerencia')
   const [subject, setSubject] = useState('')
   const [msg, setMsg] = useState('')
+  const [sending, setSending] = useState(false)
 
-  const ok = !!(subject.trim() && msg.trim())
+  const ok = !!(subject.trim() && msg.trim()) && !sending
 
-  const sendContact = () => {
+  const sendContact = async () => {
     const subj = subject.trim()
     const body = msg.trim()
-    if (!subj || !body) return
+    if (!subj || !body || sending) return
     const tipo = TYPES.find(([k]) => k === type)?.[1] ?? 'Sugerencia'
-    const asunto = `[${tipo}] ${subj}`
-    const cuerpo = `${body}\n\n—\nEnviado desde Ventory · ${s.settings?.name ?? ''} · Usuario: ${s.me.name}`
-    const href =
-      'mailto:ventorypos@gmail.com?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(cuerpo)
+    setSending(true)
     try {
-      window.location.href = href
-    } catch {
-      // sin cliente de correo disponible
+      await api.sendContact({ type: tipo, subject: subj, message: body })
+      s.closeModal()
+      s.toast('Mensaje enviado ✓ Te responderemos a tu correo')
+    } catch (e) {
+      // Respaldo: si el envío directo no está disponible, abrir el correo del usuario
+      if (e instanceof ApiError && e.code === 'MAILER_NOT_CONFIGURED') {
+        const asunto = `[${tipo}] ${subj}`
+        const cuerpo = `${body}\n\n—\nEnviado desde Ventory · ${s.settings?.name ?? ''} · Usuario: ${s.me.name}`
+        try {
+          window.location.href =
+            'mailto:ventorypos@gmail.com?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(cuerpo)
+        } catch {
+          // sin cliente de correo disponible
+        }
+        s.closeModal()
+        s.toast('Abriendo tu correo…')
+      } else {
+        s.toast('No se pudo enviar el mensaje. Intenta de nuevo.')
+      }
+    } finally {
+      setSending(false)
     }
-    s.closeModal()
-    s.toast('Abriendo tu correo…')
   }
 
   return (
@@ -151,8 +167,8 @@ export default function ContactModal() {
         }}
       />
       <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--muted)' }}>
-        Se abrirá tu correo con el mensaje listo para enviar a{' '}
-        <b style={{ color: 'var(--text)' }}>ventorypos@gmail.com</b>.
+        Tu mensaje se enviará a <b style={{ color: 'var(--text)' }}>ventorypos@gmail.com</b> y te
+        responderemos al correo con el que inicias sesión.
       </div>
 
       <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
@@ -173,7 +189,7 @@ export default function ContactModal() {
           Cancelar
         </button>
         <button onClick={sendContact} style={saveBtnStyle(ok)}>
-          Enviar mensaje
+          {sending ? 'Enviando…' : 'Enviar mensaje'}
         </button>
       </div>
     </Modal>
