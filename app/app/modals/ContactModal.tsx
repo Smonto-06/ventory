@@ -1,7 +1,7 @@
 'use client'
 
 // Modal Contáctanos — réplica 1:1 del prototipo (docs/prototype/Ventory POS.dc.html).
-// Abre el correo del usuario (mailto:) con el mensaje listo para soporte@ventory.app.
+// Abre el correo del usuario (mailto:) con el mensaje listo para ventorypos@gmail.com.
 
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
@@ -54,7 +54,7 @@ export default function ContactModal() {
     const asunto = `[${tipo}] ${subj}`
     const cuerpo = `${body}\n\n—\nEnviado desde Ventory · ${s.settings?.name ?? ''} · Usuario: ${s.me.name}`
     const href =
-      'mailto:soporte@ventory.app?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(cuerpo)
+      'mailto:ventorypos@gmail.com?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(cuerpo)
     try {
       window.location.href = href
     } catch {
@@ -152,7 +152,7 @@ export default function ContactModal() {
       />
       <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--muted)' }}>
         Se abrirá tu correo con el mensaje listo para enviar a{' '}
-        <b style={{ color: 'var(--text)' }}>soporte@ventory.app</b>.
+        <b style={{ color: 'var(--text)' }}>ventorypos@gmail.com</b>.
       </div>
 
       <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
