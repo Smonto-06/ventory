@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { serialize } from '@/lib/api-helpers'
+import { requireActiveBusiness } from '@/lib/plan'
 import {
   lineValue,
   cartSubtotal,
@@ -72,6 +73,10 @@ export async function POST(req: NextRequest) {
   const discountIsPct = parsed.data.discountAmount !== undefined ? false : parsed.data.discountIsPct
   const businessId = session.user.businessId
   const cashierId = session.user.id
+
+  // Prueba vencida o plan suspendido → no se puede vender
+  const planBlock = await requireActiveBusiness(businessId)
+  if (planBlock) return planBlock
 
   try {
     const cashSession = await db.cashSession.findFirst({

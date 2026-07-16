@@ -65,6 +65,9 @@ export default function RegisterPage() {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Ventory</h1>
           <p className="text-gray-500 mt-1">Registra tu negocio</p>
+          <p className="mt-3 inline-block rounded-lg bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-600">
+            Prueba gratis de 15 días · sin tarjeta de crédito
+          </p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">

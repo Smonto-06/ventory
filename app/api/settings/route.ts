@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
 import { unauthorized, forbidden, badRequest, serverError, isAdmin } from '@/lib/api-helpers'
+import { planInfo, isSuperAdmin } from '@/lib/plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,8 @@ export async function GET(req: NextRequest) {
       defaultOpeningAmount: true,
       allowNegativeStock: true,
       barcodeEnabled: true,
+      status: true,
+      trialEndsAt: true,
     },
   })
   if (!business) return NextResponse.json({ error: 'Negocio no encontrado' }, { status: 404 })
@@ -40,6 +43,8 @@ export async function GET(req: NextRequest) {
       ...business,
       ivaPct: Number(business.ivaPct),
       defaultOpeningAmount: Number(business.defaultOpeningAmount),
+      plan: planInfo(business),
+      isSuperAdmin: isSuperAdmin(user.email),
     },
   })
 }

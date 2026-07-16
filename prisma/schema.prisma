@@ -47,6 +47,12 @@ enum CashSessionStatus {
   CLOSED
 }
 
+enum BusinessStatus {
+  TRIAL     // prueba gratis — funcional hasta trialEndsAt
+  ACTIVE    // plan activo (activado por el super-admin tras el pago)
+  SUSPENDED // suspendido — solo lectura hasta reactivar
+}
+
 enum MovementType {
   SALE        // decremented by a sale
   RETURN      // incremented by a return/refund
@@ -88,6 +94,13 @@ model Business {
   // IVA incluido en el precio: desglose informativo = total × pct / (100 + pct)
   ivaPct               Decimal @default(0) @db.Decimal(5, 2)
   defaultOpeningAmount Decimal @default(0) @db.Decimal(12, 2)
+
+  // Plan comercial: los negocios nuevos entran en prueba (el registro lo fija);
+  // los existentes quedan ACTIVE por el default
+  status       BusinessStatus @default(ACTIVE)
+  trialEndsAt  DateTime?
+  activatedAt  DateTime?
+  adminNotes   String?
 
   branches     Branch[]
   users        User[]
@@ -137,6 +150,9 @@ model User {
   isActive       Boolean      @default(true)
   failedAttempts Int          @default(0)
   lockedAt       DateTime?
+  // Recuperación de contraseña (token de un solo uso, con vencimiento)
+  resetToken        String?   @unique
+  resetTokenExpires DateTime?
 
   businessId     String
   business       Business     @relation(fields: [businessId], references: [id])

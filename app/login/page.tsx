@@ -122,6 +122,12 @@ function LoginContent() {
               </button>
             </form>
 
+            <div style={{ marginTop: 14, textAlign: 'center' }}>
+              <Link href="/forgot" style={{ color: 'var(--muted)', fontWeight: 600, fontSize: 13.5 }}>
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
+
             <div style={{ marginTop: 18, textAlign: 'center', fontSize: 13.5, color: 'var(--muted)' }}>
               ¿No tienes cuenta?{' '}
               <Link href="/register" style={{ color: '#6366F1', fontWeight: 700 }}>

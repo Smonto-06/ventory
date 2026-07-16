@@ -23,6 +23,8 @@ export default withAuth(
           pathname.startsWith('/login') ||
           pathname.startsWith('/register') ||
           pathname.startsWith('/pin-login') ||
+          pathname.startsWith('/forgot') ||
+          pathname.startsWith('/reset') ||
           pathname.startsWith('/api/auth') ||
           pathname.startsWith('/api/register') ||
           pathname.startsWith('/api/health') ||

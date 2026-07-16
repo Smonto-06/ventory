@@ -259,6 +259,14 @@ function Sidebar({ narrow }: { narrow: boolean }) {
               <div style={{ fontSize: 12, color: '#94A3B8' }}>{s.isAdmin ? 'Administrador' : 'Cajero'}</div>
             </div>
           </div>
+          {s.settings?.isSuperAdmin && (
+            <a
+              href="/admin"
+              style={{ display: 'block', marginTop: 12, fontSize: 13.5, color: '#94A3B8', fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}
+            >
+              Panel de plataforma →
+            </a>
+          )}
           <button
             onClick={s.logout}
             className="v-hover-logout"
@@ -269,6 +277,45 @@ function Sidebar({ narrow }: { narrow: boolean }) {
         </div>
       )}
     </aside>
+  )
+}
+
+// Bloqueo suave: prueba vencida o plan suspendido — se puede ver el aviso,
+// contactar y cerrar sesión; las operaciones quedan deshabilitadas.
+function PlanBlockedOverlay() {
+  const s = useApp()
+  const suspended = s.settings?.plan?.status === 'SUSPENDED'
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ width: '100%', maxWidth: 440, background: 'var(--surface)', borderRadius: 18, padding: 28, boxShadow: '0 30px 60px -30px rgba(15,25,23,.5)', animation: 'vpop .25s ease', textAlign: 'center' }}>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: '#FDF4E5', color: '#B4740A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 26 }}>
+          {suspended ? '⏸' : '⏰'}
+        </div>
+        <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 800, letterSpacing: '-.3px' }}>
+          {suspended ? 'Tu plan está suspendido' : 'Tu prueba gratis terminó'}
+        </h2>
+        <div style={{ fontSize: 14.5, color: 'var(--muted)', lineHeight: 1.55 }}>
+          Tus datos están guardados y seguros. Para {suspended ? 'reactivar tu plan' : 'seguir vendiendo con Ventory'},
+          escríbenos y activamos tu cuenta el mismo día:
+        </div>
+        <a
+          href="mailto:ventorypos@gmail.com?subject=Activar%20mi%20plan%20de%20Ventory"
+          style={{ display: 'block', marginTop: 16, padding: '13px 16px', borderRadius: 12, background: '#EEF0FE', color: '#4338CA', fontWeight: 800, fontSize: 15, textDecoration: 'none' }}
+        >
+          ventorypos@gmail.com
+        </a>
+        <div style={{ marginTop: 16, fontSize: 12.5, color: 'var(--muted)' }}>
+          ¿Ya nos escribiste? Apenas activemos tu plan, recarga esta página.
+        </div>
+        <button
+          onClick={s.logout}
+          style={{ marginTop: 18, fontSize: 13.5, color: 'var(--muted)', fontWeight: 600, cursor: 'pointer' }}
+          className="v-hover-underline"
+        >
+          Cerrar sesión
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -335,6 +382,12 @@ export default function Shell() {
         <div style={{ minHeight: '100vh', display: 'flex', flexWrap: 'wrap', alignItems: 'stretch' }}>
           <Sidebar narrow={narrow} />
           <div style={{ flex: 1, minWidth: 'min(100%,320px)', display: 'flex', flexDirection: 'column' }}>
+            {s.settings?.plan?.status === 'TRIAL' && !s.settings.plan.blocked && (
+              <div data-no-print="true" style={{ background: '#FDF4E5', borderBottom: '1px solid #F3DCB0', color: '#8A6B2E', fontWeight: 700, fontSize: 13, padding: '9px 16px', textAlign: 'center' }}>
+                Prueba gratis: {s.settings.plan.daysLeft === 1 ? 'queda 1 día' : `quedan ${s.settings.plan.daysLeft} días`} · Para activar tu
+                plan escríbenos con el botón Contáctanos
+              </div>
+            )}
             {screens[s.screen]}
           </div>
         </div>
@@ -342,6 +395,7 @@ export default function Shell() {
         screens[s.screen]
       )}
 
+      {!s.loading && s.settings?.plan?.blocked && <PlanBlockedOverlay />}
       <Modals />
     </div>
   )
