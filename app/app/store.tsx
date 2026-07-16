@@ -34,6 +34,7 @@ import {
   Branch,
   DailyReport,
   AbonoReceipt,
+  ShiftStat,
 } from './api'
 import { cartSubtotal, saleTotal, resolvePayment, expectedBalance } from '@/lib/pos'
 
@@ -140,6 +141,12 @@ export interface CierreResult {
   difference: number
   salesCount: number
   byMethod: Record<string, number>
+  // Actividad del turno (conteo + total); las filas en cero no se imprimen
+  creditSales: ShiftStat
+  customerPayments: ShiftStat
+  purchases: ShiftStat
+  supplierPayments: ShiftStat
+  returns: ShiftStat
   /** Apertura del turno siguiente, o null si fue cierre del día */
   nextOpening: number | null
   closedAt: string
@@ -1182,10 +1189,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
           openNext,
           nextOpeningAmount,
         })
+        const zero = { count: 0, total: 0 }
         setLastCierre({
           ...r.summary,
           salesCount: r.report?.salesCount ?? 0,
           byMethod: r.report?.byMethod ?? {},
+          creditSales: r.report?.creditSales ?? zero,
+          customerPayments: r.report?.customerPayments ?? zero,
+          purchases: r.report?.purchases ?? zero,
+          supplierPayments: r.report?.supplierPayments ?? zero,
+          returns: r.report?.returns ?? zero,
           nextOpening: openNext ? (nextOpeningAmount ?? cierrePreview.contado) : null,
           closedAt: new Date().toISOString(),
           branchName: session.branch.name,

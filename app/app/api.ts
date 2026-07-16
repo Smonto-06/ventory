@@ -238,6 +238,12 @@ export interface PlanInfo {
   blocked: boolean
 }
 
+// Conteo + total de una actividad del turno (para el recibo de cierre)
+export interface ShiftStat {
+  count: number
+  total: number
+}
+
 export interface Settings {
   id: string
   name: string
@@ -368,7 +374,15 @@ export const api = {
         countedBalance: number
         difference: number
       }
-      report?: { salesCount: number; byMethod: Record<string, number> }
+      report?: {
+        salesCount: number
+        byMethod: Record<string, number>
+        creditSales?: ShiftStat
+        customerPayments?: ShiftStat
+        purchases?: ShiftStat
+        supplierPayments?: ShiftStat
+        returns?: ShiftStat
+      }
       nextSession: { id: string } | null
     }>(`/api/cash-registers/${id}/close`, data),
   shifts: () => get<{ shifts: Shift[] }>('/api/shifts'),
