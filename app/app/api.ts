@@ -363,6 +363,7 @@ export const api = {
         countedBalance: number
         difference: number
       }
+      report?: { salesCount: number; byMethod: Record<string, number> }
       nextSession: { id: string } | null
     }>(`/api/cash-registers/${id}/close`, data),
   shifts: () => get<{ shifts: Shift[] }>('/api/shifts'),
