@@ -66,6 +66,12 @@ export default function AperturaModal() {
             Cerrar y abrir turno
           </button>
         </div>
+        <button
+          onClick={() => s.confirmCierreFinal()}
+          style={{ width: '100%', height: 46, marginTop: 10, borderRadius: 12, background: '#FDECEC', color: '#C9433B', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}
+        >
+          Cierre del día (sin abrir turno nuevo)
+        </button>
       </div>
     </div>
   )

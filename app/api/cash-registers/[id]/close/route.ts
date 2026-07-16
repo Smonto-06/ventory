@@ -29,7 +29,10 @@ export async function POST(
     where: { id: params.id, status: 'OPEN' },
     include: {
       // Solo ventas no anuladas del turno cuentan para el saldo esperado
-      sales: { where: { status: 'COMPLETED' }, select: { total: true } },
+      sales: {
+        where: { status: 'COMPLETED' },
+        select: { total: true, paymentMethod: true, payments: { select: { method: true, amount: true } } },
+      },
       movements: { select: { type: true, amount: true } },
       openedBy: { select: { id: true, businessId: true } },
     },
@@ -145,6 +148,18 @@ export async function POST(
     })
     .catch(() => {})
 
+  // Desglose del turno para el recibo de cierre: transacciones y ventas por método
+  const byMethod: Record<string, number> = {}
+  for (const sale of session.sales) {
+    if (sale.payments.length > 0) {
+      for (const p of sale.payments) {
+        byMethod[p.method] = (byMethod[p.method] ?? 0) + Number(p.amount)
+      }
+    } else {
+      byMethod[sale.paymentMethod] = (byMethod[sale.paymentMethod] ?? 0) + Number(sale.total)
+    }
+  }
+
   return NextResponse.json({
     session: serialize(result.closed),
     nextSession: serialize(result.next),
@@ -157,6 +172,10 @@ export async function POST(
       countedBalance: calc.countedBalance,
       difference: calc.difference,
       status: calc.difference > 0 ? 'sobrante' : calc.difference < 0 ? 'faltante' : 'exacto',
+    },
+    report: {
+      salesCount: session.sales.length,
+      byMethod,
     },
   })
 }

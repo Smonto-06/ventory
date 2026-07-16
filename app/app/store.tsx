@@ -56,6 +56,7 @@ export type Screen =
   | 'esperas'
   | 'devoluciones'
   | 'reciboAbono'
+  | 'cierreRecibo'
 
 export type ModalId =
   | 'producto'
@@ -126,6 +127,25 @@ export interface CierrePreview {
   contado: number
   diff: number
   fecha: string
+}
+
+// Resultado de un cierre ya ejecutado — alimenta el recibo imprimible
+export interface CierreResult {
+  openingBalance: number
+  salesTotal: number
+  incomes: number
+  expenses: number
+  expectedBalance: number
+  countedBalance: number
+  difference: number
+  salesCount: number
+  byMethod: Record<string, number>
+  /** Apertura del turno siguiente, o null si fue cierre del día */
+  nextOpening: number | null
+  closedAt: string
+  branchName: string
+  cashierName: string
+  businessName: string
 }
 
 interface AppData {
@@ -204,6 +224,9 @@ export interface AppStore extends AppData {
   cierrePreview: CierrePreview | null
   doCierre: (declared: number) => void
   confirmApertura: (nextApertura: number) => Promise<void>
+  /** Cierre del día: cierra el turno SIN abrir uno nuevo */
+  confirmCierreFinal: () => Promise<void>
+  lastCierre: CierreResult | null
   addMov: (type: 'INCOME' | 'EXPENSE', description: string, comment: string, amount: number) => Promise<void>
 
   // carrito / POS
@@ -353,6 +376,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastSale, setLastSale] = useState<Sale | null>(null)
   const [lastAbono, setLastAbono] = useState<AbonoReceipt | null>(null)
   const [cierrePreview, setCierrePreview] = useState<CierrePreview | null>(null)
+  const [lastCierre, setLastCierre] = useState<CierreResult | null>(null)
 
   const [saleDetId, setSaleDetId] = useState<string | null>(null)
   const [editProdId, setEditProdId] = useState<string | null>(null)
@@ -1147,19 +1171,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [apertura, ventasTurno, ingresos, gastos, esperado],
   )
 
-  const confirmApertura = useCallback(
-    async (nextApertura: number) => {
-      if (!data.cash.session || !cierrePreview) return
+  const closeShift = useCallback(
+    async (openNext: boolean, nextOpeningAmount?: number) => {
+      const session = data.cash.session
+      if (!session || !cierrePreview) return
       try {
-        await api.closeCashSession(data.cash.session.id, {
+        const r = await api.closeCashSession(session.id, {
           closingBalance: cierrePreview.contado,
           closingNotes: cierrePreview.diff !== 0 ? `Diferencia de cierre: ${cierrePreview.diff}` : undefined,
-          openNext: true,
-          nextOpeningAmount: nextApertura,
+          openNext,
+          nextOpeningAmount,
+        })
+        setLastCierre({
+          ...r.summary,
+          salesCount: r.report?.salesCount ?? 0,
+          byMethod: r.report?.byMethod ?? {},
+          nextOpening: openNext ? (nextOpeningAmount ?? cierrePreview.contado) : null,
+          closedAt: new Date().toISOString(),
+          branchName: session.branch.name,
+          cashierName: me.name,
+          businessName: data.settings?.name ?? '',
         })
         setModal(null)
-        setScreen('panel')
-        toast(`Turno cerrado · Nuevo turno abierto con ${fmt(nextApertura)}`)
+        setScreen('cierreRecibo')
         const shifts = await api.shifts()
         patch({ shifts: shifts.shifts })
         await Promise.all([refreshCash(), refreshSales()])
@@ -1167,8 +1201,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         onError(e)
       }
     },
-    [data.cash.session, cierrePreview, toast, fmt, patch, refreshCash, refreshSales, onError],
+    [data.cash.session, data.settings, cierrePreview, me.name, patch, refreshCash, refreshSales, onError],
   )
+
+  const confirmApertura = useCallback(
+    (nextApertura: number) => closeShift(true, nextApertura),
+    [closeShift],
+  )
+
+  const confirmCierreFinal = useCallback(() => closeShift(false), [closeShift])
 
   const addMov = useCallback(
     async (type: 'INCOME' | 'EXPENSE', description: string, comment: string, amount: number) => {
@@ -1289,6 +1330,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cierrePreview,
       doCierre,
       confirmApertura,
+      confirmCierreFinal,
+      lastCierre,
       addMov,
       cart,
       addToCart,
@@ -1381,7 +1424,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
-      turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, cierrePreview,
+      turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, cierrePreview, lastCierre,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
       pay, amounts, received, lastSale, lastAbono, saleDetId, dscId, editProdId, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,
