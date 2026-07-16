@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
 import { calculateShiftClose, requiresObservation } from '@/lib/cash-session'
+import { cashPortion } from '@/lib/pos'
 import { serialize } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
@@ -69,8 +70,14 @@ export async function POST(
 
   const { closingBalance, closingNotes, openNext, nextOpeningAmount } = parsed.data
 
-  // Regla del prototipo: esperado = apertura + ventas del turno + ingresos − gastos
+  // Esperado del cajón = apertura + ventas EN EFECTIVO + ingresos − gastos.
+  // Tarjeta/transferencia/crédito no ponen billetes en la caja: sumarlas
+  // produciría un faltante ficticio contra el conteo físico.
   const salesTotal = session.sales.reduce((sum, s) => sum + Number(s.total), 0)
+  const cashSalesTotal = session.sales.reduce(
+    (sum, s) => sum + cashPortion({ ...s, total: Number(s.total) }),
+    0,
+  )
   const incomes = session.movements
     .filter((m) => m.type === 'INCOME')
     .reduce((sum, m) => sum + Number(m.amount), 0)
@@ -80,7 +87,7 @@ export async function POST(
 
   const calc = calculateShiftClose(
     Number(session.openingBalance),
-    salesTotal,
+    cashSalesTotal,
     incomes,
     expenses,
     closingBalance,
@@ -196,7 +203,8 @@ export async function POST(
     nextSession: serialize(result.next),
     summary: {
       openingBalance: calc.openingBalance,
-      salesTotal: calc.salesTotal,
+      salesTotal,
+      cashSales: cashSalesTotal,
       incomes: calc.incomes,
       expenses: calc.expenses,
       expectedBalance: calc.expectedBalance,

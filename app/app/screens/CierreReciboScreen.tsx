@@ -56,18 +56,17 @@ export default function CierreReciboScreen() {
           </div>
         </div>
 
+        {/* Solo lo que entra o sale del cajón físico — la suma da el esperado */}
         <div style={{ borderTop: '1px dashed var(--border)', margin: '9px 0' }} />
         {kv('Apertura', s.fmt(c.openingBalance))}
-        {kv(`Ventas (${c.salesCount})`, '+ ' + s.fmt(c.salesTotal))}
+        {kv('Ventas en efectivo', '+ ' + s.fmt(c.cashSales))}
         {kv('Ingresos', '+ ' + s.fmt(c.incomes))}
         {kv('Gastos', '− ' + s.fmt(c.expenses))}
 
-        {methods.length > 0 && (
-          <>
-            <div style={{ borderTop: '1px dashed var(--border)', margin: '9px 0' }} />
-            {methods.map(([m, v]) => kv(methodLabel(m), s.fmt(v), { muted: true }))}
-          </>
-        )}
+        {/* Ventas totales del turno con su desglose por método (informativo) */}
+        <div style={{ borderTop: '1px dashed var(--border)', margin: '9px 0' }} />
+        {kv(`Ventas del turno (${c.salesCount})`, s.fmt(c.salesTotal))}
+        {methods.map(([m, v]) => kv(methodLabel(m), s.fmt(v), { muted: true }))}
 
         {(c.creditSales.count > 0 ||
           c.customerPayments.count > 0 ||

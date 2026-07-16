@@ -36,7 +36,7 @@ export function requiresObservation(
 
 export interface ShiftCloseCalculation {
   openingBalance: number
-  /** Total de ventas del turno no anuladas (todos los métodos, como el prototipo) */
+  /** Ventas EN EFECTIVO del turno no anuladas — lo único que entra al cajón */
   salesTotal: number
   incomes: number
   expenses: number
@@ -46,9 +46,10 @@ export interface ShiftCloseCalculation {
 }
 
 /**
- * Cierre de turno según el prototipo:
- * esperado = apertura + ventas del turno + ingresos − gastos
+ * Cierre de turno (conteo físico del cajón):
+ * esperado = apertura + ventas en efectivo + ingresos − gastos
  * diferencia = contado − esperado
+ * Tarjeta, transferencia y crédito no entran al cajón y no cuentan aquí.
  */
 export function calculateShiftClose(
   openingBalance: number,

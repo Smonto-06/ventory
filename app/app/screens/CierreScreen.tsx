@@ -89,7 +89,11 @@ export default function CierreScreen() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 12 }}>
                   <span style={{ color: 'var(--muted)' }}>Ventas del turno</span>
-                  <span style={{ color: '#6366F1', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>+ {s.fmt(s.ventasTurno)}</span>
+                  <span style={{ color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{s.fmt(s.ventasTurno)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 12 }}>
+                  <span style={{ color: 'var(--muted)' }}>Ventas en efectivo</span>
+                  <span style={{ color: '#6366F1', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>+ {s.fmt(s.ventasEfectivo)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 12 }}>
                   <span style={{ color: 'var(--muted)' }}>Ingresos de caja</span>

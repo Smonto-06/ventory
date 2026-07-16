@@ -368,6 +368,8 @@ export const api = {
       summary: {
         openingBalance: number
         salesTotal: number
+        // Parte en efectivo de las ventas — lo único que suma al esperado del cajón
+        cashSales: number
         incomes: number
         expenses: number
         expectedBalance: number
