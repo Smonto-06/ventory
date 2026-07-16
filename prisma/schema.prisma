@@ -86,6 +86,8 @@ model Business {
   taxId              String?
   phone              String?
   address            String?
+  // Mensaje final impreso en la factura de venta (p. ej. "¡Gracias por su compra!")
+  receiptFooter      String?
   currency           String    @default("COP")
   locale             String    @default("es-CO")
   isActive           Boolean   @default(true)
