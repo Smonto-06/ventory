@@ -72,15 +72,33 @@ export default function ReceiptScreen() {
           <span style={{ fontSize: 16, fontWeight: 800, color: '#6366F1' }}>Total</span>
           <span style={{ fontSize: 24, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{s.fmt(sale.total)}</span>
         </div>
-        <div style={{ fontSize: 13.5, color: 'var(--muted)', marginBottom: 22 }}>
-          Método: <b style={{ color: 'var(--text)' }}>{methodLabel(sale.paymentMethod, sale.payments)}</b>
-          {sale.changeGiven > 0 && (
-            <span>
-              {' '}
-              · Cambio: <b style={{ color: 'var(--text)' }}>{s.fmt(sale.changeGiven)}</b>
-            </span>
-          )}
-        </div>
+        {sale.paymentMethod === 'MIXED' ? (
+          // Pago combinado: cada método con su monto (efectivo, tarjeta, transferencia)
+          <div style={{ fontSize: 13.5, color: 'var(--muted)', marginBottom: 22 }}>
+            {sale.payments.map((p) => (
+              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                <span>{methodLabel(p.method)}</span>
+                <b style={{ color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{s.fmt(p.amount)}</b>
+              </div>
+            ))}
+            {sale.changeGiven > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                <span>Cambio</span>
+                <b style={{ color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{s.fmt(sale.changeGiven)}</b>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13.5, color: 'var(--muted)', marginBottom: 22 }}>
+            Método: <b style={{ color: 'var(--text)' }}>{methodLabel(sale.paymentMethod, sale.payments)}</b>
+            {sale.changeGiven > 0 && (
+              <span>
+                {' '}
+                · Cambio: <b style={{ color: 'var(--text)' }}>{s.fmt(sale.changeGiven)}</b>
+              </span>
+            )}
+          </div>
+        )}
         <div data-no-print="true" style={{ display: 'flex', gap: 10 }}>
           <button onClick={() => window.print()} className="v-hover-bg" style={{ flex: 1, height: 52, borderRadius: 13, background: 'var(--surface)', color: 'var(--text)', fontWeight: 700, fontSize: 15, cursor: 'pointer', border: '1.5px solid var(--border)' }}>
             Imprimir factura

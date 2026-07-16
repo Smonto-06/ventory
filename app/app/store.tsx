@@ -58,6 +58,7 @@ export type Screen =
   | 'devoluciones'
   | 'reciboAbono'
   | 'cierreRecibo'
+  | 'compraRecibo'
 
 export type ModalId =
   | 'producto'
@@ -275,6 +276,8 @@ export interface AppStore extends AppData {
   lastSale: Sale | null
   setLastSale: (s: Sale) => void
   newSale: () => void
+  /** Última compra registrada — alimenta el recibo imprimible de compra */
+  lastPurchase: Purchase | null
 
   // esperas
   holdSale: () => Promise<void>
@@ -388,6 +391,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastAbono, setLastAbono] = useState<AbonoReceipt | null>(null)
   const [cierrePreview, setCierrePreview] = useState<CierrePreview | null>(null)
   const [lastCierre, setLastCierre] = useState<CierreResult | null>(null)
+  const [lastPurchase, setLastPurchase] = useState<Purchase | null>(null)
 
   const [saleDetId, setSaleDetId] = useState<string | null>(null)
   const [editProdId, setEditProdId] = useState<string | null>(null)
@@ -1036,7 +1040,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const methodMap = { contado: 'CASH', transferencia: 'TRANSFER', credito: 'CREDIT' } as const
     try {
       const valor = ncItems.reduce((a, i) => a + (i.total || i.qty * i.unit), 0)
-      await api.createPurchase({
+      const r = await api.createPurchase({
         supplierName: ncProv.trim(),
         method: methodMap[ncMethod],
         initialPayment: ncMethod === 'credito' ? ncAbono : 0,
@@ -1049,7 +1053,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })),
       })
       clearNc()
-      setScreen('compras')
+      setLastPurchase(r.purchase)
+      setScreen('compraRecibo')
       toast(`Compra registrada · ${fmt(valor)}`)
       await Promise.all([refreshPurchases(), refreshProducts(), refreshSuppliers(), refreshCash()])
     } catch (e) {
@@ -1383,6 +1388,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lastSale,
       setLastSale,
       newSale,
+      lastPurchase,
       holdSale,
       resumeSale,
       discardHeldSale,
@@ -1446,7 +1452,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
       turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
-      pay, amounts, received, lastSale, lastAbono, saleDetId, dscId, editProdId, editClientId,
+      pay, amounts, received, lastSale, lastPurchase, lastAbono, saleDetId, dscId, editProdId, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,
       ncProv, ncItems, ncMethod, ncAbono, fmt,
     ],
