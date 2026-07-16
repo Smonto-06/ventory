@@ -55,6 +55,9 @@ export default function AdminClient() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [toast, setToast] = useState('')
+  // Eliminación definitiva: negocio seleccionado + nombre digitado como confirmación
+  const [del, setDel] = useState<BizRow | null>(null)
+  const [delName, setDelName] = useState('')
 
   const load = useCallback(async () => {
     const res = await fetch('/api/admin/businesses')
@@ -90,6 +93,29 @@ export default function AdminClient() {
       } else {
         const body = await res.json().catch(() => null)
         showToast(body?.error ?? 'No se pudo aplicar la acción')
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const doDelete = async () => {
+    if (!del || delName.trim() !== del.name.trim()) return
+    setBusy(del.id)
+    try {
+      const res = await fetch(`/api/admin/businesses/${del.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: delName.trim() }),
+      })
+      const body = await res.json().catch(() => null)
+      if (res.ok) {
+        setDel(null)
+        setDelName('')
+        await load()
+        showToast(`Cuenta "${body?.name ?? ''}" eliminada definitivamente`)
+      } else {
+        showToast(body?.error ?? 'No se pudo eliminar la cuenta')
       }
     } finally {
       setBusy(null)
@@ -181,6 +207,17 @@ export default function AdminClient() {
                         Suspender
                       </button>
                     )}
+                    <button
+                      disabled={busy === r.id}
+                      onClick={() => {
+                        setDel(r)
+                        setDelName('')
+                      }}
+                      title="Eliminar la cuenta y todos sus datos"
+                      style={{ ...btn('transparent', '#C9433B'), border: '1.5px solid #F3C6C2' }}
+                    >
+                      Eliminar
+                    </button>
                   </div>
                 </div>
               ))}
@@ -192,9 +229,72 @@ export default function AdminClient() {
         <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
           <b style={{ color: 'var(--text)' }}>Cómo funciona:</b> los negocios nuevos entran con 15 días de prueba. Cuando un
           cliente te pague, pulsa <b>Activar plan</b>. <b>+15 días</b> extiende la prueba (útil para negociar).{' '}
-          <b>Suspender</b> bloquea las ventas de un negocio que dejó de pagar (sus datos se conservan y puedes reactivarlo).
+          <b>Suspender</b> bloquea las ventas de un negocio que dejó de pagar (sus datos se conservan y puedes reactivarlo).{' '}
+          <b>Eliminar</b> borra la cuenta y todos sus datos de forma definitiva — úsalo solo cuando estés seguro.
         </div>
       </div>
+
+      {del && (
+        <div
+          onClick={() => setDel(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,25,23,.5)', zIndex: 150, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', borderRadius: 18, padding: 24, boxShadow: '0 30px 60px -30px rgba(15,25,23,.6)', animation: 'vpop .25s ease' }}
+          >
+            <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, letterSpacing: '-.3px', color: '#C9433B' }}>
+              Eliminar cuenta definitivamente
+            </h2>
+            <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.65 }}>
+              Vas a eliminar <b>{del.name}</b> ({del.owner?.email ?? 'sin dueño'}). Se borrarán para siempre:
+            </div>
+            <ul style={{ margin: '10px 0 0', paddingLeft: 20, fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.7 }}>
+              <li>{del.userCount} usuario{del.userCount === 1 ? '' : 's'} (ya no podrán iniciar sesión)</li>
+              <li>{del.salesCount} venta{del.salesCount === 1 ? '' : 's'} y todo su historial de caja</li>
+              <li>{del.productCount} producto{del.productCount === 1 ? '' : 's'} e inventario</li>
+              <li>{del.customerCount} cliente{del.customerCount === 1 ? '' : 's'}, proveedores y compras</li>
+            </ul>
+            <div style={{ marginTop: 14, background: '#FDECEC', borderRadius: 11, padding: '10px 14px', fontSize: 13, color: '#C9433B', fontWeight: 700 }}>
+              Esta acción no se puede deshacer. Si solo quieres bloquear el acceso, usa Suspender.
+            </div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, margin: '16px 0 6px' }}>
+              Escribe el nombre exacto del negocio para confirmar:
+            </label>
+            <input
+              value={delName}
+              onChange={(e) => setDelName(e.target.value)}
+              placeholder={del.name}
+              style={{ width: '100%', height: 46, padding: '0 14px', border: '1.5px solid var(--border)', borderRadius: 11, background: 'var(--input)', fontSize: 14.5, fontWeight: 600 }}
+            />
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button
+                onClick={() => setDel(null)}
+                style={{ flex: 1, height: 48, borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={doDelete}
+                disabled={delName.trim() !== del.name.trim() || busy === del.id}
+                style={{
+                  flex: 1.4,
+                  height: 48,
+                  borderRadius: 12,
+                  fontWeight: 800,
+                  fontSize: 14.5,
+                  color: '#fff',
+                  background: delName.trim() === del.name.trim() ? '#C9433B' : '#E5A9A4',
+                  cursor: delName.trim() === del.name.trim() ? 'pointer' : 'not-allowed',
+                  boxShadow: delName.trim() === del.name.trim() ? '0 8px 18px -8px #C9433Bcc' : undefined,
+                }}
+              >
+                {busy === del.id ? 'Eliminando…' : 'Eliminar para siempre'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
