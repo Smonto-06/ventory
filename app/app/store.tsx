@@ -1107,7 +1107,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const confirmAperturaCaja = useCallback(
     async (amount: number) => {
       const branchId = data.branches[0]?.id
-      if (!branchId) return
+      if (!branchId) {
+        toast('Tu negocio no tiene una sucursal configurada. Recarga la página o contáctanos.')
+        return
+      }
       try {
         await api.openCashSession(branchId, amount)
         setModal(null)
