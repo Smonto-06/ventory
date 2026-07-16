@@ -68,6 +68,12 @@ export async function requireActiveBusiness(businessId: string): Promise<NextRes
 
 /** El super-admin de la plataforma se define por correo (SUPER_ADMIN_EMAIL en Vercel) */
 export function isSuperAdmin(email: string | null | undefined): boolean {
-  const configured = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase()
+  // Tolera comillas alrededor del valor (error común al pegar en Vercel)
+  const configured = process.env.SUPER_ADMIN_EMAIL?.trim().replace(/^["']|["']$/g, '').trim().toLowerCase()
   return !!configured && !!email && email.trim().toLowerCase() === configured
+}
+
+/** Si la variable SUPER_ADMIN_EMAIL existe en este despliegue (para diagnóstico) */
+export function superAdminConfigured(): boolean {
+  return !!process.env.SUPER_ADMIN_EMAIL?.trim()
 }
