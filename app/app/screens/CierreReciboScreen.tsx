@@ -1,8 +1,9 @@
 'use client'
 
-// Recibo de cierre de turno — informe imprimible con el resumen del turno:
-// apertura, ventas (con desglose por método), ingresos, gastos, esperado,
-// contado y diferencia. Se muestra tras cualquier cierre (de turno o del día).
+// Recibo de cierre de caja — formato ticket 80mm "térmico esencial":
+// informe del turno (apertura, ventas con desglose por método, ingresos,
+// gastos, esperado/contado/diferencia) y línea de firma del cajero.
+// Se muestra tras cualquier cierre (de turno o del día).
 
 import { useApp } from '../store'
 import { methodLabel } from '../ui'
@@ -32,75 +33,67 @@ export default function CierreReciboScreen() {
   const diffColor = c.difference === 0 ? '#6366F1' : c.difference > 0 ? '#B4740A' : '#C9433B'
   const methods = Object.entries(c.byMethod).sort((a, b) => b[1] - a[1])
 
-  const row = (label: string, value: string, opts?: { color?: string; bold?: boolean }) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14.5, padding: '6px 0' }}>
-      <span style={{ color: opts?.bold ? 'var(--text)' : 'var(--muted)', fontWeight: opts?.bold ? 800 : 500 }}>{label}</span>
-      <span style={{ fontWeight: opts?.bold ? 800 : 700, fontVariantNumeric: 'tabular-nums', color: opts?.color ?? 'var(--text)' }}>
+  const kv = (label: string, value: string, opts?: { muted?: boolean; bold?: boolean; color?: string }) => (
+    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '1.5px 0' }}>
+      <span style={{ color: opts?.muted ? '#6E7280' : 'var(--text)', fontWeight: opts?.bold ? 700 : 400 }}>{label}</span>
+      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: opts?.bold ? 700 : 400, color: opts?.color ?? (opts?.muted ? '#6E7280' : 'var(--text)') }}>
         {value}
       </span>
     </div>
   )
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'radial-gradient(900px 500px at 50% -5%, #EEF0FE 0%, var(--bg) 55%)' }}>
-      <div style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '30px 28px', boxShadow: '0 24px 50px -30px rgba(16,20,30,.28)', animation: 'vpop .35s ease' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#6366F1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#fff', boxShadow: '0 10px 22px -8px #6366F199' }}>
-            ✓
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--bg)', gap: 16 }}>
+      <div style={{ width: 302, background: 'var(--surface)', border: '1px solid var(--border)', padding: '18px 16px', fontFamily: "'Courier New',monospace", fontSize: 12, color: 'var(--text)', boxShadow: '0 14px 30px -20px rgba(16,20,30,.4)', fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '.5px' }}>CIERRE DE CAJA</div>
+          <div style={{ color: '#6E7280', fontSize: 10.5 }}>
+            {[c.businessName, c.branchName].filter(Boolean).join(' · ')}
           </div>
-          <div style={{ fontSize: 19, fontWeight: 800, marginTop: 14 }}>
-            {c.nextOpening !== null ? 'Cierre de turno' : 'Cierre del día'}
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{dateStr}</div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--bg)', borderRadius: 12, padding: '12px 16px', margin: '20px 0 14px', fontSize: 13.5 }}>
-          <div>
-            Sucursal: <b>{c.branchName}</b>
-          </div>
-          <div>
-            Cajero: <b>{c.cashierName}</b>
+          <div style={{ color: '#6E7280', fontSize: 10.5 }}>
+            {dateStr}
+            {c.cashierName ? ` · Cajero: ${c.cashierName}` : ''}
           </div>
         </div>
 
-        <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '.8px', color: 'var(--muted)', textTransform: 'uppercase', margin: '14px 0 4px' }}>
-          Resumen del turno
-        </div>
-        {row('Apertura', s.fmt(c.openingBalance))}
-        {row(`Ventas (${c.salesCount} ${c.salesCount === 1 ? 'venta' : 'ventas'})`, '+ ' + s.fmt(c.salesTotal), { color: '#6366F1' })}
-        {row('Ingresos de caja', '+ ' + s.fmt(c.incomes), { color: '#6366F1' })}
-        {row('Gastos de caja', '− ' + s.fmt(c.expenses), { color: '#C9433B' })}
+        <div style={{ borderTop: '1px dashed var(--border)', margin: '9px 0' }} />
+        {kv('Apertura', s.fmt(c.openingBalance))}
+        {kv(`Ventas (${c.salesCount})`, '+ ' + s.fmt(c.salesTotal))}
+        {kv('Ingresos', '+ ' + s.fmt(c.incomes))}
+        {kv('Gastos', '− ' + s.fmt(c.expenses))}
 
         {methods.length > 0 && (
           <>
-            <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '.8px', color: 'var(--muted)', textTransform: 'uppercase', margin: '14px 0 4px' }}>
-              Ventas por método de pago
-            </div>
-            {methods.map(([m, v]) => row(methodLabel(m), s.fmt(v)))}
+            <div style={{ borderTop: '1px dashed var(--border)', margin: '9px 0' }} />
+            {methods.map(([m, v]) => kv(methodLabel(m), s.fmt(v), { muted: true }))}
           </>
         )}
 
-        <div style={{ borderTop: '1px dashed #E2E5EC', marginTop: 12, paddingTop: 10 }}>
-          {row('Saldo esperado', s.fmt(c.expectedBalance), { bold: true })}
-          {row('Total contado', s.fmt(c.countedBalance), { bold: true })}
-          {row('Diferencia', (c.difference >= 0 ? '+ ' : '− ') + s.fmt(Math.abs(c.difference)), { bold: true, color: diffColor })}
-        </div>
+        <div style={{ borderTop: '1.5px solid var(--text)', margin: '9px 0' }} />
+        {kv('Esperado', s.fmt(c.expectedBalance), { bold: true })}
+        {kv('Contado', s.fmt(c.countedBalance), { bold: true })}
+        {kv('Diferencia', (c.difference >= 0 ? '+ ' : '− ') + s.fmt(Math.abs(c.difference)), { bold: true, color: diffColor })}
 
+        <div style={{ textAlign: 'center', marginTop: 16, color: '#6E7280', fontSize: 11 }}>
+          Firma cajero: ______________
+        </div>
+      </div>
+
+      <div data-no-print="true" style={{ width: 302, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {c.nextOpening !== null ? (
-          <div style={{ marginTop: 14, background: '#EEF0FE', borderRadius: 12, padding: '11px 16px', fontSize: 14, color: '#4338CA', fontWeight: 700, textAlign: 'center' }}>
+          <div style={{ background: '#EEF0FE', borderRadius: 12, padding: '10px 16px', fontSize: 13.5, color: '#4338CA', fontWeight: 700, textAlign: 'center' }}>
             Nuevo turno abierto con {s.fmt(c.nextOpening)}
           </div>
         ) : (
-          <div style={{ marginTop: 14, background: 'var(--bg)', borderRadius: 12, padding: '11px 16px', fontSize: 13.5, color: 'var(--muted)', textAlign: 'center' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 16px', fontSize: 13, color: 'var(--muted)', textAlign: 'center' }}>
             Jornada terminada — no se abrió un turno nuevo.
           </div>
         )}
-
-        <div data-no-print="true" style={{ display: 'flex', gap: 10, marginTop: 22 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
           <button
             onClick={() => window.print()}
             className="v-hover-bg"
-            style={{ flex: 1, height: 50, borderRadius: 13, background: 'var(--surface)', color: 'var(--text)', fontWeight: 700, fontSize: 14.5, cursor: 'pointer', border: '1.5px solid var(--border)' }}
+            style={{ flex: 1, height: 48, borderRadius: 12, background: 'var(--surface)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer', border: '1.5px solid var(--border)' }}
           >
             Imprimir recibo
           </button>
@@ -108,14 +101,14 @@ export default function CierreReciboScreen() {
             <button
               onClick={() => s.go('panel')}
               className="v-hover-primary"
-              style={{ flex: 1.2, height: 50, borderRadius: 13, background: '#6366F1', color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer', boxShadow: '0 10px 22px -10px #6366F1cc' }}
+              style={{ flex: 1.2, height: 48, borderRadius: 12, background: '#6366F1', color: '#fff', fontWeight: 800, fontSize: 14.5, cursor: 'pointer', boxShadow: '0 10px 22px -10px #6366F1cc' }}
             >
               Volver al panel
             </button>
           ) : (
             <button
               onClick={s.logout}
-              style={{ flex: 1.2, height: 50, borderRadius: 13, background: '#C9433B', color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer', boxShadow: '0 10px 22px -12px #C9433Bcc' }}
+              style={{ flex: 1.2, height: 48, borderRadius: 12, background: '#C9433B', color: '#fff', fontWeight: 800, fontSize: 14.5, cursor: 'pointer', boxShadow: '0 10px 22px -12px #C9433Bcc' }}
             >
               Cerrar sesión
             </button>
@@ -123,10 +116,9 @@ export default function CierreReciboScreen() {
         </div>
         {c.nextOpening === null && (
           <button
-            data-no-print="true"
             onClick={() => s.go('panel')}
             className="v-hover-underline"
-            style={{ display: 'block', margin: '12px auto 0', fontSize: 13.5, color: 'var(--muted)', fontWeight: 600, cursor: 'pointer' }}
+            style={{ display: 'block', margin: '2px auto 0', fontSize: 13.5, color: 'var(--muted)', fontWeight: 600, cursor: 'pointer' }}
           >
             Volver al panel sin cerrar sesión
           </button>

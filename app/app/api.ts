@@ -246,6 +246,11 @@ export interface Settings {
   defaultOpeningAmount: number
   allowNegativeStock: boolean
   barcodeEnabled: boolean
+  // Datos impresos en la factura de venta
+  taxId?: string | null
+  phone?: string | null
+  address?: string | null
+  receiptFooter?: string | null
   plan?: PlanInfo
   isSuperAdmin?: boolean
 }

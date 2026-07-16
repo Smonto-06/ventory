@@ -85,6 +85,10 @@ export default function AjustesModal() {
   const [currency, setCurrency] = useState(s.settings?.currency ?? '$')
   const [ivaPct, setIvaPct] = useState(s.settings?.ivaPct ?? 0)
   const [apertura, setApertura] = useState(s.settings?.defaultOpeningAmount ?? 0)
+  const [taxId, setTaxId] = useState(s.settings?.taxId ?? '')
+  const [phone, setPhone] = useState(s.settings?.phone ?? '')
+  const [address, setAddress] = useState(s.settings?.address ?? '')
+  const [receiptFooter, setReceiptFooter] = useState(s.settings?.receiptFooter ?? '')
   // Preferencia de novedades: solo local, se guarda en este navegador
   const [showNov, setShowNov] = useState<boolean>(() =>
     typeof window === 'undefined' ? true : window.localStorage.getItem('ventory-novedades') !== '0',
@@ -125,6 +129,45 @@ export default function AjustesModal() {
         placeholder="Nombre del negocio"
         style={textInputStyle}
       />
+
+      <div style={sectionStyle}>Facturación</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div>
+          <label style={fieldLabelStyle}>NIT</label>
+          <input
+            value={taxId}
+            onChange={(e) => setTaxId(e.target.value)}
+            placeholder="900.123.456-7"
+            style={textInputStyle}
+          />
+        </div>
+        <div>
+          <label style={fieldLabelStyle}>Teléfono</label>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="301 456 7890"
+            style={textInputStyle}
+          />
+        </div>
+      </div>
+      <label style={{ ...fieldLabelStyle, marginTop: 10 }}>Dirección</label>
+      <input
+        value={address}
+        onChange={(e) => setAddress(e.target.value)}
+        placeholder="Cra 12 #34-56, Bogotá"
+        style={textInputStyle}
+      />
+      <label style={{ ...fieldLabelStyle, marginTop: 10 }}>Mensaje final de la factura</label>
+      <input
+        value={receiptFooter}
+        onChange={(e) => setReceiptFooter(e.target.value)}
+        placeholder="¡Gracias por su compra!"
+        style={textInputStyle}
+      />
+      <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8' }}>
+        Estos datos aparecen en la factura de venta. Los campos vacíos no se imprimen.
+      </div>
 
       <div style={sectionStyle}>Impuestos y moneda</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -239,6 +282,10 @@ export default function AjustesModal() {
             currency,
             ivaPct,
             defaultOpeningAmount: apertura,
+            taxId: taxId.trim(),
+            phone: phone.trim(),
+            address: address.trim(),
+            receiptFooter: receiptFooter.trim(),
           })
         }
         className="v-hover-primary"

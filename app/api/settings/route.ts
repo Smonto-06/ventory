@@ -15,7 +15,14 @@ const UpdateSettingsSchema = z.object({
   defaultOpeningAmount: z.number().min(0).optional(),
   allowNegativeStock: z.boolean().optional(),
   barcodeEnabled: z.boolean().optional(),
+  // Datos que aparecen en la factura de venta (vacío = no se imprime esa línea)
+  taxId: z.string().trim().max(40).optional(),
+  phone: z.string().trim().max(40).optional(),
+  address: z.string().trim().max(160).optional(),
+  receiptFooter: z.string().trim().max(160).optional(),
 })
+
+const BILLING_FIELDS = ['taxId', 'phone', 'address', 'receiptFooter'] as const
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser(req)
@@ -32,6 +39,10 @@ export async function GET(req: NextRequest) {
       defaultOpeningAmount: true,
       allowNegativeStock: true,
       barcodeEnabled: true,
+      taxId: true,
+      phone: true,
+      address: true,
+      receiptFooter: true,
       status: true,
       trialEndsAt: true,
     },
@@ -63,10 +74,16 @@ export async function PUT(req: NextRequest) {
   const parsed = UpdateSettingsSchema.safeParse(body)
   if (!parsed.success) return badRequest(parsed.error.issues[0].message)
 
+  // Campos de facturación: cadena vacía significa "quitar de la factura" → null
+  const data: Record<string, unknown> = { ...parsed.data }
+  for (const f of BILLING_FIELDS) {
+    if (typeof data[f] === 'string' && data[f] === '') data[f] = null
+  }
+
   try {
     const updated = await db.business.update({
       where: { id: user.businessId },
-      data: parsed.data,
+      data,
       select: {
         id: true,
         name: true,
@@ -76,6 +93,10 @@ export async function PUT(req: NextRequest) {
         defaultOpeningAmount: true,
         allowNegativeStock: true,
         barcodeEnabled: true,
+        taxId: true,
+        phone: true,
+        address: true,
+        receiptFooter: true,
       },
     })
 
