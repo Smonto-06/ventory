@@ -62,13 +62,17 @@ export async function POST(request: Request) {
     const hashedPassword = await bcrypt.hash(password, 12)
     const slug = await generateUniqueSlug(businessName)
 
-    // Los negocios nuevos entran en prueba gratis; el super-admin los activa tras el pago
+    // Los negocios nuevos entran en prueba gratis; el super-admin los activa tras el pago.
+    // La sucursal por defecto es indispensable: sin ella no se puede abrir caja ni vender.
     const business = await db.business.create({
       data: {
         name: businessName,
         slug,
         status: 'TRIAL',
         trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86400000),
+        branches: {
+          create: { name: 'Principal' },
+        },
         users: {
           create: {
             name,
