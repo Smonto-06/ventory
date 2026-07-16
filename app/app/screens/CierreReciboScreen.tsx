@@ -69,6 +69,26 @@ export default function CierreReciboScreen() {
           </>
         )}
 
+        {(c.creditSales.count > 0 ||
+          c.customerPayments.count > 0 ||
+          c.returns.count > 0 ||
+          c.purchases.count > 0 ||
+          c.supplierPayments.count > 0) && (
+          <>
+            <div style={{ borderTop: '1px dashed var(--border)', margin: '9px 0' }} />
+            {c.creditSales.count > 0 &&
+              kv(`Ventas a crédito (${c.creditSales.count})`, s.fmt(c.creditSales.total))}
+            {c.customerPayments.count > 0 &&
+              kv(`Abonos de clientes (${c.customerPayments.count})`, '+ ' + s.fmt(c.customerPayments.total))}
+            {c.returns.count > 0 &&
+              kv(`Devoluciones (${c.returns.count})`, '− ' + s.fmt(c.returns.total))}
+            {c.purchases.count > 0 &&
+              kv(`Compras (${c.purchases.count})`, s.fmt(c.purchases.total))}
+            {c.supplierPayments.count > 0 &&
+              kv(`Pagos a proveedores (${c.supplierPayments.count})`, '− ' + s.fmt(c.supplierPayments.total))}
+          </>
+        )}
+
         <div style={{ borderTop: '1.5px solid var(--text)', margin: '9px 0' }} />
         {kv('Esperado', s.fmt(c.expectedBalance), { bold: true })}
         {kv('Contado', s.fmt(c.countedBalance), { bold: true })}

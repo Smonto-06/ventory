@@ -160,6 +160,37 @@ export async function POST(
     }
   }
 
+  const creditSales = session.sales.filter((s) => s.paymentMethod === 'CREDIT')
+  const creditTotal = creditSales.reduce((sum, s) => sum + Number(s.total), 0)
+
+  // Actividad del negocio ocurrida durante el turno (informativa para el recibo):
+  // abonos de clientes, compras, pagos a proveedores y devoluciones. Se consulta
+  // por ventana de tiempo del turno porque estos registros no cuelgan de la sesión.
+  const closedAt = result.closed.closedAt ?? new Date()
+  const window = { gte: session.openedAt, lte: closedAt }
+  const [abonos, compras, pagosProveedor, devoluciones] = await Promise.all([
+    db.customerPayment.aggregate({
+      _count: { _all: true },
+      _sum: { amount: true },
+      where: { createdAt: window, customer: { businessId: user.businessId } },
+    }),
+    db.purchase.aggregate({
+      _count: { _all: true },
+      _sum: { total: true },
+      where: { createdAt: window, businessId: user.businessId, branchId: session.branchId },
+    }),
+    db.purchasePayment.aggregate({
+      _count: { _all: true },
+      _sum: { amount: true },
+      where: { createdAt: window, purchase: { businessId: user.businessId, branchId: session.branchId } },
+    }),
+    db.saleReturn.aggregate({
+      _count: { _all: true },
+      _sum: { totalRefund: true },
+      where: { createdAt: window, sale: { branchId: session.branchId } },
+    }),
+  ])
+
   return NextResponse.json({
     session: serialize(result.closed),
     nextSession: serialize(result.next),
@@ -176,6 +207,11 @@ export async function POST(
     report: {
       salesCount: session.sales.length,
       byMethod,
+      creditSales: { count: creditSales.length, total: creditTotal },
+      customerPayments: { count: abonos._count._all, total: Number(abonos._sum.amount ?? 0) },
+      purchases: { count: compras._count._all, total: Number(compras._sum.total ?? 0) },
+      supplierPayments: { count: pagosProveedor._count._all, total: Number(pagosProveedor._sum.amount ?? 0) },
+      returns: { count: devoluciones._count._all, total: Number(devoluciones._sum.totalRefund ?? 0) },
     },
   })
 }
