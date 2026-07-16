@@ -16,6 +16,7 @@ import TicketScreen from './screens/TicketScreen'
 import CierreScreen from './screens/CierreScreen'
 import EsperasScreen from './screens/EsperasScreen'
 import CierreReciboScreen from './screens/CierreReciboScreen'
+import CompraReciboScreen from './screens/CompraReciboScreen'
 import DevolucionesScreen from './screens/DevolucionesScreen'
 import ReciboAbonoScreen from './screens/ReciboAbonoScreen'
 import ProductosScreen from './screens/ProductosScreen'
@@ -336,6 +337,7 @@ export default function Shell() {
     devoluciones: <DevolucionesScreen />,
     reciboAbono: <ReciboAbonoScreen />,
     cierreRecibo: <CierreReciboScreen />,
+    compraRecibo: <CompraReciboScreen />,
     productos: <ProductosScreen />,
     ventas: <VentasScreen />,
     reportes: <ReportesScreen />,

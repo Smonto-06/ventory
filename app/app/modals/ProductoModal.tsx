@@ -169,7 +169,7 @@ export default function ProductoModal() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
-          <label style={lblStyle}>SKU</label>
+          <label style={lblStyle}>SKU (opcional)</label>
           <input value={f.sku} onChange={(e) => set('sku')(e.target.value)} placeholder="RH005" style={fieldStyle} />
         </div>
         <div>
@@ -189,7 +189,7 @@ export default function ProductoModal() {
         </div>
       </div>
 
-      <label style={lblStyle}>Código de barras</label>
+      <label style={lblStyle}>Código de barras (opcional)</label>
       <input
         value={f.barcode}
         onChange={(e) => set('barcode')(e.target.value)}

@@ -8,14 +8,15 @@ export const dynamic = 'force-dynamic'
 
 const updateProductSchema = z.object({
   name: z.string().min(1).max(200).optional(),
-  description: z.string().max(1000).optional(),
-  barcode: z.string().max(50).optional(),
-  sku: z.string().max(50).optional(),
+  description: z.string().max(1000).nullish(),
+  // null = limpiar el campo (SKU y código de barras son opcionales)
+  barcode: z.string().max(50).nullish(),
+  sku: z.string().max(50).nullish(),
   price: z.number().positive('El precio debe ser mayor a 0').optional(),
   cost: z.number().nonnegative('El costo no puede ser negativo').optional(),
   taxRate: z.number().min(0).max(1).optional(),
-  unitOfMeasure: z.string().max(50).optional(),
-  supplier: z.string().max(200).optional(),
+  unitOfMeasure: z.string().max(50).nullish(),
+  supplier: z.string().max(200).nullish(),
   imageUrl: z.string().nullable().optional(),
   categoryId: z.string().nullable().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),

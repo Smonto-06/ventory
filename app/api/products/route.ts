@@ -6,20 +6,22 @@ import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
+// Los campos de texto opcionales aceptan null (el formulario envía null cuando
+// están vacíos): SKU, código de barras, proveedor, categoría y foto son opcionales.
 const createProductSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido').max(200),
-  description: z.string().max(1000).optional(),
-  barcode: z.string().max(50).optional(),
-  sku: z.string().max(50).optional(),
+  description: z.string().max(1000).nullish(),
+  barcode: z.string().max(50).nullish(),
+  sku: z.string().max(50).nullish(),
   price: z.number('El precio es requerido').positive('El precio debe ser mayor a 0'),
   cost: z.number().nonnegative('El costo no puede ser negativo').optional(),
   taxRate: z.number().min(0).max(1).optional(),
-  unitOfMeasure: z.string().max(50).optional(),
-  supplier: z.string().max(200).optional(),
-  imageUrl: z.string().optional(),
-  categoryId: z.string().optional(),
-  // Initial stock (optional, requires branchId)
-  branchId: z.string().optional(),
+  unitOfMeasure: z.string().max(50).nullish(),
+  supplier: z.string().max(200).nullish(),
+  imageUrl: z.string().nullish(),
+  categoryId: z.string().nullish(),
+  // Stock inicial (opcional, puede ser 0; requiere branchId)
+  branchId: z.string().nullish(),
   initialStock: z.number().int().nonnegative('El stock no puede ser negativo').optional(),
   minStock: z.number().int().nonnegative().optional(),
 })
