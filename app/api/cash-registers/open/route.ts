@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
+import { requireActiveBusiness } from '@/lib/plan'
 
 const openSchema = z.object({
   branchId: z.string().min(1, 'Sucursal requerida'),
@@ -29,6 +30,10 @@ export async function POST(req: NextRequest) {
   }
 
   const { branchId, terminal, openingBalance, notes } = parsed.data
+
+  // Prueba vencida o plan suspendido → no se puede abrir caja
+  const planBlock = await requireActiveBusiness(user.businessId)
+  if (planBlock) return planBlock
 
   const branch = await db.branch.findFirst({
     where: { id: branchId, businessId: user.businessId, isActive: true },

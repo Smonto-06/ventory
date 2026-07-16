@@ -33,6 +33,20 @@ export interface ContactMessage {
  * es un clic). No se puede enviar "desde" el correo del usuario: los
  * proveedores lo bloquean por anti-suplantación.
  */
+/** Enlace de recuperación de contraseña (token de 1 hora) */
+export async function sendPasswordResetEmail(to: string, name: string, link: string): Promise<void> {
+  await transport().sendMail({
+    from: `"Ventory" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: 'Restablecer tu contraseña de Ventory',
+    text:
+      `Hola${name ? ` ${name}` : ''},\n\n` +
+      `Recibimos una solicitud para restablecer tu contraseña de Ventory.\n` +
+      `Abre este enlace para elegir una nueva (vence en 1 hora):\n\n${link}\n\n` +
+      `Si no fuiste tú, ignora este correo — tu contraseña actual sigue siendo válida.\n\n— Ventory`,
+  })
+}
+
 export async function sendContactEmail(msg: ContactMessage): Promise<void> {
   const to = process.env.CONTACT_EMAIL || process.env.GMAIL_USER!
   await transport().sendMail({

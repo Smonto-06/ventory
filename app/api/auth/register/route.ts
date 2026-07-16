@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { TRIAL_DAYS } from '@/lib/plan'
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Nombre debe tener al menos 2 caracteres'),
@@ -61,10 +62,13 @@ export async function POST(request: Request) {
     const hashedPassword = await bcrypt.hash(password, 12)
     const slug = await generateUniqueSlug(businessName)
 
+    // Los negocios nuevos entran en prueba gratis; el super-admin los activa tras el pago
     const business = await db.business.create({
       data: {
         name: businessName,
         slug,
+        status: 'TRIAL',
+        trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86400000),
         users: {
           create: {
             name,

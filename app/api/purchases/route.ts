@@ -13,6 +13,7 @@ import {
   serialize,
 } from '@/lib/api-helpers'
 import { CashMovementType, MovementType, PurchaseMethod } from '@prisma/client'
+import { requireActiveBusiness } from '@/lib/plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,10 @@ export async function POST(req: NextRequest) {
   if (!supplierId && !supplierName) {
     return badRequest('Indica el proveedor de la compra')
   }
+
+  // Prueba vencida o plan suspendido → no se pueden registrar compras
+  const planBlock = await requireActiveBusiness(user.businessId)
+  if (planBlock) return planBlock
 
   try {
     const branchId = await resolveBranchId(user.businessId, parsed.data.branchId)

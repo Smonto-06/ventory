@@ -231,6 +231,13 @@ export interface AppUser {
   branch?: { id: string; name: string } | null
 }
 
+export interface PlanInfo {
+  status: 'TRIAL' | 'ACTIVE' | 'SUSPENDED'
+  trialEndsAt: string | null
+  daysLeft: number | null
+  blocked: boolean
+}
+
 export interface Settings {
   id: string
   name: string
@@ -239,6 +246,8 @@ export interface Settings {
   defaultOpeningAmount: number
   allowNegativeStock: boolean
   barcodeEnabled: boolean
+  plan?: PlanInfo
+  isSuperAdmin?: boolean
 }
 
 export interface Branch {

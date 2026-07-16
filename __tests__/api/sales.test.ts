@@ -117,7 +117,12 @@ describe('POST /api/sales', () => {
     jest.clearAllMocks()
     ;(getServerSession as jest.Mock).mockResolvedValue(mockSession)
     ;(db.cashSession.findFirst as jest.Mock).mockResolvedValue(mockCashSession)
-    ;(db.business.findUnique as jest.Mock).mockResolvedValue({ allowNegativeStock: false })
+    ;(db.business.findUnique as jest.Mock).mockResolvedValue({
+      allowNegativeStock: false,
+      ivaPct: 0,
+      status: 'ACTIVE',
+      trialEndsAt: null,
+    })
     ;(db.product.findMany as jest.Mock).mockResolvedValue([mockProduct])
     ;(db.inventory.findMany as jest.Mock).mockResolvedValue([mockInventory])
     ;(db.$transaction as jest.Mock).mockImplementation(async (fn: (tx: typeof db) => unknown) =>
