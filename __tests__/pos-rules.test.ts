@@ -6,6 +6,7 @@ import {
   includedIva,
   resolvePayment,
   expectedBalance,
+  cashPortion,
   refundForItems,
   priceFromMargin,
   marginFromPrice,
@@ -84,8 +85,37 @@ describe('resolvePayment — cobro combinado', () => {
 })
 
 describe('expectedBalance — saldo esperado de caja', () => {
-  it('apertura + ventas + ingresos − gastos', () => {
+  it('apertura + ventas en efectivo + ingresos − gastos', () => {
     expect(expectedBalance(1000000, 350000, 50000, 120000)).toBe(1280000)
+  })
+})
+
+describe('cashPortion — efectivo que entra al cajón por una venta', () => {
+  it('venta en efectivo: el pago CASH ya viene neto de cambio', () => {
+    expect(cashPortion({ total: 65000, paymentMethod: 'CASH', payments: [{ method: 'CASH', amount: 65000 }] })).toBe(65000)
+  })
+  it('tarjeta o transferencia no ponen billetes en el cajón', () => {
+    expect(cashPortion({ total: 50000, paymentMethod: 'CARD', payments: [{ method: 'CARD', amount: 50000 }] })).toBe(0)
+    expect(cashPortion({ total: 50000, paymentMethod: 'TRANSFER', payments: [{ method: 'TRANSFER', amount: 50000 }] })).toBe(0)
+  })
+  it('crédito no aporta efectivo al momento de la venta', () => {
+    expect(cashPortion({ total: 45000, paymentMethod: 'CREDIT', payments: [{ method: 'CREDIT', amount: 45000 }] })).toBe(0)
+  })
+  it('pago combinado: solo la parte en efectivo', () => {
+    expect(
+      cashPortion({
+        total: 50000,
+        paymentMethod: 'MIXED',
+        payments: [
+          { method: 'CARD', amount: 30000 },
+          { method: 'CASH', amount: 20000 },
+        ],
+      }),
+    ).toBe(20000)
+  })
+  it('venta antigua sin registro de pagos: solo CASH aporta el total', () => {
+    expect(cashPortion({ total: 40000, paymentMethod: 'CASH' })).toBe(40000)
+    expect(cashPortion({ total: 40000, paymentMethod: 'CARD' })).toBe(0)
   })
 })
 

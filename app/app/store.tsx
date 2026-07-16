@@ -134,6 +134,8 @@ export interface CierrePreview {
 export interface CierreResult {
   openingBalance: number
   salesTotal: number
+  /** Parte en efectivo de las ventas — lo único que suma al esperado del cajón */
+  cashSales: number
   incomes: number
   expenses: number
   expectedBalance: number
@@ -227,6 +229,8 @@ export interface AppStore extends AppData {
   ingresos: number
   gastos: number
   ventasTurno: number
+  /** Parte en efectivo de las ventas del turno — lo único que suma al esperado */
+  ventasEfectivo: number
   confirmAperturaCaja: (amount: number) => Promise<void>
   cierrePreview: CierrePreview | null
   doCierre: (declared: number) => void
@@ -525,10 +529,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const apertura = data.cash.session ? Number(data.cash.session.openingBalance) : 0
   const ventasTurno = data.cash.summary?.totalSales ?? 0
+  // Solo el efectivo entra al cajón: el esperado no incluye tarjeta/transferencia/crédito
+  const ventasEfectivo = data.cash.summary?.cashSales ?? 0
   const ingresos = data.cash.summary?.incomes ?? 0
   const gastos = data.cash.summary?.expenses ?? 0
   const esperado = data.cash.session
-    ? expectedBalance(apertura, ventasTurno, ingresos, gastos)
+    ? expectedBalance(apertura, ventasEfectivo, ingresos, gastos)
     : 0
   const turnoAbierto = !!data.cash.session
 
@@ -1339,6 +1345,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ingresos,
       gastos,
       ventasTurno,
+      ventasEfectivo,
       confirmAperturaCaja,
       cierrePreview,
       doCierre,
@@ -1437,7 +1444,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
-      turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, cierrePreview, lastCierre,
+      turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
       pay, amounts, received, lastSale, lastAbono, saleDetId, dscId, editProdId, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,

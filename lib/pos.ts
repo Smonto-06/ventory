@@ -79,17 +79,38 @@ export function resolvePayment(total: number, split: PaymentSplit): PaymentResol
 }
 
 /**
- * Saldo esperado de caja = apertura + ventas del turno + ingresos − gastos.
- * Solo ventas del turno actual no anuladas cuentan (el prototipo suma TODAS las
- * ventas del turno, sin importar el método de pago).
+ * Efectivo que entró al cajón por una venta: la suma de sus pagos en efectivo
+ * (ya neta de cambio, porque el pago CASH se registra por lo aplicado al total).
+ * Tarjeta, transferencia y crédito no ponen billetes en el cajón.
+ */
+export function cashPortion(sale: {
+  total: number
+  paymentMethod: string
+  // amount admite Decimal de Prisma (se normaliza con Number())
+  payments?: Array<{ method: string; amount: number | { toString(): string } }>
+}): number {
+  if (sale.payments && sale.payments.length > 0) {
+    return sale.payments
+      .filter((p) => p.method === 'CASH')
+      .reduce((sum, p) => sum + Number(p.amount), 0)
+  }
+  // Ventas antiguas sin registro de pagos: solo el método CASH aporta efectivo
+  return sale.paymentMethod === 'CASH' ? Number(sale.total) : 0
+}
+
+/**
+ * Saldo esperado del cajón = apertura + ventas EN EFECTIVO del turno + ingresos − gastos.
+ * Solo cuenta el efectivo físico: las ventas con tarjeta, transferencia o crédito
+ * no entran al cajón y sumarlas produciría un "faltante" ficticio en cada cierre.
+ * Solo ventas del turno actual no anuladas cuentan.
  */
 export function expectedBalance(
   opening: number,
-  shiftSalesTotal: number,
+  shiftCashSales: number,
   incomes: number,
   expenses: number,
 ): number {
-  return opening + shiftSalesTotal + incomes - expenses
+  return opening + shiftCashSales + incomes - expenses
 }
 
 /** Reembolso de una devolución: valor unitario de línea (val/qty redondeado) × cantidad devuelta */
