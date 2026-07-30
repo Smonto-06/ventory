@@ -191,6 +191,23 @@ export default function PosScreen() {
       (p.barcode ?? '').includes(q),
   )
 
+  // Lector de código de barras USB: el lector "escribe" el código y envía Enter.
+  // Enter agrega directo al carrito por código/SKU exacto (o si hay un único resultado).
+  const onSearchEnter = () => {
+    const code = query.trim()
+    if (!code) return
+    const exact = s.products.find(
+      (p) => p.barcode === code || (p.sku ?? '').toLowerCase() === code.toLowerCase(),
+    )
+    const target = exact ?? (results.length === 1 ? results[0] : undefined)
+    if (target) {
+      s.addToCart(target)
+      setQuery('')
+    } else {
+      s.toast(`Sin coincidencia exacta para "${code}"`)
+    }
+  }
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', color: 'var(--text)', background: 'var(--bg)' }}>
       <header
@@ -253,13 +270,25 @@ export default function PosScreen() {
 
       <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'stretch' }}>
         <main style={{ flex: '1 1 460px', minWidth: 'min(100%,340px)', padding: 'clamp(14px,2.4vw,24px)', paddingBottom: narrow ? 96 : undefined, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por nombre, SKU o código de barras…"
-            autoFocus={!narrow}
-            style={{ width: '100%', height: 52, padding: '0 18px', border: '1.5px solid var(--border)', borderRadius: 14, background: 'var(--surface)', fontSize: 15.5, boxShadow: '0 1px 2px rgba(16,20,30,.04)' }}
-          />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onSearchEnter()
+              }}
+              placeholder="Buscar por nombre, SKU o código de barras…"
+              autoFocus={!narrow}
+              style={{ flex: 1, height: 52, padding: '0 18px', border: '1.5px solid var(--border)', borderRadius: 14, background: 'var(--surface)', fontSize: 15.5, boxShadow: '0 1px 2px rgba(16,20,30,.04)' }}
+            />
+            <button
+              onClick={() => s.openModal('scanner')}
+              title="Escanear con la cámara"
+              style={{ width: 52, height: 52, flex: 'none', borderRadius: 14, background: '#EEF0FE', color: '#4338CA', fontSize: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              📷
+            </button>
+          </div>
 
           {results.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill,minmax(${narrow ? 140 : 158}px,1fr))`, gap: 12, alignContent: 'start' }}>
