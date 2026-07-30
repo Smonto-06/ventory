@@ -7,6 +7,7 @@
 
 import { useApp } from '../store'
 import { methodLabel } from '../ui'
+import { smartPrint, TicketLine } from '../printer'
 
 export default function CierreReciboScreen() {
   const s = useApp()
@@ -41,6 +42,29 @@ export default function CierreReciboScreen() {
       </span>
     </div>
   )
+
+  const reciboLines = (): TicketLine[] => {
+    const L: TicketLine[] = [
+      { type: 'center', left: 'CIERRE DE CAJA', bold: true },
+      { type: 'center', left: [c.businessName, c.branchName].filter(Boolean).join(' - ') },
+      { type: 'center', left: `${dateStr}${c.cashierName ? ` - ${c.cashierName}` : ''}` },
+      { type: 'divider' },
+      { type: 'row', left: 'Apertura', right: s.fmt(c.openingBalance) },
+      { type: 'row', left: 'Ventas en efectivo', right: '+' + s.fmt(c.cashSales) },
+      { type: 'row', left: 'Ingresos', right: '+' + s.fmt(c.incomes) },
+      { type: 'row', left: 'Gastos', right: '-' + s.fmt(c.expenses) },
+      { type: 'divider' },
+      { type: 'row', left: `Ventas del turno (${c.salesCount})`, right: s.fmt(c.salesTotal) },
+    ]
+    for (const [m, v] of methods) L.push({ type: 'row', left: '  ' + methodLabel(m), right: s.fmt(v) })
+    L.push({ type: 'divider' })
+    L.push({ type: 'row', left: 'Esperado', right: s.fmt(c.expectedBalance), bold: true })
+    L.push({ type: 'row', left: 'Contado', right: s.fmt(c.countedBalance), bold: true })
+    L.push({ type: 'row', left: 'Diferencia', right: (c.difference >= 0 ? '+' : '-') + s.fmt(Math.abs(c.difference)), bold: true })
+    L.push({ type: 'feed' })
+    L.push({ type: 'center', left: 'Firma cajero: ______________' })
+    return L
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--bg)', gap: 16 }}>
@@ -110,7 +134,10 @@ export default function CierreReciboScreen() {
         )}
         <div style={{ display: 'flex', gap: 10 }}>
           <button
-            onClick={() => window.print()}
+            onClick={async () => {
+              const via = await smartPrint(reciboLines())
+              if (via === 'directa') s.toast('Recibo impreso')
+            }}
             className="v-hover-bg"
             style={{ flex: 1, height: 48, borderRadius: 12, background: 'var(--surface)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer', border: '1.5px solid var(--border)' }}
           >

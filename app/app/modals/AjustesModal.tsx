@@ -5,6 +5,7 @@
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
 import { Modal, ModalTitle } from '../ui'
+import { connectUsb, connectBt, forgetPrinter, printerPref, testPrint } from '../printer'
 
 const sectionStyle: CSSProperties = {
   fontSize: 11,
@@ -89,6 +90,7 @@ export default function AjustesModal() {
   const [phone, setPhone] = useState(s.settings?.phone ?? '')
   const [address, setAddress] = useState(s.settings?.address ?? '')
   const [receiptFooter, setReceiptFooter] = useState(s.settings?.receiptFooter ?? '')
+  const [printerState, setPrinterState] = useState<string | null>(printerPref())
   // Gestión de sucursales
   const [newBranch, setNewBranch] = useState('')
   const [editBranchId, setEditBranchId] = useState<string | null>(null)
@@ -213,6 +215,73 @@ export default function AjustesModal() {
       </div>
       <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8' }}>
         IVA incluido en el precio · desglose informativo
+      </div>
+
+      <div style={sectionStyle}>Impresora de tickets</div>
+      {printerState ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ flex: 1, fontSize: 13.5, color: 'var(--text)', fontWeight: 600 }}>
+            🖨 Conectada por {printerState === 'usb' ? 'USB' : 'Bluetooth'}
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                await testPrint(s.settings?.name ?? 'Ventory')
+                s.toast('Prueba enviada a la impresora')
+              } catch (e) {
+                s.toast(e instanceof Error ? e.message : 'No se pudo imprimir')
+              }
+            }}
+            style={{ height: 38, padding: '0 12px', borderRadius: 10, background: '#EEF0FE', color: '#4338CA', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+          >
+            Probar
+          </button>
+          <button
+            onClick={() => {
+              forgetPrinter()
+              setPrinterState(null)
+              s.toast('Impresora olvidada')
+            }}
+            style={{ height: 38, padding: '0 12px', borderRadius: 10, background: '#FDECEC', color: '#C9433B', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+          >
+            Olvidar
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={async () => {
+              try {
+                await connectUsb()
+                setPrinterState('usb')
+                s.toast('Impresora USB conectada')
+              } catch (e) {
+                s.toast(e instanceof Error ? e.message : 'No se pudo conectar')
+              }
+            }}
+            style={{ flex: 1, height: 40, borderRadius: 10, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+          >
+            Conectar USB
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                await connectBt()
+                setPrinterState('bt')
+                s.toast('Impresora Bluetooth conectada')
+              } catch (e) {
+                s.toast(e instanceof Error ? e.message : 'No se pudo conectar')
+              }
+            }}
+            style={{ flex: 1, height: 40, borderRadius: 10, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+          >
+            Conectar Bluetooth
+          </button>
+        </div>
+      )}
+      <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8' }}>
+        Para impresoras térmicas de tickets (58/80 mm) en Chrome o Edge. Sin impresora conectada,
+        imprimir usa el diálogo del navegador.
       </div>
 
       <div style={sectionStyle}>Caja</div>

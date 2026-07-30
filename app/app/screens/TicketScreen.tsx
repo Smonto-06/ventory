@@ -7,6 +7,7 @@
 
 import { useApp } from '../store'
 import { methodLabel, fmtQty } from '../ui'
+import { smartPrint, TicketLine } from '../printer'
 
 export default function TicketScreen() {
   const s = useApp()
@@ -48,6 +49,43 @@ export default function TicketScreen() {
       <span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   )
+
+  // Ticket en formato ESC/POS para impresora térmica (mismo contenido)
+  const ticketLines = (): TicketLine[] => {
+    const L: TicketLine[] = [{ type: 'center', left: (st?.name ?? '').toUpperCase(), bold: true }]
+    if (st?.taxId) L.push({ type: 'center', left: `NIT ${st.taxId}` })
+    if (st?.address) L.push({ type: 'center', left: st.address })
+    if (st?.phone) L.push({ type: 'center', left: `Tel ${st.phone}` })
+    L.push({ type: 'divider' })
+    L.push({ type: 'row', left: `Fact ${sale.folio}`, right: dateStr })
+    if (sale.cashier?.name || branchName) L.push({ type: 'row', left: sale.cashier?.name ?? '', right: branchName })
+    L.push({ type: 'divider' })
+    for (const it of sale.items) {
+      const q = it.product.unitOfMeasure === 'kg' ? `${fmtQty(it.quantity)}kg` : `${fmtQty(it.quantity)}x`
+      L.push({ type: 'row', left: `${q} ${it.product.name}`, right: s.fmt(it.total) })
+      if (it.product.unitOfMeasure === 'kg') L.push({ type: 'row', left: '', right: `${s.fmt(it.unitPrice)}/kg` })
+      else if (it.quantity > 1) L.push({ type: 'row', left: '', right: `${s.fmt(it.unitPrice)} c/u` })
+    }
+    L.push({ type: 'divider' })
+    if (sale.discountAmount > 0) {
+      L.push({ type: 'row', left: 'Subtotal', right: s.fmt(sale.subtotal) })
+      L.push({ type: 'row', left: 'Descuento', right: '-' + s.fmt(sale.discountAmount) })
+    }
+    L.push({ type: 'row', left: 'TOTAL', right: s.fmt(sale.total), bold: true })
+    if (sale.taxAmount > 0) L.push({ type: 'row', left: ivaLabel, right: s.fmt(sale.taxAmount) })
+    if (sale.paymentMethod === 'MIXED') {
+      for (const p of sale.payments) L.push({ type: 'row', left: methodLabel(p.method), right: s.fmt(p.amount) })
+    } else if (sale.paymentMethod === 'CASH') {
+      L.push({ type: 'row', left: 'Efectivo', right: s.fmt(sale.amountPaid) })
+    } else {
+      L.push({ type: 'row', left: methodLabel(sale.paymentMethod, sale.payments), right: s.fmt(sale.total) })
+    }
+    if (sale.changeGiven > 0) L.push({ type: 'row', left: 'Cambio', right: s.fmt(sale.changeGiven) })
+    L.push({ type: 'feed' })
+    L.push({ type: 'center', left: st?.receiptFooter || '¡Gracias por su compra!' })
+    L.push({ type: 'center', left: 'Sistema Ventory POS' })
+    return L
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 24, background: 'var(--bg)', gap: 16 }}>
@@ -122,7 +160,14 @@ export default function TicketScreen() {
         <button onClick={() => s.go('receipt')} className="v-hover-bg" style={{ height: 46, padding: '0 18px', borderRadius: 12, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
           ← Volver
         </button>
-        <button onClick={() => window.print()} className="v-hover-primary" style={{ height: 46, padding: '0 20px', borderRadius: 12, background: '#6366F1', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 8px 18px -8px #6366F1cc' }}>
+        <button
+          onClick={async () => {
+            const via = await smartPrint(ticketLines())
+            if (via === 'directa') s.toast('Ticket impreso')
+          }}
+          className="v-hover-primary"
+          style={{ height: 46, padding: '0 20px', borderRadius: 12, background: '#6366F1', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 8px 18px -8px #6366F1cc' }}
+        >
           Imprimir ticket
         </button>
       </div>
