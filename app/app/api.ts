@@ -298,6 +298,25 @@ export interface DailyReport {
   }
 }
 
+export interface RangeReport {
+  from: string
+  to: string
+  days: number
+  summary: { totalSales: number; transactionCount: number; averageSale: number; totalItems: number }
+  salesByDay: Array<{ date: string; total: number; count: number }>
+  byPaymentMethod: Record<string, number>
+  topProducts: Array<{ productId: string; name: string; quantity: number; revenue: number }>
+  profit: { sales: number; costOfGoods: number; gross: number; marginPct: number; expenses: number; net: number }
+  comparison: {
+    prevTotalSales: number
+    prevTransactionCount: number
+    prevNet: number
+    salesChangePct: number | null
+    countChangePct: number | null
+    netChangePct: number | null
+  }
+}
+
 export interface AbonoReceipt {
   type: 'cliente' | 'proveedor'
   name: string
@@ -431,6 +450,7 @@ export const api = {
 
   // Reportes
   dailyReport: (date: string) => get<DailyReport>(`/api/reports/daily?date=${date}`),
+  rangeReport: (from: string, to: string) => get<RangeReport>(`/api/reports/range?from=${from}&to=${to}`),
 
   // Contacto (envío directo por correo desde el sistema)
   sendContact: (data: { type: string; subject: string; message: string }) =>
