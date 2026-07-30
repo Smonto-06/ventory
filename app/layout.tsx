@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Plus_Jakarta_Sans, Poppins } from "next/font/google";
 import "./globals.css";
@@ -31,6 +31,12 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "Ventory — Sistema POS",
   description: "Punto de venta para pequeñas y medianas empresas",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Ventory" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#6366F1",
 };
 
 export default function RootLayout({

@@ -38,6 +38,7 @@ import {
   ShiftStat,
 } from './api'
 import { cartSubtotal, saleTotal, resolvePayment, expectedBalance } from '@/lib/pos'
+import { queueSale, syncPendingSales, pendingSales, registerServiceWorker } from './offline'
 
 export type Screen =
   | 'panel'
@@ -289,6 +290,8 @@ export interface AppStore extends AppData {
   addReceived: (v: number) => void
   finalizeSale: () => Promise<void>
   finalizeCredito: (customerId: string) => Promise<void>
+  /** Ventas guardadas sin conexión, pendientes de enviarse */
+  pendingCount: number
   lastSale: Sale | null
   setLastSale: (s: Sale) => void
   newSale: () => void
@@ -412,6 +415,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastPurchase, setLastPurchase] = useState<Purchase | null>(null)
   const [pesoProduct, setPesoProduct] = useState<Product | null>(null)
   const [rangeReport, setRangeReport] = useState<RangeReport | null>(null)
+  // Ventas guardadas sin conexión, pendientes de enviar
+  const [pendingCount, setPendingCount] = useState(0)
   // Sucursal activa de este dispositivo (para abrir caja); se guarda localmente
   const [branchId, setBranchIdState] = useState<string>(() =>
     typeof window === 'undefined' ? '' : window.localStorage.getItem('ventory-branch') ?? '',
@@ -453,7 +458,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ─── Cargas ────────────────────────────────────────────────────────────────
 
   const refreshProducts = useCallback(async () => {
-    const r = await api.products()
+    // El stock mostrado es el de la sucursal activa (donde se abre la caja)
+    const branch = typeof window !== 'undefined' ? window.localStorage.getItem('ventory-branch') : null
+    const r = await api.productsIn(branch ?? undefined)
     patch({ products: r.products })
   }, [patch])
 
@@ -532,6 +539,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const saved = typeof window !== 'undefined' ? window.localStorage.getItem('ventory-theme') : null
     if (saved === 'oscuro') setThemeState('oscuro')
     refreshAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Modo offline: registra el service worker y envía las ventas encoladas
+  // al cargar y cada vez que vuelve la conexión.
+  useEffect(() => {
+    registerServiceWorker()
+    let alive = true
+    const flush = async () => {
+      const queued = await pendingSales()
+      if (!alive) return
+      setPendingCount(queued.length)
+      if (!queued.length || !navigator.onLine) return
+      const { sent, rejected } = await syncPendingSales()
+      if (!alive || (sent === 0 && rejected.length === 0)) return
+      const left = await pendingSales()
+      setPendingCount(left.length)
+      if (sent > 0) {
+        toast(`${sent} venta${sent === 1 ? '' : 's'} sin conexión sincronizada${sent === 1 ? '' : 's'}`)
+      }
+      // Una venta encolada que el servidor rechaza no puede desaparecer en
+      // silencio: el cajero tiene que enterarse para rehacerla.
+      if (rejected.length > 0) {
+        setTimeout(() => {
+          if (alive) toast(`${rejected.length} venta sin conexión no se pudo registrar: ${rejected[0].reason}`)
+        }, sent > 0 ? 2800 : 0)
+      }
+      await refreshAll()
+    }
+    flush()
+    window.addEventListener('online', flush)
+    return () => {
+      alive = false
+      window.removeEventListener('online', flush)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -758,24 +800,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
       received,
     })
     if (!resolution.covered) return
+    const payload = {
+      cashSessionId: data.cash.session.id,
+      items: buildSaleItems(),
+      paymentMethod: 'CASH' as const,
+      payments: { cashActive: pay.efectivo, cashReceived: received, card, transfer },
+      discount,
+      discountIsPct,
+      customerId: matchCustomerId(),
+      notes: [note, !matchCustomerId() && customerName.trim() ? `Cliente: ${customerName.trim()}` : '']
+        .filter(Boolean)
+        .join(' · ') || undefined,
+    }
     try {
-      const r = await api.createSale({
-        cashSessionId: data.cash.session.id,
-        items: buildSaleItems(),
-        paymentMethod: 'CASH',
-        payments: { cashActive: pay.efectivo, cashReceived: received, card, transfer },
-        discount,
-        discountIsPct,
-        customerId: matchCustomerId(),
-        notes: [note, !matchCustomerId() && customerName.trim() ? `Cliente: ${customerName.trim()}` : '']
-          .filter(Boolean)
-          .join(' · ') || undefined,
-      })
+      const r = await api.createSale(payload)
       await afterSale(r.sale)
     } catch (e) {
+      // Sin conexión: la venta se guarda y se envía sola al volver el internet
+      if (!navigator.onLine || (e instanceof TypeError)) {
+        await queueSale(payload, total)
+        setPendingCount((n) => n + 1)
+        toast('Sin conexión — venta guardada, se enviará al volver el internet')
+        newSale()
+        return
+      }
       onError(e)
     }
-  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, buildSaleItems, matchCustomerId, afterSale, toast, onError])
+  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, buildSaleItems, matchCustomerId, afterSale, newSale, toast, onError])
 
   const finalizeCredito = useCallback(
     async (customerId: string) => {
@@ -1522,6 +1573,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addReceived,
       finalizeSale,
       finalizeCredito,
+      pendingCount,
       lastSale,
       setLastSale,
       newSale,
@@ -1591,7 +1643,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
       turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre, branchId,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
-      pay, amounts, received, lastSale, lastPurchase, pesoProduct, rangeReport, lastAbono, saleDetId, dscId, editProdId, editClientId,
+      pay, amounts, received, lastSale, lastPurchase, pesoProduct, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,
       ncProv, ncItems, ncMethod, ncAbono, fmt,
     ],

@@ -321,6 +321,43 @@ function PlanBlockedOverlay() {
   )
 }
 
+// Aviso de conexión: sin internet o con ventas pendientes de sincronizar
+function OfflineBanner() {
+  const s = useApp()
+  const [online, setOnline] = useState(true)
+
+  useEffect(() => {
+    const upd = () => setOnline(navigator.onLine)
+    upd()
+    window.addEventListener('online', upd)
+    window.addEventListener('offline', upd)
+    return () => {
+      window.removeEventListener('online', upd)
+      window.removeEventListener('offline', upd)
+    }
+  }, [])
+
+  if (online && s.pendingCount === 0) return null
+  return (
+    <div
+      data-no-print="true"
+      style={{
+        background: online ? '#EEF0FE' : '#FDF4E5',
+        borderBottom: `1px solid ${online ? '#C7D0FB' : '#F3DCB0'}`,
+        color: online ? '#4338CA' : '#8A6B2E',
+        fontWeight: 700,
+        fontSize: 13,
+        padding: '9px 16px',
+        textAlign: 'center',
+      }}
+    >
+      {online
+        ? `${s.pendingCount} venta${s.pendingCount === 1 ? '' : 's'} sin conexión pendiente${s.pendingCount === 1 ? '' : 's'} de sincronizar…`
+        : `Sin conexión — puedes seguir vendiendo${s.pendingCount ? ` (${s.pendingCount} pendiente${s.pendingCount === 1 ? '' : 's'})` : ''}, se enviará al volver el internet`}
+    </div>
+  )
+}
+
 export default function Shell() {
   const s = useApp()
   const w = useWindowWidth()
@@ -386,6 +423,7 @@ export default function Shell() {
         <div style={{ minHeight: '100vh', display: 'flex', flexWrap: 'wrap', alignItems: 'stretch' }}>
           <Sidebar narrow={narrow} />
           <div style={{ flex: 1, minWidth: 'min(100%,320px)', display: 'flex', flexDirection: 'column' }}>
+            <OfflineBanner />
             {s.settings?.plan?.status === 'TRIAL' && !s.settings.plan.blocked && (
               <div data-no-print="true" style={{ background: '#FDF4E5', borderBottom: '1px solid #F3DCB0', color: '#8A6B2E', fontWeight: 700, fontSize: 13, padding: '9px 16px', textAlign: 'center' }}>
                 Prueba gratis: {s.settings.plan.daysLeft === 1 ? 'queda 1 día' : `quedan ${s.settings.plan.daysLeft} días`} · Para activar tu
@@ -396,7 +434,10 @@ export default function Shell() {
           </div>
         </div>
       ) : (
-        screens[s.screen]
+        <>
+          <OfflineBanner />
+          {screens[s.screen]}
+        </>
       )}
 
       {!s.loading && s.settings?.plan?.blocked && <PlanBlockedOverlay />}
