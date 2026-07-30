@@ -21,7 +21,7 @@ const AdjustSchema = z.object({
       z.object({
         productId: z.string().min(1),
         // Stock absoluto resultante (el modal de ajuste del prototipo escribe el conteo físico)
-        quantity: z.number().int().min(0),
+        quantity: z.number().min(0),
       }),
     )
     .min(1, 'Indica al menos un producto a ajustar'),
@@ -64,24 +64,24 @@ export async function POST(req: NextRequest) {
           create: { productId: adj.productId, branchId, quantity: 0 },
           update: {},
         })
-        if (inv.quantity === adj.quantity) continue
+        if (Number(inv.quantity) === adj.quantity) continue
 
         await tx.inventory.update({
           where: { id: inv.id },
-          data: { quantity: adj.quantity, lowStock: adj.quantity <= inv.minStock },
+          data: { quantity: adj.quantity, lowStock: adj.quantity <= Number(inv.minStock) },
         })
         await tx.inventoryMovement.create({
           data: {
             type: MovementType.ADJUSTMENT,
-            quantity: Math.abs(adj.quantity - inv.quantity),
-            quantityBefore: inv.quantity,
+            quantity: Math.abs(adj.quantity - Number(inv.quantity)),
+            quantityBefore: Number(inv.quantity),
             quantityAfter: adj.quantity,
             reason: parsed.data.reason ?? 'Ajuste de inventario',
             inventoryId: inv.id,
             createdById: user.id,
           },
         })
-        changed.push({ productId: adj.productId, before: inv.quantity, after: adj.quantity })
+        changed.push({ productId: adj.productId, before: Number(inv.quantity), after: adj.quantity })
       }
       return changed
     })

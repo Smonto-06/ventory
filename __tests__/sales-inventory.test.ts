@@ -113,9 +113,9 @@ async function createSale(
     const currentInv = await tx.inventory.findUnique({
       where: { id: inventory.id },
     })
-    const quantityBefore = currentInv!.quantity
+    const quantityBefore = Number(currentInv!.quantity)
     const quantityAfter = quantityBefore - quantity
-    const isLowStock = quantityAfter <= currentInv!.minStock
+    const isLowStock = quantityAfter <= Number(currentInv!.minStock)
 
     const updatedInv = await tx.inventory.update({
       where: { id: inventory.id },
@@ -167,16 +167,16 @@ describe('Sale → Stock decrement → Movement recorded', () => {
     const { updatedInv, movement } = await createSale(fixture, 3)
 
     // Stock decremented correctly
-    expect(updatedInv.quantity).toBe(7)
+    expect(Number(updatedInv.quantity)).toBe(7)
 
     // lowStock flag: 7 > 2, so should be false
     expect(updatedInv.lowStock).toBe(false)
 
     // Movement created with correct values
     expect(movement.type).toBe(MovementType.SALE)
-    expect(movement.quantity).toBe(3)
-    expect(movement.quantityBefore).toBe(10)
-    expect(movement.quantityAfter).toBe(7)
+    expect(Number(movement.quantity)).toBe(3)
+    expect(Number(movement.quantityBefore)).toBe(10)
+    expect(Number(movement.quantityAfter)).toBe(7)
     expect(movement.inventoryId).toBe(inventory.id)
 
     await cleanup({
@@ -196,7 +196,7 @@ describe('Sale → Stock decrement → Movement recorded', () => {
     // Sell 3 → quantity becomes 2, minStock=3, so 2 <= 3 → lowStock=true
     const { updatedInv } = await createSale(fixture, 3)
 
-    expect(updatedInv.quantity).toBe(2)
+    expect(Number(updatedInv.quantity)).toBe(2)
     expect(updatedInv.lowStock).toBe(true)
 
     await cleanup({
@@ -216,7 +216,7 @@ describe('Sale → Stock decrement → Movement recorded', () => {
     // Sell all 3 → quantity becomes 0, minStock=0, so 0 <= 0 → lowStock=true
     const { updatedInv } = await createSale(fixture, 3)
 
-    expect(updatedInv.quantity).toBe(0)
+    expect(Number(updatedInv.quantity)).toBe(0)
     expect(updatedInv.lowStock).toBe(true)
 
     await cleanup({
@@ -286,7 +286,7 @@ describe('Sale → Stock decrement → Movement recorded', () => {
 
     // Inventory should be unchanged
     const inv = await db.inventory.findUnique({ where: { id: inventory.id } })
-    expect(inv?.quantity).toBe(5)
+    expect(Number(inv?.quantity)).toBe(5)
 
     // No sale created
     const sales = await db.sale.findMany({ where: { branchId: branch.id } })

@@ -98,6 +98,17 @@ export function methodTint(m: string): [string, string] {
 }
 
 // Método del backend → etiqueta del prototipo
+// Cantidad legible: enteros sin decimales, pesos con hasta 3 (es-CO: coma decimal)
+export function fmtQty(q: number): string {
+  return Number.isInteger(q) ? String(q) : q.toLocaleString('es-CO', { maximumFractionDigits: 3 })
+}
+
+// Parse tolerante para pesos digitados: acepta coma o punto decimal
+export function parseQty(raw: string): number {
+  const n = parseFloat((raw || '').replace(/[^\d.,]/g, '').replace(',', '.'))
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 1000) / 1000 : 0
+}
+
 export function methodLabel(method: string, payments?: Array<{ method: string }>): string {
   const map: Record<string, string> = {
     CASH: 'Efectivo',

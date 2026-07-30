@@ -6,7 +6,7 @@
 // mensaje final configurable. Las líneas sin dato no se imprimen.
 
 import { useApp } from '../store'
-import { methodLabel } from '../ui'
+import { methodLabel, fmtQty } from '../ui'
 
 export default function TicketScreen() {
   const s = useApp()
@@ -69,14 +69,23 @@ export default function TicketScreen() {
           <div key={it.id}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '1.5px 0' }}>
               <span>
-                <span style={{ color: '#6E7280' }}>{it.quantity}×</span> {it.product.name}
+                <span style={{ color: '#6E7280' }}>
+                  {it.product.unitOfMeasure === 'kg' ? `${fmtQty(it.quantity)} kg` : `${fmtQty(it.quantity)}×`}
+                </span>{' '}
+                {it.product.name}
               </span>
               <span>{s.fmt(it.total)}</span>
             </div>
-            {it.quantity > 1 && (
+            {it.product.unitOfMeasure === 'kg' ? (
               <div style={{ color: '#6E7280', fontSize: 10, paddingLeft: 14, marginTop: -2 }}>
-                {s.fmt(it.unitPrice)} c/u
+                {s.fmt(it.unitPrice)} /kg
               </div>
+            ) : (
+              it.quantity > 1 && (
+                <div style={{ color: '#6E7280', fontSize: 10, paddingLeft: 14, marginTop: -2 }}>
+                  {s.fmt(it.unitPrice)} c/u
+                </div>
+              )
             )}
           </div>
         ))}

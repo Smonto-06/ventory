@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import { useApp, NcItem } from '../store'
 import { Product } from '../api'
-import { tileFor, saveBtnStyle } from '../ui'
+import { tileFor, saveBtnStyle, fmtQty, parseQty } from '../ui'
 import { priceFromMargin, marginFromPrice } from '@/lib/pos'
 
 const num = (v: unknown) => parseInt(String(v ?? '').replace(/\D/g, '')) || 0
@@ -75,11 +75,18 @@ export default function NuevaCompraScreen() {
 
   const ncTotal = s.ncItems.reduce((a, i) => a + (i.total || 0), 0)
   const canSave = !!s.ncProv.trim() && s.ncItems.length > 0
+  // Productos vendidos por peso: cantidades decimales (kg)
+  const isKg = (productId: string) => s.products.find((p) => p.id === productId)?.unitOfMeasure === 'kg'
 
   const changeQty = (productId: string, d: number) => {
     s.setNcItems(
       s.ncItems
-        .map((i) => (i.productId === productId ? { ...i, qty: i.qty + d, total: (i.qty + d) * i.unit } : i))
+        .map((i) => {
+          if (i.productId !== productId) return i
+          const step = isKg(productId) ? d * 0.1 : d
+          const qty = Math.round((i.qty + step) * 1000) / 1000
+          return { ...i, qty, total: Math.round(qty * i.unit) }
+        })
         .filter((i) => i.qty > 0),
     )
   }
@@ -199,7 +206,7 @@ export default function NuevaCompraScreen() {
                       >
                         −
                       </button>
-                      <span style={{ minWidth: 26, textAlign: 'center', fontWeight: 800, fontSize: 14.5, fontVariantNumeric: 'tabular-nums' }}>{it.qty}</span>
+                      <span style={{ minWidth: 26, textAlign: 'center', fontWeight: 800, fontSize: isKg(it.productId) ? 12 : 14.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{isKg(it.productId) ? `${fmtQty(it.qty)} kg` : it.qty}</span>
                       <button
                         onClick={() => changeQty(it.productId, 1)}
                         style={{ width: 30, height: 30, borderRadius: 9, background: '#EEF0FE', color: '#6366F1', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -373,15 +380,18 @@ export default function NuevaCompraScreen() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label style={{ ...editLabelStyle, margin: '11px 0 5px' }}>Cantidad recibida</label>
+                <label style={{ ...editLabelStyle, margin: '11px 0 5px' }}>
+                  {isKg(edit.productId) ? 'Cantidad recibida (kg)' : 'Cantidad recibida'}
+                </label>
                 <input
-                  value={edit.qty || ''}
+                  key={edit.productId}
+                  defaultValue={edit.qty || ''}
                   onChange={(e) => {
-                    const qty = num(e.target.value)
-                    setEdit({ ...edit, qty, total: qty * (edit.unit || 0) })
+                    const qty = isKg(edit.productId) ? parseQty(e.target.value) : num(e.target.value)
+                    setEdit({ ...edit, qty, total: Math.round(qty * (edit.unit || 0)) })
                   }}
-                  inputMode="numeric"
-                  placeholder="0"
+                  inputMode={isKg(edit.productId) ? 'decimal' : 'numeric'}
+                  placeholder={isKg(edit.productId) ? '0,000' : '0'}
                   style={editInputStyle}
                 />
               </div>

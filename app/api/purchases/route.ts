@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic'
 
 const ItemSchema = z.object({
   productId: z.string().min(1),
-  quantity: z.number().int().positive(),
+  quantity: z.number().positive(),
   unitCost: z.number().nonnegative(),
   totalCost: z.number().nonnegative().optional(),
   // Nuevo precio de venta del producto (ganancia % ↔ precio, calculado en el frontend)
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     where: { businessId: user.businessId },
     include: {
       supplier: { select: { id: true, name: true } },
-      items: { include: { product: { select: { id: true, name: true, sku: true } } } },
+      items: { include: { product: { select: { id: true, name: true, sku: true, unitOfMeasure: true } } } },
       payments: { orderBy: { createdAt: 'asc' } },
       createdBy: { select: { id: true, name: true } },
     },
@@ -182,16 +182,16 @@ export async function POST(req: NextRequest) {
           create: { productId: item.productId, branchId, quantity: 0 },
           update: {},
         })
-        const quantityAfter = inv.quantity + item.quantity
+        const quantityAfter = Number(inv.quantity) + item.quantity
         await tx.inventory.update({
           where: { id: inv.id },
-          data: { quantity: quantityAfter, lowStock: quantityAfter <= inv.minStock },
+          data: { quantity: quantityAfter, lowStock: quantityAfter <= Number(inv.minStock) },
         })
         await tx.inventoryMovement.create({
           data: {
             type: MovementType.PURCHASE,
             quantity: item.quantity,
-            quantityBefore: inv.quantity,
+            quantityBefore: Number(inv.quantity),
             quantityAfter,
             reason: `Compra a ${supplier.name}`,
             inventoryId: inv.id,
@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
         where: { id: newPurchase.id },
         include: {
           supplier: { select: { id: true, name: true } },
-          items: { include: { product: { select: { id: true, name: true, sku: true } } } },
+          items: { include: { product: { select: { id: true, name: true, sku: true, unitOfMeasure: true } } } },
           payments: true,
         },
       })

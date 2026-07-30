@@ -44,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     // Valor ya devuelto en devoluciones previas (unitario proporcional × retQty)
     const refunded = sale.items.reduce(
-      (sum, it) => sum + Math.round(Number(it.total) / it.quantity) * it.returnedQty,
+      (sum, it) => sum + Math.round(Number(it.total) / Number(it.quantity)) * Number(it.returnedQty),
       0,
     )
     const refund = Math.max(0, Number(sale.total) - refunded)
@@ -62,23 +62,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const voided = await db.$transaction(async (tx) => {
       // Regresa el stock restante de cada artículo
       for (const item of sale.items) {
-        const remaining = item.quantity - item.returnedQty
+        const remaining = Number(item.quantity) - Number(item.returnedQty)
         if (remaining <= 0) continue
         const inv = await tx.inventory.upsert({
           where: { productId_branchId: { productId: item.productId, branchId: sale.branchId } },
           create: { productId: item.productId, branchId: sale.branchId, quantity: 0 },
           update: {},
         })
-        const quantityAfter = inv.quantity + remaining
+        const quantityAfter = Number(inv.quantity) + remaining
         await tx.inventory.update({
           where: { id: inv.id },
-          data: { quantity: quantityAfter, lowStock: quantityAfter <= inv.minStock },
+          data: { quantity: quantityAfter, lowStock: quantityAfter <= Number(inv.minStock) },
         })
         await tx.inventoryMovement.create({
           data: {
             type: MovementType.RETURN,
             quantity: remaining,
-            quantityBefore: inv.quantity,
+            quantityBefore: Number(inv.quantity),
             quantityAfter,
             reason: `Anulación ${sale.folio}`,
             inventoryId: inv.id,

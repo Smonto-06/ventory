@@ -6,7 +6,7 @@
 
 import { useState } from 'react'
 import { useApp } from '../store'
-import { tileFor, VLogo } from '../ui'
+import { tileFor, VLogo, fmtQty } from '../ui'
 import { useWindowWidth } from '../Shell'
 
 function CartItems() {
@@ -29,7 +29,13 @@ function CartItems() {
               <button onClick={() => s.changeQty(it.productId, -1)} style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--bg)', color: 'var(--text)', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 −
               </button>
-              <span style={{ minWidth: 22, textAlign: 'center', fontWeight: 700, fontSize: 14 }}>{it.qty}</span>
+              <span
+                onClick={it.unit === 'kg' ? () => s.editPeso(it.productId) : undefined}
+                title={it.unit === 'kg' ? 'Toca para digitar el peso' : undefined}
+                style={{ minWidth: 22, textAlign: 'center', fontWeight: 700, fontSize: it.unit === 'kg' ? 12.5 : 14, cursor: it.unit === 'kg' ? 'pointer' : undefined, color: it.unit === 'kg' ? '#6366F1' : undefined, whiteSpace: 'nowrap' }}
+              >
+                {it.unit === 'kg' ? `${fmtQty(it.qty)} kg` : it.qty}
+              </span>
               <button onClick={() => s.changeQty(it.productId, 1)} style={{ width: 30, height: 30, borderRadius: 8, background: '#EEF0FE', color: '#6366F1', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 +
               </button>

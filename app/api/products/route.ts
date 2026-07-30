@@ -22,8 +22,8 @@ const createProductSchema = z.object({
   categoryId: z.string().nullish(),
   // Stock inicial (opcional, puede ser 0; requiere branchId)
   branchId: z.string().nullish(),
-  initialStock: z.number().int().nonnegative('El stock no puede ser negativo').optional(),
-  minStock: z.number().int().nonnegative().optional(),
+  initialStock: z.number().nonnegative('El stock no puede ser negativo').optional(),
+  minStock: z.number().nonnegative().optional(),
 })
 
 export async function GET(request: Request) {
@@ -79,8 +79,8 @@ export async function GET(request: Request) {
       supplier: p.supplier,
       status: p.status,
       category: p.category,
-      stock: p.inventory.reduce((sum, inv) => sum + inv.quantity, 0),
-      minStock: p.inventory.length > 0 ? Math.max(...p.inventory.map((i) => i.minStock)) : 0,
+      stock: p.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0),
+      minStock: p.inventory.length > 0 ? Math.max(...p.inventory.map((i) => Number(i.minStock))) : 0,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
     }))
@@ -161,7 +161,7 @@ export async function POST(request: Request) {
           price: Number(product.price),
           cost: product.cost ? Number(product.cost) : null,
           taxRate: Number(product.taxRate),
-          stock: product.inventory.reduce((sum, inv) => sum + inv.quantity, 0),
+          stock: product.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0),
         },
       },
       { status: 201 }
