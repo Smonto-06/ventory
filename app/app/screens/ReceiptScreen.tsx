@@ -3,7 +3,7 @@
 // Comprobante de venta — réplica 1:1 del prototipo (sección sReceipt).
 
 import { useApp } from '../store'
-import { methodLabel } from '../ui'
+import { methodLabel, fmtQty } from '../ui'
 
 export default function ReceiptScreen() {
   const s = useApp()
@@ -56,7 +56,8 @@ export default function ReceiptScreen() {
           {sale.items.map((it) => (
             <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 14 }}>
               <span style={{ color: 'var(--text)' }}>
-                {it.product.name} × {it.quantity}
+                {it.product.name} ×{' '}
+                {it.product.unitOfMeasure === 'kg' ? `${fmtQty(it.quantity)} kg` : fmtQty(it.quantity)}
               </span>
               <span style={{ color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{s.fmt(it.total)}</span>
             </div>

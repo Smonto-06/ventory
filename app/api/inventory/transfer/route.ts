@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
 
 const TransferSchema = z.object({
   productId: z.string().min(1),
-  quantity: z.number().int().positive('La cantidad debe ser mayor a 0'),
+  quantity: z.number().positive('La cantidad debe ser mayor a 0'),
   // 'out' = salida de mercancía hacia otra sucursal; 'in' = entrada
   direction: z.enum(['in', 'out']),
   branchId: z.string().optional(),
@@ -59,24 +59,24 @@ export async function POST(req: NextRequest) {
       })
       // Como el prototipo: la salida no baja de 0
       const quantityAfter =
-        direction === 'out' ? Math.max(0, inv.quantity - quantity) : inv.quantity + quantity
+        direction === 'out' ? Math.max(0, Number(inv.quantity) - quantity) : Number(inv.quantity) + quantity
 
       await tx.inventory.update({
         where: { id: inv.id },
-        data: { quantity: quantityAfter, lowStock: quantityAfter <= inv.minStock },
+        data: { quantity: quantityAfter, lowStock: quantityAfter <= Number(inv.minStock) },
       })
       await tx.inventoryMovement.create({
         data: {
           type: MovementType.ADJUSTMENT,
-          quantity: Math.abs(quantityAfter - inv.quantity),
-          quantityBefore: inv.quantity,
+          quantity: Math.abs(quantityAfter - Number(inv.quantity)),
+          quantityBefore: Number(inv.quantity),
           quantityAfter,
           reason: `Traslado ${direction === 'out' ? 'salida' : 'entrada'}${notes ? ` · ${notes}` : ''}`,
           inventoryId: inv.id,
           createdById: user.id,
         },
       })
-      return { before: inv.quantity, after: quantityAfter }
+      return { before: Number(inv.quantity), after: quantityAfter }
     })
 
     return NextResponse.json({ product: product.name, ...result })

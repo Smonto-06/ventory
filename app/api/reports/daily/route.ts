@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
   const totalSales = sales.reduce((sum, s) => sum + Number(s.total), 0)
   const transactionCount = sales.length
   const totalItems = sales.reduce(
-    (sum, s) => sum + s.items.reduce((a, i) => a + i.quantity, 0),
+    (sum, s) => sum + s.items.reduce((a, i) => a + Number(i.quantity), 0),
     0,
   )
 
@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
       }
       productMap.set(item.productId, {
         name: item.product.name,
-        quantity: existing.quantity + item.quantity,
+        quantity: existing.quantity + Number(item.quantity),
         revenue: existing.revenue + Number(item.total),
       })
     }
@@ -116,7 +116,7 @@ export async function GET(req: NextRequest) {
   // Utilidad: ventas − costo de lo vendido (snapshot costPrice); neta = utilidad − gastos
   const costOfGoods = sales.reduce(
     (sum, s) =>
-      sum + s.items.reduce((a, i) => a + Number(i.costPrice ?? 0) * i.quantity, 0),
+      sum + s.items.reduce((a, i) => a + Number(i.costPrice ?? 0) * Number(i.quantity), 0),
     0,
   )
   const incomes = movements

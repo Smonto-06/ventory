@@ -47,6 +47,8 @@ export interface Product {
   barcode: string | null
   price: number
   cost: number | null
+  /** 'kg' = se vende por peso (price es el precio por kilo); null = por unidad */
+  unitOfMeasure?: string | null
   supplier: string | null
   imageUrl?: string | null
   status: string
@@ -88,7 +90,7 @@ export interface SaleItem {
   costPrice: number | null
   total: number
   productId: string
-  product: { id: string; name: string; sku: string | null }
+  product: { id: string; name: string; sku: string | null; unitOfMeasure?: string | null }
 }
 
 export interface Sale {
@@ -127,7 +129,7 @@ export interface Purchase {
     unitCost: number
     totalCost: number
     newPrice: number | null
-    product: { id: string; name: string; sku: string | null }
+    product: { id: string; name: string; sku: string | null; unitOfMeasure?: string | null }
   }>
   payments: Array<{ id: string; amount: number; method: string; createdAt: string }>
 }

@@ -4,7 +4,7 @@
 
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
-import { catChipStyle, tileFor } from '../ui'
+import { catChipStyle, tileFor, fmtQty } from '../ui'
 
 const gridCols = 'minmax(220px,1.8fr) minmax(120px,1fr) 110px 110px 70px 60px 140px'
 
@@ -222,7 +222,7 @@ export default function ProductosScreen() {
                   {s.isAdmin ? s.fmt(p.cost ?? 0) : '—'}
                 </div>
                 <div style={{ padding: '13px 10px', textAlign: 'right' }}>
-                  <span style={p.stock <= p.minStock ? stockLowStyle : stockOkStyle}>{p.stock}</span>
+                  <span style={p.stock <= p.minStock ? stockLowStyle : stockOkStyle}>{p.unitOfMeasure === 'kg' ? `${fmtQty(p.stock)} kg` : p.stock}</span>
                 </div>
                 <div style={{ padding: '13px 10px', textAlign: 'right', fontSize: 13.5, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
                   {p.minStock}

@@ -82,6 +82,7 @@ export type ModalId =
   | 'confirm'
   | 'novedades'
   | 'contact'
+  | 'peso'
   | null
 
 export interface CartLine {
@@ -93,6 +94,8 @@ export interface CartLine {
   imageUrl?: string | null
   qty: number
   dscPct: number
+  /** 'kg' = vendido por peso (qty en kilos) */
+  unit?: string | null
 }
 
 export interface PayState {
@@ -245,6 +248,10 @@ export interface AppStore extends AppData {
   cart: CartLine[]
   addToCart: (p: Product) => void
   changeQty: (productId: string, d: number) => void
+  /** Producto en el modal de peso (ventas por kg) */
+  pesoProduct: Product | null
+  confirmPeso: (kg: number) => void
+  editPeso: (productId: string) => void
   setItemDsc: (productId: string, pct: number) => void
   clearCart: () => void
   discount: number
@@ -392,6 +399,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [cierrePreview, setCierrePreview] = useState<CierrePreview | null>(null)
   const [lastCierre, setLastCierre] = useState<CierreResult | null>(null)
   const [lastPurchase, setLastPurchase] = useState<Purchase | null>(null)
+  const [pesoProduct, setPesoProduct] = useState<Product | null>(null)
 
   const [saleDetId, setSaleDetId] = useState<string | null>(null)
   const [editProdId, setEditProdId] = useState<string | null>(null)
@@ -545,6 +553,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ─── Carrito ───────────────────────────────────────────────────────────────
 
   const addToCart = useCallback((p: Product) => {
+    // Productos por peso: se digita el peso en el modal en vez de sumar 1
+    if (p.unitOfMeasure === 'kg') {
+      setPesoProduct(p)
+      setModal('peso')
+      return
+    }
     setCart((c) => {
       const ex = c.find((i) => i.productId === p.id)
       if (ex) return c.map((i) => (i.productId === p.id ? { ...i, qty: i.qty + 1 } : i))
@@ -564,9 +578,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  // Fija el peso (en kg) de un producto vendido por peso — agrega o reemplaza
+  const confirmPeso = useCallback(
+    (kg: number) => {
+      const p = pesoProduct
+      if (!p || kg <= 0) return
+      const qty = Math.round(kg * 1000) / 1000
+      setCart((c) => {
+        const ex = c.find((i) => i.productId === p.id)
+        if (ex) return c.map((i) => (i.productId === p.id ? { ...i, qty } : i))
+        return [
+          ...c,
+          {
+            productId: p.id,
+            name: p.name,
+            sku: p.sku,
+            price: p.price,
+            cost: p.cost,
+            imageUrl: p.imageUrl,
+            qty,
+            dscPct: 0,
+            unit: 'kg',
+          },
+        ]
+      })
+      setPesoProduct(null)
+      setModal(null)
+    },
+    [pesoProduct],
+  )
+
+  // Reabre el modal de peso para editar la cantidad de un ítem por kg
+  const editPeso = useCallback(
+    (productId: string) => {
+      const p = data.products.find((x) => x.id === productId)
+      if (!p) return
+      setPesoProduct(p)
+      setModal('peso')
+    },
+    [data.products],
+  )
+
   const changeQty = useCallback((productId: string, d: number) => {
     setCart((c) =>
-      c.map((i) => (i.productId === productId ? { ...i, qty: i.qty + d } : i)).filter((i) => i.qty > 0),
+      c
+        .map((i) => {
+          if (i.productId !== productId) return i
+          // Por peso: los botones ± mueven de a 100 g
+          const step = i.unit === 'kg' ? d * 0.1 : d
+          return { ...i, qty: Math.round((i.qty + step) * 1000) / 1000 }
+        })
+        .filter((i) => i.qty > 0),
     )
   }, [])
 
@@ -582,7 +644,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const cartLines = cart.map((i) => ({ unitPrice: i.price, quantity: i.qty, discountPct: i.dscPct }))
   const subtotal = cartSubtotal(cartLines)
   const total = saleTotal(cartLines, discount, discountIsPct)
-  const itemCount = cart.reduce((s, i) => s + i.qty, 0)
+  const itemCount = cart.reduce((s, i) => s + (i.unit === 'kg' ? 1 : i.qty), 0)
 
   // ─── Cobro ────────────────────────────────────────────────────────────────
 
@@ -1361,6 +1423,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cart,
       addToCart,
       changeQty,
+      pesoProduct,
+      confirmPeso,
+      editPeso,
       setItemDsc,
       clearCart,
       discount,
@@ -1452,7 +1517,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
       turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
-      pay, amounts, received, lastSale, lastPurchase, lastAbono, saleDetId, dscId, editProdId, editClientId,
+      pay, amounts, received, lastSale, lastPurchase, pesoProduct, lastAbono, saleDetId, dscId, editProdId, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,
       ncProv, ncItems, ncMethod, ncAbono, fmt,
     ],

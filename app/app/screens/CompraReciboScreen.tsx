@@ -5,6 +5,7 @@
 // total de la factura, método de pago y saldo pendiente si fue a crédito.
 
 import { useApp } from '../store'
+import { fmtQty } from '../ui'
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: 'Contado (efectivo)',
@@ -34,7 +35,7 @@ export default function CompraReciboScreen() {
     minute: '2-digit',
     hour12: true,
   })
-  const units = p.items.reduce((a, it) => a + it.quantity, 0)
+  const units = p.items.reduce((a, it) => a + Number(it.quantity), 0)
 
   const kv = (label: string, value: string, opts?: { muted?: boolean; bold?: boolean; color?: string }) => (
     <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '1.5px 0' }}>
@@ -65,13 +66,16 @@ export default function CompraReciboScreen() {
           <div key={it.id}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '1.5px 0' }}>
               <span>
-                <span style={{ color: '#6E7280' }}>{it.quantity}×</span> {it.product.name}
+                <span style={{ color: '#6E7280' }}>
+                  {it.product.unitOfMeasure === 'kg' ? `${fmtQty(it.quantity)} kg` : `${fmtQty(it.quantity)}×`}
+                </span>{' '}
+                {it.product.name}
               </span>
               <span>{s.fmt(it.totalCost)}</span>
             </div>
-            {it.quantity > 1 && (
+            {(it.quantity > 1 || it.product.unitOfMeasure === 'kg') && (
               <div style={{ color: '#6E7280', fontSize: 10, paddingLeft: 14, marginTop: -2 }}>
-                {s.fmt(it.unitCost)} c/u
+                {s.fmt(it.unitCost)} {it.product.unitOfMeasure === 'kg' ? '/kg' : 'c/u'}
               </div>
             )}
           </div>
@@ -91,7 +95,7 @@ export default function CompraReciboScreen() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: 12, color: '#6E7280', fontSize: 10.5 }}>
-          ✓ {units} {units === 1 ? 'unidad ingresada' : 'unidades ingresadas'} al inventario
+          ✓ {fmtQty(units)} {units === 1 ? 'unidad ingresada' : 'unidades ingresadas'} al inventario
           <br />
           Sistema Ventory POS
         </div>

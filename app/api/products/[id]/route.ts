@@ -20,7 +20,7 @@ const updateProductSchema = z.object({
   imageUrl: z.string().nullable().optional(),
   categoryId: z.string().nullable().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
-  minStock: z.number().int().nonnegative().optional(),
+  minStock: z.number().nonnegative().optional(),
 })
 
 type Params = { params: { id: string } }
@@ -53,8 +53,8 @@ export async function GET(_request: Request, { params }: Params) {
         price: Number(product.price),
         cost: product.cost ? Number(product.cost) : null,
         taxRate: Number(product.taxRate),
-        stock: product.inventory.reduce((sum, inv) => sum + inv.quantity, 0),
-        minStock: product.inventory.length > 0 ? Math.max(...product.inventory.map((i) => i.minStock)) : 0,
+        stock: product.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0),
+        minStock: product.inventory.length > 0 ? Math.max(...product.inventory.map((i) => Number(i.minStock))) : 0,
       },
     })
   } catch (error) {
@@ -132,8 +132,8 @@ export async function PATCH(request: Request, { params }: Params) {
         price: Number(product.price),
         cost: product.cost ? Number(product.cost) : null,
         taxRate: Number(product.taxRate),
-        stock: product.inventory.reduce((sum, inv) => sum + inv.quantity, 0),
-        minStock: product.inventory.length > 0 ? Math.max(...product.inventory.map((i) => i.minStock)) : 0,
+        stock: product.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0),
+        minStock: product.inventory.length > 0 ? Math.max(...product.inventory.map((i) => Number(i.minStock))) : 0,
       },
     })
   } catch (error) {

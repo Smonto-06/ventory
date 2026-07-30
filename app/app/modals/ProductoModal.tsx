@@ -4,7 +4,7 @@
 
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
-import { Modal, ModalTitle, saveBtnStyle } from '../ui'
+import { Modal, ModalTitle, saveBtnStyle, parseQty } from '../ui'
 
 const num = (v: string | number | null | undefined) =>
   parseInt(String(v ?? '').replace(/\D/g, '')) || 0
@@ -44,6 +44,8 @@ interface FormState {
   stock: string
   min: string
   photo: string | null
+  /** 'und' = por unidad · 'kg' = por peso (precio por kilo) */
+  unit: 'und' | 'kg'
 }
 
 export default function ProductoModal() {
@@ -63,8 +65,9 @@ export default function ProductoModal() {
           stock: String(editing.stock),
           min: String(editing.minStock),
           photo: editing.imageUrl ?? null,
+          unit: editing.unitOfMeasure === 'kg' ? 'kg' : 'und',
         }
-      : { name: '', sku: '', cat: '', barcode: '', prov: '', price: '', cost: '', stock: '', min: '', photo: null },
+      : { name: '', sku: '', cat: '', barcode: '', prov: '', price: '', cost: '', stock: '', min: '', photo: null, unit: 'und' },
   )
   const [suggOpen, setSuggOpen] = useState(false)
 
@@ -98,8 +101,9 @@ export default function ProductoModal() {
       categoryId: f.cat || null,
       supplier: f.prov.trim() || null,
       imageUrl: f.photo,
-      minStock: num(f.min),
-      ...(s.editProdId ? {} : { initialStock: num(f.stock) }),
+      unitOfMeasure: f.unit === 'kg' ? 'kg' : null,
+      minStock: f.unit === 'kg' ? parseQty(f.min) : num(f.min),
+      ...(s.editProdId ? {} : { initialStock: f.unit === 'kg' ? parseQty(f.stock) : num(f.stock) }),
     }
     const done = await s.saveProduct(payload, s.editProdId)
     if (done) {
@@ -166,6 +170,29 @@ export default function ProductoModal() {
 
       <label style={{ ...lblStyle, margin: '11px 0 5px' }}>Nombre</label>
       <input value={f.name} onChange={(e) => set('name')(e.target.value)} placeholder="Ej. Camiseta Estampada M" style={fieldStyle} />
+
+      <label style={lblStyle}>Se vende por</label>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {([['und', 'Unidad'], ['kg', 'Peso (kg)']] as const).map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => setF((st) => ({ ...st, unit: k }))}
+            style={{
+              flex: 1, height: 40, borderRadius: 10, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', transition: 'all .13s',
+              border: f.unit === k ? '1.5px solid #6366F1' : '1.5px solid var(--border)',
+              background: f.unit === k ? '#6366F1' : 'var(--surface)',
+              color: f.unit === k ? '#fff' : 'var(--text)',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {f.unit === 'kg' && (
+        <div style={{ marginTop: 6, fontSize: 12.5, color: '#94A3B8' }}>
+          El precio de venta y el costo son por kilogramo. Al vender se digita el peso.
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
@@ -257,18 +284,18 @@ export default function ProductoModal() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
-          <label style={lblStyle}>Precio de venta $</label>
+          <label style={lblStyle}>{f.unit === 'kg' ? 'Precio por kg $' : 'Precio de venta $'}</label>
           <input value={f.price} onChange={(e) => set('price')(e.target.value)} inputMode="numeric" placeholder="0" style={numFieldStyle} />
         </div>
         <div>
-          <label style={lblStyle}>Costo $</label>
+          <label style={lblStyle}>{f.unit === 'kg' ? 'Costo por kg $' : 'Costo $'}</label>
           <input value={f.cost} onChange={(e) => set('cost')(e.target.value)} inputMode="numeric" placeholder="0" style={numFieldStyle} />
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
-          <label style={lblStyle}>Stock inicial</label>
+          <label style={lblStyle}>{f.unit === 'kg' ? 'Stock inicial (kg)' : 'Stock inicial'}</label>
           <input
             value={f.stock}
             onChange={(e) => set('stock')(e.target.value)}
@@ -280,7 +307,7 @@ export default function ProductoModal() {
           />
         </div>
         <div>
-          <label style={lblStyle}>Stock mínimo</label>
+          <label style={lblStyle}>{f.unit === 'kg' ? 'Stock mínimo (kg)' : 'Stock mínimo'}</label>
           <input value={f.min} onChange={(e) => set('min')(e.target.value)} inputMode="numeric" placeholder="0" style={numFieldStyle} />
         </div>
       </div>

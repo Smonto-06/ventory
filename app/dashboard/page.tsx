@@ -231,7 +231,7 @@ export default async function DashboardPage() {
                   </div>
                   <div className="text-right">
                     <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 text-xs font-semibold px-2 py-1 rounded-full">
-                      {item.quantity} / {item.minStock}
+                      {Number(item.quantity)} / {Number(item.minStock)}
                     </span>
                   </div>
                 </div>

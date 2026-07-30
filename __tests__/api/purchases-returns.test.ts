@@ -100,7 +100,7 @@ describe('Compras (POST /api/purchases)', () => {
     expect(body.purchase.balance).toBe(0)
 
     const inv = await db.inventory.findUnique({ where: { id: f.inventory.id } })
-    expect(inv!.quantity).toBe(15)
+    expect(Number(inv!.quantity)).toBe(15)
 
     const product = await db.product.findUnique({ where: { id: f.product.id } })
     expect(Number(product!.cost)).toBe(28000)
@@ -212,10 +212,10 @@ describe('Devoluciones y anulación', () => {
     expect(body.creditForExchange).toBe(0)
 
     const inv = await db.inventory.findUnique({ where: { id: f.inventory.id } })
-    expect(inv!.quantity).toBe(11)
+    expect(Number(inv!.quantity)).toBe(11)
 
     const item = await db.saleItem.findUnique({ where: { id: sale.items[0].id } })
-    expect(item!.returnedQty).toBe(1)
+    expect(Number(item!.returnedQty)).toBe(1)
 
     const movement = await db.cashMovement.findFirst({
       where: { cashSessionId: f.cashSession.id, description: 'Devolución' },
@@ -265,7 +265,7 @@ describe('Devoluciones y anulación', () => {
     expect(body.sale.status).toBe('CANCELLED')
 
     const inv = await db.inventory.findUnique({ where: { id: f.inventory.id } })
-    expect(inv!.quantity).toBe(12) // 10 − 0 (venta directa no descontó) +1 dev +1 anulación
+    expect(Number(inv!.quantity)).toBe(12) // 10 − 0 (venta directa no descontó) +1 dev +1 anulación
 
     const voidMov = await db.cashMovement.findFirst({
       where: { cashSessionId: f.cashSession.id, description: 'Anulación de venta' },

@@ -19,7 +19,8 @@ export const dynamic = 'force-dynamic'
 
 const ItemSchema = z.object({
   productId: z.string().min(1),
-  quantity: z.number().int().positive(),
+  // Decimal para productos vendidos por peso (p. ej. 0.75 kg)
+  quantity: z.number().positive(),
   unitPrice: z.number().positive(),
   // Descuento por artículo en % (0–100)
   discountPct: z.number().min(0).max(100).default(0),
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
     if (!allowNegativeStock) {
       for (const item of items) {
         const inv = inventoryMap.get(item.productId)
-        if (!inv || inv.quantity < item.quantity) {
+        if (!inv || Number(inv.quantity) < item.quantity) {
           const product = productMap.get(item.productId)
           return NextResponse.json(
             {
@@ -258,11 +259,11 @@ export async function POST(req: NextRequest) {
           throw new Error(`Sin registro de inventario para producto ${item.productId}`)
         }
 
-        const quantityBefore = currentInv.quantity
+        const quantityBefore = Number(currentInv.quantity)
         const quantityAfter = quantityBefore - item.quantity
         await tx.inventory.update({
           where: { id: currentInv.id },
-          data: { quantity: quantityAfter, lowStock: quantityAfter <= currentInv.minStock },
+          data: { quantity: quantityAfter, lowStock: quantityAfter <= Number(currentInv.minStock) },
         })
         await tx.inventoryMovement.create({
           data: {
@@ -289,7 +290,7 @@ export async function POST(req: NextRequest) {
       return tx.sale.findUnique({
         where: { id: newSale.id },
         include: {
-          items: { include: { product: { select: { id: true, name: true, sku: true } } } },
+          items: { include: { product: { select: { id: true, name: true, sku: true, unitOfMeasure: true } } } },
           payments: true,
           cashier: { select: { id: true, name: true } },
           branch: { select: { id: true, name: true } },
@@ -349,7 +350,7 @@ export async function GET(req: NextRequest) {
   const sales = await db.sale.findMany({
     where,
     include: {
-      items: { include: { product: { select: { id: true, name: true, sku: true } } } },
+      items: { include: { product: { select: { id: true, name: true, sku: true, unitOfMeasure: true } } } },
       payments: true,
       returns: { include: { items: true } },
       cashier: { select: { id: true, name: true } },

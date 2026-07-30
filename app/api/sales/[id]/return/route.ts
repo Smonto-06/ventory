@@ -18,7 +18,7 @@ const ReturnSchema = z.object({
     .array(
       z.object({
         saleItemId: z.string().min(1),
-        quantity: z.number().int().positive(),
+        quantity: z.number().positive(),
       }),
     )
     .min(1, 'Indica los artículos a devolver'),
@@ -57,10 +57,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     for (const r of parsed.data.items) {
       const item = itemMap.get(r.saleItemId)
       if (!item) return badRequest('Artículo no pertenece a esta venta')
-      const available = item.quantity - item.returnedQty
+      const available = Number(item.quantity) - Number(item.returnedQty)
       const q = Math.min(r.quantity, available)
       if (q <= 0) continue
-      const unitValue = Math.round(Number(item.total) / item.quantity)
+      const unitValue = Math.round(Number(item.total) / Number(item.quantity))
       toReturn.push({ saleItemId: item.id, productId: item.productId, quantity: q, refund: unitValue * q })
     }
     const totalRefund = toReturn.reduce((sum, r) => sum + r.refund, 0)
@@ -86,16 +86,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           create: { productId: r.productId, branchId: sale.branchId, quantity: 0 },
           update: {},
         })
-        const quantityAfter = inv.quantity + r.quantity
+        const quantityAfter = Number(inv.quantity) + r.quantity
         await tx.inventory.update({
           where: { id: inv.id },
-          data: { quantity: quantityAfter, lowStock: quantityAfter <= inv.minStock },
+          data: { quantity: quantityAfter, lowStock: quantityAfter <= Number(inv.minStock) },
         })
         await tx.inventoryMovement.create({
           data: {
             type: MovementType.RETURN,
             quantity: r.quantity,
-            quantityBefore: inv.quantity,
+            quantityBefore: Number(inv.quantity),
             quantityAfter,
             reason: `${exchange ? 'Cambio' : 'Devolución'} ${sale.folio}`,
             inventoryId: inv.id,
