@@ -332,6 +332,9 @@ export const api = {
   // Catálogo
   products: (q = '', status = 'ACTIVE') =>
     get<{ products: Product[] }>(`/api/products?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
+  createBranch: (name: string) => post<{ branch: Branch }>('/api/branches', { name }),
+  updateBranch: (id: string, data: { name?: string; isActive?: boolean }) =>
+    patch<{ branch: Branch & { isActive: boolean } }>(`/api/branches/${id}`, data),
   auditLogs: () =>
     get<{ logs: Array<{ id: string; action: string; entity: string; payload: Record<string, unknown> | null; user: string; createdAt: string }> }>(
       '/api/audit',

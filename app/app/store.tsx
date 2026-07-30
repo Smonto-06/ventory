@@ -240,6 +240,11 @@ export interface AppStore extends AppData {
   /** Parte en efectivo de las ventas del turno — lo único que suma al esperado */
   ventasEfectivo: number
   confirmAperturaCaja: (amount: number) => Promise<void>
+  /** Sucursal activa en este dispositivo (para abrir caja) */
+  activeBranchId: string
+  setBranch: (id: string) => void
+  addBranch: (name: string) => Promise<void>
+  renameBranch: (id: string, name: string) => Promise<void>
   cierrePreview: CierrePreview | null
   doCierre: (declared: number) => void
   confirmApertura: (nextApertura: number) => Promise<void>
@@ -407,6 +412,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastPurchase, setLastPurchase] = useState<Purchase | null>(null)
   const [pesoProduct, setPesoProduct] = useState<Product | null>(null)
   const [rangeReport, setRangeReport] = useState<RangeReport | null>(null)
+  // Sucursal activa de este dispositivo (para abrir caja); se guarda localmente
+  const [branchId, setBranchIdState] = useState<string>(() =>
+    typeof window === 'undefined' ? '' : window.localStorage.getItem('ventory-branch') ?? '',
+  )
 
   const [saleDetId, setSaleDetId] = useState<string | null>(null)
   const [editProdId, setEditProdId] = useState<string | null>(null)
@@ -1215,9 +1224,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ─── Caja / turnos ────────────────────────────────────────────────────────
 
+  // Sucursal efectiva: la elegida en este dispositivo si sigue activa; si no, la primera
+  const selectedBranchId = useCallback(() => {
+    const chosen = data.branches.find((b) => b.id === branchId)
+    return (chosen ?? data.branches[0])?.id
+  }, [data.branches, branchId])
+
+  const setBranch = useCallback((id: string) => {
+    setBranchIdState(id)
+    window.localStorage.setItem('ventory-branch', id)
+  }, [])
+
+  const addBranch = useCallback(
+    async (name: string) => {
+      try {
+        await api.createBranch(name)
+        const r = await api.branches()
+        patch({ branches: r.branches })
+        toast('Sucursal creada')
+      } catch (e) {
+        onError(e)
+      }
+    },
+    [patch, toast, onError],
+  )
+
+  const renameBranch = useCallback(
+    async (id: string, name: string) => {
+      try {
+        await api.updateBranch(id, { name })
+        const r = await api.branches()
+        patch({ branches: r.branches })
+        toast('Sucursal actualizada')
+      } catch (e) {
+        onError(e)
+      }
+    },
+    [patch, toast, onError],
+  )
+
   const confirmAperturaCaja = useCallback(
     async (amount: number) => {
-      const branchId = data.branches[0]?.id
+      const branchId = selectedBranchId()
       if (!branchId) {
         toast('Tu negocio no tiene una sucursal configurada. Recarga la página o contáctanos.')
         return
@@ -1231,7 +1279,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         onError(e)
       }
     },
-    [data.branches, toast, fmt, refreshCash, onError],
+    [selectedBranchId, toast, fmt, refreshCash, onError],
   )
 
   const doCierre = useCallback(
@@ -1434,6 +1482,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ventasTurno,
       ventasEfectivo,
       confirmAperturaCaja,
+      activeBranchId: selectedBranchId() ?? '',
+      setBranch,
+      addBranch,
+      renameBranch,
       cierrePreview,
       doCierre,
       confirmApertura,
@@ -1537,7 +1589,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
-      turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre,
+      turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre, branchId,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
       pay, amounts, received, lastSale, lastPurchase, pesoProduct, rangeReport, lastAbono, saleDetId, dscId, editProdId, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,

@@ -79,12 +79,34 @@ export default function ProductoModal() {
   )
   const suggVisible = suggOpen && suggs.length > 0
 
+  // La foto se comprime en el navegador (máx. 320px, JPEG 72%) antes de
+  // guardarse: pasa de varios MB a ~15-30 KB y la base de datos gratuita rinde.
   const onPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files && e.target.files[0]
     if (!file) return
-    const r = new FileReader()
-    r.onload = () => setF((st) => ({ ...st, photo: String(r.result) }))
-    r.readAsDataURL(file)
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const MAX = 320
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(img.width * scale))
+      canvas.height = Math.max(1, Math.round(img.height * scale))
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        URL.revokeObjectURL(url)
+        return
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      const compressed = canvas.toDataURL('image/jpeg', 0.72)
+      URL.revokeObjectURL(url)
+      setF((st) => ({ ...st, photo: compressed }))
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      s.toast('No se pudo leer la imagen')
+    }
+    img.src = url
   }
 
   const ok = !!f.name && num(f.price) > 0
