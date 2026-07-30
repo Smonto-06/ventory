@@ -11,6 +11,7 @@ import {
   resolveBranchId,
 } from '@/lib/api-helpers'
 import { MovementType } from '@prisma/client'
+import { setStock } from '@/lib/inventory'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,29 +60,23 @@ export async function POST(req: NextRequest) {
     const results = await db.$transaction(async (tx) => {
       const changed: Array<{ productId: string; before: number; after: number }> = []
       for (const adj of parsed.data.adjustments) {
-        const inv = await tx.inventory.upsert({
-          where: { productId_branchId: { productId: adj.productId, branchId } },
-          create: { productId: adj.productId, branchId, quantity: 0 },
-          update: {},
-        })
-        if (Number(inv.quantity) === adj.quantity) continue
+        // Conteo físico: fija el valor absoluto bloqueando la fila, para que
+        // una venta simultánea no se pierda ni pise el ajuste
+        const move = await setStock(tx, adj.productId, branchId, adj.quantity)
+        if (move.before === move.after) continue
 
-        await tx.inventory.update({
-          where: { id: inv.id },
-          data: { quantity: adj.quantity, lowStock: adj.quantity <= Number(inv.minStock) },
-        })
         await tx.inventoryMovement.create({
           data: {
             type: MovementType.ADJUSTMENT,
-            quantity: Math.abs(adj.quantity - Number(inv.quantity)),
-            quantityBefore: Number(inv.quantity),
-            quantityAfter: adj.quantity,
+            quantity: Math.abs(move.after - move.before),
+            quantityBefore: move.before,
+            quantityAfter: move.after,
             reason: parsed.data.reason ?? 'Ajuste de inventario',
-            inventoryId: inv.id,
+            inventoryId: move.inventoryId,
             createdById: user.id,
           },
         })
-        changed.push({ productId: adj.productId, before: Number(inv.quantity), after: adj.quantity })
+        changed.push({ productId: adj.productId, before: move.before, after: move.after })
       }
       return changed
     })
