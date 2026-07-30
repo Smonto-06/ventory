@@ -75,6 +75,10 @@ export async function POST(req: NextRequest) {
         role: parsed.data.role as UserRole,
         branchId: parsed.data.branchId,
         businessId: user.businessId,
+        // Los usuarios creados por el administrador (cajeros, supervisores)
+        // entran verificados: es el admin quien responde por ellos, no se
+        // registran solos ni reciben correo de confirmación.
+        emailVerified: new Date(),
       },
       select: { id: true, name: true, email: true, role: true, isActive: true, branchId: true },
     })
