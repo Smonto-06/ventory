@@ -332,6 +332,10 @@ export const api = {
   // Catálogo
   products: (q = '', status = 'ACTIVE') =>
     get<{ products: Product[] }>(`/api/products?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
+  auditLogs: () =>
+    get<{ logs: Array<{ id: string; action: string; entity: string; payload: Record<string, unknown> | null; user: string; createdAt: string }> }>(
+      '/api/audit',
+    ),
   importProducts: (rows: unknown[]) =>
     post<{ created: number; skipped: Array<{ name: string; reason: string }>; total: number }>(
       '/api/products/import',
