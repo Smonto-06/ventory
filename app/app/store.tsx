@@ -84,6 +84,7 @@ export type ModalId =
   | 'contact'
   | 'peso'
   | 'importar'
+  | 'scanner'
   | null
 
 export interface CartLine {
