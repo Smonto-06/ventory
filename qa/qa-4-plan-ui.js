@@ -1,0 +1,129 @@
+// PRUEBA 4: plan comercial, super admin, catálogos y recorrido completo de la interfaz
+const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE } = require('./qa-lib')
+
+;(async () => {
+  const browser = await newBrowser()
+  const t = Date.now().toString(36)
+  const S = await registerAndLogin(browser, {
+    businessName: `QA Plan ${t}`, name: 'Pablo QA', email: `plan-${t}@test.com`, password: 'ClaveSegura99',
+  })
+  const branchId = (await S.get('/api/branches')).data.branches[0].id
+
+  // ── CATÁLOGOS ──
+  const cat = await S.post('/api/categories', { name: `Cat ${t}` })
+  check('catálogos', 'crear categoría', cat.status < 300, `status ${cat.status}`)
+  const catDup = await S.post('/api/categories', { name: `Cat ${t}` })
+  check('catálogos', 'rechaza categoría duplicada', catDup.status >= 400, `status ${catDup.status}`)
+
+  const prov = await S.post('/api/suppliers', { name: `Proveedor ${t}`, phone: '3001234567' })
+  check('catálogos', 'crear proveedor', prov.status < 300, `status ${prov.status}`)
+
+  const cli = await S.post('/api/customers', { name: `Cliente ${t}`, phone: '3007654321' })
+  check('catálogos', 'crear cliente', cli.status < 300, `status ${cli.status}`)
+  const cliSinNombre = await S.post('/api/customers', { name: '' })
+  check('catálogos', 'rechaza cliente sin nombre', cliSinNombre.status >= 400, `status ${cliSinNombre.status}`)
+
+  // ── AJUSTES DEL NEGOCIO ──
+  const cfg = await S.put('/api/settings', { name: `QA Plan ${t}`, taxId: '900.111.222-3', phone: '3111111111', address: 'Calle 1 #2-3', receiptFooter: '¡Gracias!', ivaPct: 19 })
+  check('ajustes', 'guardar datos de facturación e IVA', cfg.status === 200, `status ${cfg.status}`)
+  const cfgLeido = await S.get('/api/settings')
+  check('ajustes', 'los datos guardados se leen de vuelta', cfgLeido.data.settings?.taxId === '900.111.222-3' && cfgLeido.data.settings?.ivaPct === 19, JSON.stringify(cfgLeido.data.settings?.taxId))
+
+  const ivaInvalido = await S.put('/api/settings', { ivaPct: 90 })
+  check('ajustes', 'rechaza IVA fuera de rango', ivaInvalido.status === 400, `status ${ivaInvalido.status}`)
+
+  // venta con IVA para verificar el desglose incluido
+  await S.post('/api/cash-registers/open', { branchId, openingBalance: 50000 })
+  const sid = (await S.get('/api/cash-registers/current')).data.session.id
+  const p = (await S.post('/api/products', { name: `ProdIva ${t}`, price: 11900, branchId, initialStock: 10 })).data.product
+  const vIva = await S.post('/api/sales', { cashSessionId: sid, items: [{ productId: p.id, quantity: 1, unitPrice: 11900 }], paymentMethod: 'CASH', payments: { cashActive: true, cashReceived: 11900, card: 0, transfer: 0 } })
+  const ivaCalc = vIva.data.sale?.taxAmount
+  check('ajustes', 'IVA incluido se calcula bien (11.900 al 19% → 1.900)', Number(ivaCalc) === 1900, `iva ${ivaCalc}`)
+
+  // ── PLAN COMERCIAL: negocio suspendido no puede vender ──
+  const admin = await loginOnly(browser, 'mar_u_79@hotmail.com', 'VentoryBB2026')
+  const negocios = await admin.get('/api/admin/businesses')
+  const esSuper = negocios.status === 200
+  check('super admin', 'el super admin puede listar todos los negocios', esSuper, `status ${negocios.status}`)
+
+  if (esSuper) {
+    const mio = negocios.data.businesses.find(b => b.name === `QA Plan ${t}`)
+    check('super admin', 've el negocio recién creado en la lista', !!mio, 'no aparece')
+
+    if (mio) {
+      // suspender
+      await admin.post(`/api/admin/businesses/${mio.id}`, { action: 'suspend' })
+      const ventaSuspendido = await S.post('/api/sales', { cashSessionId: sid, items: [{ productId: p.id, quantity: 1, unitPrice: 11900 }], paymentMethod: 'CASH', payments: { cashActive: true, cashReceived: 11900, card: 0, transfer: 0 } })
+      check('plan', 'un negocio SUSPENDIDO no puede vender', ventaSuspendido.status === 402, `status ${ventaSuspendido.status}`)
+      const compraSuspendido = await S.post('/api/purchases', { branchId, supplierName: 'X', method: 'TRANSFER', items: [{ productId: p.id, quantity: 1, unitCost: 100 }] })
+      check('plan', 'un negocio SUSPENDIDO no puede registrar compras', compraSuspendido.status === 402, `status ${compraSuspendido.status}`)
+      const leerSuspendido = await S.get('/api/products')
+      check('plan', 'un negocio suspendido SÍ puede consultar sus datos (solo lectura)', leerSuspendido.status === 200, `status ${leerSuspendido.status}`)
+
+      // activar
+      await admin.post(`/api/admin/businesses/${mio.id}`, { action: 'activate' })
+      const ventaActivo = await S.post('/api/sales', { cashSessionId: sid, items: [{ productId: p.id, quantity: 1, unitPrice: 11900 }], paymentMethod: 'CASH', payments: { cashActive: true, cashReceived: 11900, card: 0, transfer: 0 } })
+      check('plan', 'al activar el plan vuelve a vender', ventaActivo.status === 201, `status ${ventaActivo.status}`)
+
+      // eliminar con confirmación equivocada
+      const borrarMal = await admin.del(`/api/admin/businesses/${mio.id}`, { confirm: 'nombre equivocado' })
+      check('super admin', 'no elimina un negocio si el nombre no coincide', borrarMal.status === 400, `status ${borrarMal.status}`)
+    }
+
+    // el super admin no puede eliminar su propio negocio
+    const propio = negocios.data.businesses.find(b => b.owner?.email === 'mar_u_79@hotmail.com')
+    if (propio) {
+      const borrarPropio = await admin.del(`/api/admin/businesses/${propio.id}`, { confirm: propio.name })
+      check('super admin', 'no puede eliminar su propio negocio', borrarPropio.status === 400, `status ${borrarPropio.status}`)
+    }
+  }
+  await admin.ctx.close()
+
+  // ── RECORRIDO DE LA INTERFAZ ──
+  const page = S.page
+  await page.goto(BASE + '/app')
+  await page.waitForTimeout(2500)
+  const omitir = await page.locator('text=Omitir por ahora').count()
+  if (omitir) { await page.locator('text=Omitir por ahora').click(); await page.waitForTimeout(600) }
+
+  const errores = []
+  page.on('pageerror', e => errores.push(e.message))
+
+  const pantallas = ['Panel Principal', 'Productos', 'Compras', 'Proveedores', 'Ventas', 'Movimientos', 'Reportes', 'Clientes', 'Punto de Venta']
+  for (const nombre of pantallas) {
+    try {
+      // el Punto de Venta ocupa toda la pantalla: si estamos ahí, volver al panel
+      const inicio = await page.locator('button:has-text("Inicio")').count()
+      if (inicio) { await page.locator('button:has-text("Inicio")').first().click(); await page.waitForTimeout(700) }
+      await page.locator(`button:has-text("${nombre}")`).first().click({ timeout: 8000 })
+      await page.waitForTimeout(900)
+      const vacio = await page.locator('body').innerText()
+      check('interfaz', `la pantalla "${nombre}" carga sin errores`, vacio.length > 100 && !vacio.includes('Application error'), vacio.slice(0, 60))
+    } catch (e) {
+      check('interfaz', `la pantalla "${nombre}" carga sin errores`, false, e.message.slice(0, 50))
+    }
+  }
+
+  // modales principales
+  const volver = await page.locator('button:has-text("Inicio")').count()
+  if (volver) { await page.locator('button:has-text("Inicio")').first().click(); await page.waitForTimeout(800) }
+  for (const [boton, titulo] of [['Ajustes', 'Ajustes'], ['Cerrar caja', 'Cerrar caja']]) {
+    try {
+      await page.locator(`button:has-text("${boton}")`).first().click({ timeout: 8000 })
+      await page.waitForTimeout(800)
+      const visible = await page.locator(`text=${titulo}`).count()
+      check('interfaz', `"${boton}" abre correctamente`, visible > 0, 'no se ve el título')
+      await page.keyboard.press('Escape')
+      const cerrar = await page.locator('button:has-text("✕")').count()
+      if (cerrar) await page.locator('button:has-text("✕")').first().click().catch(() => {})
+      await page.waitForTimeout(400)
+    } catch (e) {
+      check('interfaz', `"${boton}" abre correctamente`, false, e.message.slice(0, 50))
+    }
+  }
+
+  check('interfaz', 'ningún error de JavaScript durante el recorrido', errores.length === 0, errores.slice(0, 2).join(' | '))
+
+  await browser.close()
+  process.exit(summary() > 0 ? 1 : 0)
+})().catch(e => { console.error('ERROR EN LA PRUEBA:', e.message); process.exit(2) })

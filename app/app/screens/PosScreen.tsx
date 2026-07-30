@@ -270,7 +270,7 @@ export default function PosScreen() {
 
       <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'stretch' }}>
         <main style={{ flex: '1 1 460px', minWidth: 'min(100%,340px)', padding: 'clamp(14px,2.4vw,24px)', paddingBottom: narrow ? 96 : undefined, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10, maxWidth: '100%' }}>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -279,7 +279,9 @@ export default function PosScreen() {
               }}
               placeholder="Buscar por nombre, SKU o código de barras…"
               autoFocus={!narrow}
-              style={{ flex: 1, height: 52, padding: '0 18px', border: '1.5px solid var(--border)', borderRadius: 14, background: 'var(--surface)', fontSize: 15.5, boxShadow: '0 1px 2px rgba(16,20,30,.04)' }}
+              // minWidth: 0 permite que el campo se encoja junto al botón de
+              // cámara; sin esto la fila desborda la pantalla del celular
+              style={{ flex: 1, minWidth: 0, height: 52, padding: '0 18px', border: '1.5px solid var(--border)', borderRadius: 14, background: 'var(--surface)', fontSize: 15.5, boxShadow: '0 1px 2px rgba(16,20,30,.04)' }}
             />
             <button
               onClick={() => s.openModal('scanner')}
