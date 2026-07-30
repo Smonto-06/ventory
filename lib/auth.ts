@@ -53,6 +53,10 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Correo o contraseña incorrectos')
         }
 
+        if (!user.emailVerified) {
+          throw new Error('Confirma tu correo antes de entrar. Revisa tu bandeja (y el spam).')
+        }
+
         return {
           id: user.id,
           email: user.email,

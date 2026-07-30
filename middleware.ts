@@ -25,6 +25,9 @@ export default withAuth(
           pathname.startsWith('/pin-login') ||
           pathname.startsWith('/forgot') ||
           pathname.startsWith('/reset') ||
+          pathname.startsWith('/verify') ||
+          pathname.startsWith('/terminos') ||
+          pathname.startsWith('/privacidad') ||
           pathname.startsWith('/api/auth') ||
           pathname.startsWith('/api/register') ||
           pathname.startsWith('/api/health') ||

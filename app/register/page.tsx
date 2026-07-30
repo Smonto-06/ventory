@@ -15,6 +15,8 @@ export default function RegisterPage() {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [accepted, setAccepted] = useState(false)
+  const [verifySent, setVerifySent] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -27,6 +29,11 @@ export default function RegisterPage() {
 
     if (form.password.length < 8) {
       setError('La contraseña debe tener al menos 8 caracteres')
+      return
+    }
+
+    if (!accepted) {
+      setError('Debes aceptar los Términos y la Política de datos')
       return
     }
 
@@ -51,12 +58,32 @@ export default function RegisterPage() {
         return
       }
 
+      if (data.needsVerification) {
+        setVerifySent(true)
+        return
+      }
       router.push('/login?registered=1')
     } catch {
       setError('Error de conexión. Intenta nuevamente.')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (verifySent) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
+        <div className="max-w-md w-full text-center bg-white rounded-2xl shadow-sm p-10">
+          <div className="text-5xl">📬</div>
+          <h1 className="text-2xl font-bold text-gray-900 mt-4">Revisa tu correo</h1>
+          <p className="text-gray-600 mt-3 leading-relaxed">
+            Te enviamos un enlace de confirmación a <b>{form.email}</b>. Ábrelo para activar tu
+            cuenta y empezar tu prueba gratis de 15 días.
+          </p>
+          <p className="text-gray-400 text-sm mt-4">Si no lo ves, revisa la carpeta de spam.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -150,6 +177,25 @@ export default function RegisterPage() {
                 placeholder="Repite tu contraseña"
               />
             </div>
+
+            <label className="flex items-start gap-2 text-sm text-gray-600 mt-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(e) => setAccepted(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Acepto los{' '}
+                <Link href="/terminos" target="_blank" className="text-blue-600 font-semibold hover:underline">
+                  Términos de servicio
+                </Link>{' '}
+                y la{' '}
+                <Link href="/privacidad" target="_blank" className="text-blue-600 font-semibold hover:underline">
+                  Política de tratamiento de datos
+                </Link>
+              </span>
+            </label>
 
             <button
               type="submit"

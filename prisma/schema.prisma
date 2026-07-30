@@ -155,6 +155,9 @@ model User {
   // Recuperación de contraseña (token de un solo uso, con vencimiento)
   resetToken        String?   @unique
   resetTokenExpires DateTime?
+  // Verificación de correo al registrarse (null = pendiente de verificar)
+  emailVerified     DateTime?
+  verifyToken       String?   @unique
 
   businessId     String
   business       Business     @relation(fields: [businessId], references: [id])
