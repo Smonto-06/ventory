@@ -230,6 +230,39 @@ export default function AjustesModal() {
           <button onClick={() => s.openModal('usuarios')} className="v-hover-bg" style={rowBtnStyle}>
             Gestión de usuarios <span style={{ color: '#6366F1' }}>→</span>
           </button>
+
+          <div style={sectionStyle}>Exportar datos</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {(
+              [
+                ['sales', 'Ventas (CSV)'],
+                ['products', 'Inventario (CSV)'],
+                ['customers', 'Clientes (CSV)'],
+                ['purchases', 'Compras (CSV)'],
+              ] as const
+            ).map(([t, label]) => (
+              <a
+                key={t}
+                href={`/api/export?type=${t}`}
+                download
+                className="v-hover-bg"
+                style={{ ...rowBtnStyle, height: 40, fontSize: 13, textDecoration: 'none', justifyContent: 'center' }}
+              >
+                ⬇ {label}
+              </a>
+            ))}
+          </div>
+          <a
+            href="/api/export?type=backup"
+            download
+            className="v-hover-bg"
+            style={{ ...rowBtnStyle, marginTop: 8, textDecoration: 'none' }}
+          >
+            Respaldo completo del negocio (JSON) <span style={{ color: '#6366F1' }}>⬇</span>
+          </a>
+          <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8' }}>
+            Los CSV abren en Excel. El respaldo incluye productos, clientes, ventas, compras y caja.
+          </div>
         </>
       )}
 
