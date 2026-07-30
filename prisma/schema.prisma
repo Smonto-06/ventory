@@ -123,6 +123,9 @@ model Business {
 model Branch {
   id           String    @id @default(cuid())
   name         String
+  // Consecutivo de facturación atómico: se incrementa con UPDATE … RETURNING,
+  // así dos cajas vendiendo a la vez nunca generan el mismo folio
+  saleSeq      Int       @default(0)
   address      String?
   phone        String?
   isActive     Boolean   @default(true)

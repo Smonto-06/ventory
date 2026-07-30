@@ -10,6 +10,7 @@ import {
   serialize,
 } from '@/lib/api-helpers'
 import { CashMovementType, MovementType } from '@prisma/client'
+import { moveStock } from '@/lib/inventory'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,24 +82,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const saleReturn = await db.$transaction(async (tx) => {
       // Regresa stock por artículo
       for (const r of toReturn) {
-        const inv = await tx.inventory.upsert({
-          where: { productId_branchId: { productId: r.productId, branchId: sale.branchId } },
-          create: { productId: r.productId, branchId: sale.branchId, quantity: 0 },
-          update: {},
-        })
-        const quantityAfter = Number(inv.quantity) + r.quantity
-        await tx.inventory.update({
-          where: { id: inv.id },
-          data: { quantity: quantityAfter, lowStock: quantityAfter <= Number(inv.minStock) },
-        })
+        const move = await moveStock(tx, r.productId, sale.branchId, r.quantity)
         await tx.inventoryMovement.create({
           data: {
             type: MovementType.RETURN,
             quantity: r.quantity,
-            quantityBefore: Number(inv.quantity),
-            quantityAfter,
+            quantityBefore: move.before,
+            quantityAfter: move.after,
             reason: `${exchange ? 'Cambio' : 'Devolución'} ${sale.folio}`,
-            inventoryId: inv.id,
+            inventoryId: move.inventoryId,
             saleItemId: r.saleItemId,
             createdById: user.id,
           },

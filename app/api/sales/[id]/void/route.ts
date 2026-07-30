@@ -10,6 +10,7 @@ import {
   serialize,
 } from '@/lib/api-helpers'
 import { CashMovementType, MovementType } from '@prisma/client'
+import { moveStock } from '@/lib/inventory'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,24 +65,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       for (const item of sale.items) {
         const remaining = Number(item.quantity) - Number(item.returnedQty)
         if (remaining <= 0) continue
-        const inv = await tx.inventory.upsert({
-          where: { productId_branchId: { productId: item.productId, branchId: sale.branchId } },
-          create: { productId: item.productId, branchId: sale.branchId, quantity: 0 },
-          update: {},
-        })
-        const quantityAfter = Number(inv.quantity) + remaining
-        await tx.inventory.update({
-          where: { id: inv.id },
-          data: { quantity: quantityAfter, lowStock: quantityAfter <= Number(inv.minStock) },
-        })
+        const move = await moveStock(tx, item.productId, sale.branchId, remaining)
         await tx.inventoryMovement.create({
           data: {
             type: MovementType.RETURN,
             quantity: remaining,
-            quantityBefore: Number(inv.quantity),
-            quantityAfter,
+            quantityBefore: move.before,
+            quantityAfter: move.after,
             reason: `Anulación ${sale.folio}`,
-            inventoryId: inv.id,
+            inventoryId: move.inventoryId,
             saleItemId: item.id,
             createdById: user.id,
           },

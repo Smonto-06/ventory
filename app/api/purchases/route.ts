@@ -14,6 +14,7 @@ import {
 } from '@/lib/api-helpers'
 import { CashMovementType, MovementType, PurchaseMethod } from '@prisma/client'
 import { requireActiveBusiness } from '@/lib/plan'
+import { moveStock } from '@/lib/inventory'
 
 export const dynamic = 'force-dynamic'
 
@@ -177,24 +178,17 @@ export async function POST(req: NextRequest) {
           },
         })
 
-        const inv = await tx.inventory.upsert({
-          where: { productId_branchId: { productId: item.productId, branchId } },
-          create: { productId: item.productId, branchId, quantity: 0 },
-          update: {},
-        })
-        const quantityAfter = Number(inv.quantity) + item.quantity
-        await tx.inventory.update({
-          where: { id: inv.id },
-          data: { quantity: quantityAfter, lowStock: quantityAfter <= Number(inv.minStock) },
-        })
+        // Entrada ATÓMICA: suma sobre el valor real, aunque en ese instante
+        // otra caja esté vendiendo el mismo producto
+        const move = await moveStock(tx, item.productId, branchId, item.quantity)
         await tx.inventoryMovement.create({
           data: {
             type: MovementType.PURCHASE,
             quantity: item.quantity,
-            quantityBefore: Number(inv.quantity),
-            quantityAfter,
+            quantityBefore: move.before,
+            quantityAfter: move.after,
             reason: `Compra a ${supplier.name}`,
-            inventoryId: inv.id,
+            inventoryId: move.inventoryId,
             createdById: user.id,
           },
         })

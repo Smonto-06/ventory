@@ -17,7 +17,7 @@ jest.mock('@/lib/db', () => ({
     cashSession: { findFirst: jest.fn() },
     business: { findUnique: jest.fn() },
     product: { findMany: jest.fn() },
-    inventory: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+    inventory: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     sale: { count: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
     saleItem: { create: jest.fn() },
     salePayment: { create: jest.fn() },
@@ -128,6 +128,8 @@ describe('POST /api/sales', () => {
     ;(db.$transaction as jest.Mock).mockImplementation(async (fn: (tx: typeof db) => unknown) =>
       fn({
         ...db,
+        // Consecutivo atómico de folio (UPDATE … RETURNING)
+        $queryRaw: jest.fn().mockResolvedValue([{ saleSeq: 1 }]),
         sale: {
           count: jest.fn().mockResolvedValue(0),
           create: jest.fn().mockResolvedValue({ id: 'sale-1', folio: 'F-000001' }),
@@ -137,7 +139,10 @@ describe('POST /api/sales', () => {
         salePayment: { create: jest.fn().mockResolvedValue({ id: 'sp-1' }) } as unknown as typeof db.salePayment,
         inventory: {
           findUnique: jest.fn().mockResolvedValue(mockInventory),
-          update: jest.fn().mockResolvedValue({}),
+          // Descuento atómico: upsert asegura la fila y update({decrement})
+          // devuelve el registro ya actualizado (10 − 2 vendidas = 8)
+          upsert: jest.fn().mockResolvedValue(mockInventory),
+          update: jest.fn().mockResolvedValue({ ...mockInventory, quantity: 8, lowStock: false }),
         } as unknown as typeof db.inventory,
         inventoryMovement: { create: jest.fn().mockResolvedValue({}) } as unknown as typeof db.inventoryMovement,
       } as unknown as typeof db)

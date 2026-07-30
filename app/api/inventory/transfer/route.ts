@@ -11,6 +11,7 @@ import {
   resolveBranchId,
 } from '@/lib/api-helpers'
 import { MovementType } from '@prisma/client'
+import { moveStock, InsufficientStockError } from '@/lib/inventory'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,31 +53,23 @@ export async function POST(req: NextRequest) {
     if (!product) return badRequest('Producto no encontrado')
 
     const result = await db.$transaction(async (tx) => {
-      const inv = await tx.inventory.upsert({
-        where: { productId_branchId: { productId, branchId } },
-        create: { productId, branchId, quantity: 0 },
-        update: {},
-      })
-      // Como el prototipo: la salida no baja de 0
-      const quantityAfter =
-        direction === 'out' ? Math.max(0, Number(inv.quantity) - quantity) : Number(inv.quantity) + quantity
-
-      await tx.inventory.update({
-        where: { id: inv.id },
-        data: { quantity: quantityAfter, lowStock: quantityAfter <= Number(inv.minStock) },
-      })
+      // Movimiento atómico; una salida nunca puede dejar el stock en negativo
+      const move = await moveStock(tx, productId, branchId, direction === 'out' ? -quantity : quantity)
+      if (direction === 'out' && move.after < 0) {
+        throw new InsufficientStockError(product.name, move.before, quantity)
+      }
       await tx.inventoryMovement.create({
         data: {
           type: MovementType.ADJUSTMENT,
-          quantity: Math.abs(quantityAfter - Number(inv.quantity)),
-          quantityBefore: Number(inv.quantity),
-          quantityAfter,
+          quantity,
+          quantityBefore: move.before,
+          quantityAfter: move.after,
           reason: `Traslado ${direction === 'out' ? 'salida' : 'entrada'}${notes ? ` · ${notes}` : ''}`,
-          inventoryId: inv.id,
+          inventoryId: move.inventoryId,
           createdById: user.id,
         },
       })
-      return { before: Number(inv.quantity), after: quantityAfter }
+      return { before: move.before, after: move.after }
     })
 
     return NextResponse.json({ product: product.name, ...result })

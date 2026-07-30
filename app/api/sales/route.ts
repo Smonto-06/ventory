@@ -14,6 +14,7 @@ import {
   resolvePayment,
 } from '@/lib/pos'
 import { CashSessionStatus, MovementType, PaymentMethod, Prisma } from '@prisma/client'
+import { moveStock, InsufficientStockError } from '@/lib/inventory'
 
 export const dynamic = 'force-dynamic'
 
@@ -201,9 +202,15 @@ export async function POST(req: NextRequest) {
     }
 
     const sale = await db.$transaction(async (tx) => {
-      // Consecutivo F-XXXXXX atómico por sucursal
-      const salesCount = await tx.sale.count({ where: { branchId } })
-      const folio = `F-${String(salesCount + 1).padStart(6, '0')}`
+      // Consecutivo F-XXXXXX realmente atómico: UPDATE … RETURNING toma el
+      // lock de la sucursal, así dos cajas vendiendo al mismo tiempo obtienen
+      // números distintos en vez de chocar y perder una de las ventas.
+      const seqRows = await tx.$queryRaw<Array<{ saleSeq: number }>>`
+        UPDATE "branches" SET "saleSeq" = "saleSeq" + 1
+        WHERE "id" = ${branchId}
+        RETURNING "saleSeq"
+      `
+      const folio = `F-${String(seqRows[0].saleSeq).padStart(6, '0')}`
 
       const newSale = await tx.sale.create({
         data: {
@@ -252,27 +259,21 @@ export async function POST(req: NextRequest) {
           },
         })
 
-        const currentInv = await tx.inventory.findUnique({
-          where: { productId_branchId: { productId: item.productId, branchId } },
-        })
-        if (!currentInv) {
-          throw new Error(`Sin registro de inventario para producto ${item.productId}`)
+        // Descuento ATÓMICO: la BD resta sobre el valor real del momento.
+        // Si otra caja consumió el stock justo ahora, la venta completa se
+        // revierte en vez de dejar el inventario descuadrado.
+        const move = await moveStock(tx, item.productId, branchId, -item.quantity)
+        if (!allowNegativeStock && move.after < 0) {
+          throw new InsufficientStockError(product.name, move.before, item.quantity)
         }
-
-        const quantityBefore = Number(currentInv.quantity)
-        const quantityAfter = quantityBefore - item.quantity
-        await tx.inventory.update({
-          where: { id: currentInv.id },
-          data: { quantity: quantityAfter, lowStock: quantityAfter <= Number(currentInv.minStock) },
-        })
         await tx.inventoryMovement.create({
           data: {
             type: MovementType.SALE,
             quantity: item.quantity,
-            quantityBefore,
-            quantityAfter,
+            quantityBefore: move.before,
+            quantityAfter: move.after,
             reason: `Venta ${folio}`,
-            inventoryId: currentInv.id,
+            inventoryId: move.inventoryId,
             saleItemId: saleItem.id,
             createdById: cashierId,
           },
@@ -313,6 +314,18 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ sale: serialize(sale) }, { status: 201 })
   } catch (error) {
+    // Carrera perdida contra otra venta del mismo producto: nada quedó a medias
+    if (error instanceof InsufficientStockError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: 'INSUFFICIENT_STOCK',
+          available: error.available,
+          required: error.required,
+        },
+        { status: 422 },
+      )
+    }
     console.error('[POST /api/sales]', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
