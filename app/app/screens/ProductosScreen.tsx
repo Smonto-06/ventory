@@ -82,6 +82,15 @@ export default function ProductosScreen() {
           <button className="v-hover-bg" onClick={() => s.openModal('categorias')} style={{ ...toolBtnStyle, padding: '0 16px' }}>
             Categorías
           </button>
+          {s.isAdmin && (
+            <button
+              className="v-hover-bg"
+              onClick={() => s.openModal('importar')}
+              style={{ height: 44, padding: '0 16px', borderRadius: 11, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+            >
+              ⬆ Importar
+            </button>
+          )}
           <button
             className="v-hover-primary"
             onClick={() => {

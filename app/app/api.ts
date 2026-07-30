@@ -313,6 +313,11 @@ export const api = {
   // Catálogo
   products: (q = '', status = 'ACTIVE') =>
     get<{ products: Product[] }>(`/api/products?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
+  importProducts: (rows: unknown[]) =>
+    post<{ created: number; skipped: Array<{ name: string; reason: string }>; total: number }>(
+      '/api/products/import',
+      { rows },
+    ),
   createProduct: (data: unknown) => post<{ product: Product }>('/api/products', data),
   updateProduct: (id: string, data: unknown) => patch<{ product: Product }>(`/api/products/${id}`, data),
   archiveProduct: (id: string) => del<{ ok: boolean }>(`/api/products/${id}`),
