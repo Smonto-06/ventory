@@ -89,6 +89,10 @@ export default function AjustesModal() {
   const [phone, setPhone] = useState(s.settings?.phone ?? '')
   const [address, setAddress] = useState(s.settings?.address ?? '')
   const [receiptFooter, setReceiptFooter] = useState(s.settings?.receiptFooter ?? '')
+  // Gestión de sucursales
+  const [newBranch, setNewBranch] = useState('')
+  const [editBranchId, setEditBranchId] = useState<string | null>(null)
+  const [editBranchName, setEditBranchName] = useState('')
   // Preferencia de novedades: solo local, se guarda en este navegador
   const [showNov, setShowNov] = useState<boolean>(() =>
     typeof window === 'undefined' ? true : window.localStorage.getItem('ventory-novedades') !== '0',
@@ -226,6 +230,78 @@ export default function AjustesModal() {
 
       {s.isAdmin && (
         <>
+          <div style={sectionStyle}>Sucursales</div>
+          {s.branches.map((b) => (
+            <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              {editBranchId === b.id ? (
+                <>
+                  <input
+                    value={editBranchName}
+                    onChange={(e) => setEditBranchName(e.target.value)}
+                    style={{ ...textInputStyle, flex: 1 }}
+                    autoFocus
+                  />
+                  <button
+                    onClick={async () => {
+                      if (editBranchName.trim()) await s.renameBranch(b.id, editBranchName.trim())
+                      setEditBranchId(null)
+                    }}
+                    style={{ height: 38, padding: '0 12px', borderRadius: 10, background: '#6366F1', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                  >
+                    Guardar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => s.setBranch(b.id)}
+                    className="v-hover-bg"
+                    style={{
+                      flex: 1, height: 40, borderRadius: 10, textAlign: 'left', padding: '0 12px', fontWeight: 700, fontSize: 13.5, cursor: 'pointer',
+                      border: s.activeBranchId === b.id ? '1.5px solid #6366F1' : '1.5px solid var(--border)',
+                      background: s.activeBranchId === b.id ? '#EEF0FE' : 'var(--surface)',
+                      color: s.activeBranchId === b.id ? '#4338CA' : 'var(--text)',
+                    }}
+                  >
+                    {b.name} {s.activeBranchId === b.id && '· activa en este equipo'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditBranchId(b.id)
+                      setEditBranchName(b.name)
+                    }}
+                    title="Renombrar"
+                    style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--bg)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14 }}
+                  >
+                    ✎
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <input
+              value={newBranch}
+              onChange={(e) => setNewBranch(e.target.value)}
+              placeholder="Nueva sucursal (ej. Bodega, Local 2)…"
+              style={{ ...textInputStyle, flex: 1 }}
+            />
+            <button
+              onClick={async () => {
+                if (newBranch.trim()) {
+                  await s.addBranch(newBranch.trim())
+                  setNewBranch('')
+                }
+              }}
+              style={{ height: 38, padding: '0 14px', borderRadius: 10, background: '#EEF0FE', color: '#4338CA', fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >
+              + Crear
+            </button>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8' }}>
+            La sucursal activa es donde se abre la caja en este equipo. Cada sucursal tiene su propio inventario y turnos.
+          </div>
+
           <div style={sectionStyle}>Cuenta</div>
           <button onClick={() => s.openModal('usuarios')} className="v-hover-bg" style={rowBtnStyle}>
             Gestión de usuarios <span style={{ color: '#6366F1' }}>→</span>
