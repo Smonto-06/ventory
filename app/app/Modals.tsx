@@ -25,6 +25,7 @@ import AperturaModal from './modals/AperturaModal'
 import ConfirmModal from './modals/ConfirmModal'
 import ContactModal from './modals/ContactModal'
 import PesoModal from './modals/PesoModal'
+import ImportarModal from './modals/ImportarModal'
 import NovedadesModal from './modals/NovedadesModal'
 
 export default function Modals() {
@@ -72,6 +73,8 @@ export default function Modals() {
       return <ContactModal />
     case 'peso':
       return <PesoModal />
+    case 'importar':
+      return <ImportarModal />
     case 'novedades':
       return <NovedadesModal />
     default:
