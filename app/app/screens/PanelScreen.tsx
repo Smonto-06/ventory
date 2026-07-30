@@ -117,8 +117,32 @@ export default function PanelScreen() {
     padding: 20,
   }
 
+  // Productos por agotarse: en o por debajo del mínimo (o agotados)
+  const lowStock = s.products.filter(
+    (p) => p.status === 'ACTIVE' && (p.stock <= 0 || (p.minStock > 0 && p.stock <= p.minStock)),
+  )
+
   return (
     <div style={{ padding: 'clamp(16px,3vw,30px)', display: 'flex', flexDirection: 'column', gap: 18, animation: 'vfade .3s ease' }}>
+      {lowStock.length > 0 && (
+        <button
+          onClick={() => s.go('productos')}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', background: '#FDF4E5', border: '1.5px solid #F3DCB0', borderRadius: 14, padding: '12px 18px', cursor: 'pointer' }}
+        >
+          <span style={{ fontSize: 20 }}>⚠️</span>
+          <span style={{ flex: 1, fontSize: 13.5, color: '#8A6B2E', lineHeight: 1.5 }}>
+            <b>
+              {lowStock.length} producto{lowStock.length === 1 ? '' : 's'} con stock bajo:
+            </b>{' '}
+            {lowStock
+              .slice(0, 4)
+              .map((p) => `${p.name} (${p.stock <= 0 ? 'agotado' : p.stock + (p.unitOfMeasure === 'kg' ? ' kg' : '')})`)
+              .join(', ')}
+            {lowStock.length > 4 ? ` y ${lowStock.length - 4} más` : ''}
+          </span>
+          <span style={{ color: '#B4740A', fontWeight: 800, fontSize: 13.5, whiteSpace: 'nowrap' }}>Ver →</span>
+        </button>
+      )}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-.6px' }}>Panel Principal</h1>

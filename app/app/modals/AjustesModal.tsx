@@ -230,6 +230,9 @@ export default function AjustesModal() {
           <button onClick={() => s.openModal('usuarios')} className="v-hover-bg" style={rowBtnStyle}>
             Gestión de usuarios <span style={{ color: '#6366F1' }}>→</span>
           </button>
+          <button onClick={() => s.openModal('auditoria')} className="v-hover-bg" style={{ ...rowBtnStyle, marginTop: 8 }}>
+            Registro de actividad <span style={{ color: '#6366F1' }}>→</span>
+          </button>
 
           <div style={sectionStyle}>Exportar datos</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
