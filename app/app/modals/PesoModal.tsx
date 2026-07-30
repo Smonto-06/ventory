@@ -1,19 +1,46 @@
 'use client'
 
-// Modal de peso — para productos vendidos por kg: se digita el peso
-// (acepta coma o punto) y se ve el valor calculado al precio por kilo.
+// Modal de peso — para productos vendidos por kg: teclado numérico tipo
+// calculadora (solo dígitos, coma decimal y borrar) con el valor calculado
+// en vivo al precio por kilo. También acepta el teclado físico.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { fmtQty, parseQty } from '../ui'
 
-const QUICK = [0.25, 0.5, 1, 2]
+const KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', ',', '0', '⌫'] as const
 
 export default function PesoModal() {
   const s = useApp()
   const p = s.pesoProduct
   const existing = p ? s.cart.find((i) => i.productId === p.id) : undefined
   const [raw, setRaw] = useState<string>(existing ? String(existing.qty).replace('.', ',') : '')
+
+  const press = (k: string) => {
+    setRaw((r) => {
+      if (k === '⌫') return r.slice(0, -1)
+      if (k === ',') {
+        if (r.includes(',')) return r
+        return r === '' ? '0,' : r + ','
+      }
+      // máximo 3 decimales (gramos)
+      const dec = r.split(',')[1]
+      if (dec !== undefined && dec.length >= 3) return r
+      if (r.replace(',', '').length >= 6) return r
+      return r + k
+    })
+  }
+
+  // Teclado físico: dígitos, coma/punto y Backspace
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (/^[0-9]$/.test(e.key)) press(e.key)
+      else if (e.key === ',' || e.key === '.') press(',')
+      else if (e.key === 'Backspace') press('⌫')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   if (!p) return null
 
@@ -29,47 +56,55 @@ export default function PesoModal() {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 400, background: 'var(--surface)', borderRadius: 18, padding: 20, boxShadow: '0 30px 60px -30px rgba(15,25,23,.5)', animation: 'vpop .25s ease' }}
+        style={{ width: '100%', maxWidth: 360, background: 'var(--surface)', borderRadius: 18, padding: 20, boxShadow: '0 30px 60px -30px rgba(15,25,23,.5)', animation: 'vpop .25s ease' }}
       >
         <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, letterSpacing: '-.3px' }}>⚖ {p.name}</h2>
         <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--muted)' }}>
           {s.fmt(p.price)} por kilo
         </div>
 
-        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: '16px 0 6px' }}>
-          Peso en kilogramos
-        </label>
-        <input
-          value={raw}
-          onChange={(e) => setRaw(e.target.value)}
-          inputMode="decimal"
-          autoFocus
-          placeholder="0,750"
-          style={{ width: '100%', height: 52, padding: '0 14px', border: '1.5px solid var(--border)', borderRadius: 12, background: 'var(--input)', fontSize: 20, fontWeight: 800, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
-        />
+        {/* Pantalla de la calculadora: peso digitado + valor en vivo */}
+        <div style={{ marginTop: 16, background: '#0F172A', borderRadius: 14, padding: '14px 18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <span style={{ fontSize: 12.5, color: '#7EA6A0', fontWeight: 600 }}>Peso</span>
+            <span style={{ fontSize: 30, fontWeight: 800, color: '#fff', fontVariantNumeric: 'tabular-nums', letterSpacing: '-.5px' }}>
+              {raw || '0'}<span style={{ fontSize: 15, color: '#7EA6A0', fontWeight: 700 }}> kg</span>
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 6, borderTop: '1px solid #1E293B', paddingTop: 8 }}>
+            <span style={{ fontSize: 12.5, color: '#7EA6A0', fontWeight: 600 }}>
+              {ok ? `${fmtQty(kg)} kg × ${s.fmt(p.price)}` : 'Valor'}
+            </span>
+            <span style={{ fontSize: 21, fontWeight: 800, color: '#A5B4FC', fontVariantNumeric: 'tabular-nums' }}>
+              {s.fmt(total)}
+            </span>
+          </div>
+        </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          {QUICK.map((q) => (
+        {/* Teclado numérico: solo dígitos, coma y borrar */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 14 }}>
+          {KEYS.map((k) => (
             <button
-              key={q}
-              onClick={() => setRaw(String(q).replace('.', ','))}
-              style={{ flex: 1, height: 40, borderRadius: 10, background: '#EEF0FE', color: '#4338CA', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}
+              key={k}
+              onClick={() => press(k)}
+              style={{
+                height: 52,
+                borderRadius: 12,
+                fontWeight: 800,
+                fontSize: k === '⌫' ? 17 : 19,
+                cursor: 'pointer',
+                transition: 'all .1s',
+                background: k === '⌫' ? '#FDECEC' : 'var(--bg)',
+                color: k === '⌫' ? '#C9433B' : 'var(--text)',
+                fontVariantNumeric: 'tabular-nums',
+              }}
             >
-              {q < 1 ? `${q * 1000} g` : `${q} kg`}
+              {k}
             </button>
           ))}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', background: 'var(--bg)', borderRadius: 12, padding: '12px 16px', marginTop: 14 }}>
-          <span style={{ fontSize: 13.5, color: 'var(--muted)', fontWeight: 600 }}>
-            {ok ? `${fmtQty(kg)} kg × ${s.fmt(p.price)}` : 'Valor'}
-          </span>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#6366F1', fontVariantNumeric: 'tabular-nums' }}>
-            {s.fmt(total)}
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <button onClick={s.closeModal} style={{ flex: 1, height: 48, borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>
             Cancelar
           </button>
