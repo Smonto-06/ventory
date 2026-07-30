@@ -6,6 +6,7 @@
 
 import { useApp } from '../store'
 import { fmtQty } from '../ui'
+import { smartPrint, TicketLine } from '../printer'
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: 'Contado (efectivo)',
@@ -45,6 +46,31 @@ export default function CompraReciboScreen() {
       </span>
     </div>
   )
+
+  const reciboLines = (): TicketLine[] => {
+    const L: TicketLine[] = [
+      { type: 'center', left: 'COMPRA DE MERCANCÍA', bold: true },
+      { type: 'center', left: s.settings?.name ?? '' },
+      { type: 'center', left: dateStr },
+      { type: 'divider' },
+      { type: 'row', left: 'Proveedor', right: p.supplier.name },
+      { type: 'divider' },
+    ]
+    for (const it of p.items) {
+      const q = it.product.unitOfMeasure === 'kg' ? `${fmtQty(it.quantity)}kg` : `${fmtQty(it.quantity)}x`
+      L.push({ type: 'row', left: `${q} ${it.product.name}`, right: s.fmt(it.totalCost) })
+    }
+    L.push({ type: 'divider' })
+    L.push({ type: 'row', left: 'TOTAL', right: s.fmt(p.total), bold: true })
+    L.push({ type: 'row', left: 'Método', right: METHOD_LABELS[p.method] ?? p.method })
+    if (p.method === 'CREDIT') {
+      L.push({ type: 'row', left: 'Abonado', right: s.fmt(p.paidAmount) })
+      L.push({ type: 'row', left: 'Saldo pendiente', right: s.fmt(p.balance), bold: true })
+    }
+    L.push({ type: 'feed' })
+    L.push({ type: 'center', left: `${fmtQty(units)} unidades al inventario` })
+    return L
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--bg)', gap: 16 }}>
@@ -103,7 +129,10 @@ export default function CompraReciboScreen() {
 
       <div data-no-print="true" style={{ display: 'flex', gap: 10 }}>
         <button
-          onClick={() => window.print()}
+          onClick={async () => {
+            const via = await smartPrint(reciboLines())
+            if (via === 'directa') s.toast('Recibo impreso')
+          }}
           className="v-hover-bg"
           style={{ height: 46, padding: '0 18px', borderRadius: 12, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
         >
