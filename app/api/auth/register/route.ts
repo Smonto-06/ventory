@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { randomBytes } from 'crypto'
+import { mailerConfigured, sendVerificationEmail } from '@/lib/mailer'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { TRIAL_DAYS } from '@/lib/plan'
@@ -62,6 +64,11 @@ export async function POST(request: Request) {
     const hashedPassword = await bcrypt.hash(password, 12)
     const slug = await generateUniqueSlug(businessName)
 
+    // Verificación de correo: si el mailer no está configurado, la cuenta
+    // queda verificada de una (no se bloquea el registro por configuración)
+    const needsVerify = mailerConfigured()
+    const verifyToken = needsVerify ? randomBytes(32).toString('hex') : null
+
     // Los negocios nuevos entran en prueba gratis; el super-admin los activa tras el pago.
     // La sucursal por defecto es indispensable: sin ella no se puede abrir caja ni vender.
     const business = await db.business.create({
@@ -79,6 +86,8 @@ export async function POST(request: Request) {
             email: normalizedEmail,
             password: hashedPassword,
             role: 'ADMIN',
+            verifyToken,
+            emailVerified: needsVerify ? null : new Date(),
           },
         },
       },
@@ -87,9 +96,21 @@ export async function POST(request: Request) {
 
     const user = business.users[0]
 
+    if (needsVerify && verifyToken) {
+      const base = process.env.NEXTAUTH_URL ?? ''
+      try {
+        await sendVerificationEmail(user.email, user.name ?? '', `${base}/verify?token=${verifyToken}`)
+      } catch (e) {
+        // Si el envío falla, no se bloquea el registro: se verifica la cuenta
+        console.error('No se pudo enviar verificación:', e)
+        await db.user.update({ where: { id: user.id }, data: { emailVerified: new Date(), verifyToken: null } })
+      }
+    }
+
     return NextResponse.json(
       {
         message: 'Cuenta creada exitosamente',
+        needsVerification: needsVerify,
         user: {
           id: user.id,
           name: user.name,

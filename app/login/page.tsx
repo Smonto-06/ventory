@@ -34,7 +34,11 @@ function LoginContent() {
         callbackUrl,
       })
       if (result?.error) {
-        setError('Email o contraseña incorrectos')
+        // NextAuth entrega el mensaje de authorize en result.error;
+        // "CredentialsSignin" es el genérico cuando no hay mensaje propio
+        setError(
+          result.error === 'CredentialsSignin' ? 'Email o contraseña incorrectos' : result.error,
+        )
       } else {
         router.push(callbackUrl)
         router.refresh()

@@ -47,6 +47,19 @@ export async function sendPasswordResetEmail(to: string, name: string, link: str
   })
 }
 
+/** Enlace de verificación de correo al crear la cuenta */
+export async function sendVerificationEmail(to: string, name: string, link: string): Promise<void> {
+  await transport().sendMail({
+    from: `"Ventory" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: 'Confirma tu correo — Ventory',
+    text:
+      `Hola${name ? ` ${name}` : ''},\n\n` +
+      `¡Bienvenido a Ventory! Confirma tu correo abriendo este enlace:\n\n${link}\n\n` +
+      `Después de confirmar podrás iniciar sesión y empezar tu prueba gratis de 15 días.\n\n— Ventory`,
+  })
+}
+
 export async function sendContactEmail(msg: ContactMessage): Promise<void> {
   const to = process.env.CONTACT_EMAIL || process.env.GMAIL_USER!
   await transport().sendMail({
