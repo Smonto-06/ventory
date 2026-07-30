@@ -37,6 +37,9 @@ export async function GET(request: Request) {
     const q = searchParams.get('q')?.trim()
     const status = searchParams.get('status') ?? 'ACTIVE'
     const categoryId = searchParams.get('categoryId')
+    // Multi-sucursal: el stock que se muestra debe ser el de la sucursal donde
+    // se vende; sin branchId se devuelve el total de todas (vista de negocio).
+    const branchId = searchParams.get('branchId')
 
     const where: Record<string, unknown> = {
       businessId: session.user.businessId,
@@ -66,7 +69,9 @@ export async function GET(request: Request) {
       },
     })
 
-    const result = products.map((p) => ({
+    const result = products.map((p) => {
+      const inv = branchId ? p.inventory.filter((i) => i.branchId === branchId) : p.inventory
+      return {
       id: p.id,
       sku: p.sku,
       name: p.name,
@@ -79,11 +84,12 @@ export async function GET(request: Request) {
       supplier: p.supplier,
       status: p.status,
       category: p.category,
-      stock: p.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0),
-      minStock: p.inventory.length > 0 ? Math.max(...p.inventory.map((i) => Number(i.minStock))) : 0,
+      stock: inv.reduce((sum, i) => sum + Number(i.quantity), 0),
+      minStock: inv.length > 0 ? Math.max(...inv.map((i) => Number(i.minStock))) : 0,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
-    }))
+      }
+    })
 
     return NextResponse.json({ products: result })
   } catch (error) {

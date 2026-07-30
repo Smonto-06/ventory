@@ -332,6 +332,8 @@ export const api = {
   // Catálogo
   products: (q = '', status = 'ACTIVE') =>
     get<{ products: Product[] }>(`/api/products?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
+  productsIn: (branchId?: string) =>
+    get<{ products: Product[] }>(`/api/products${branchId ? `?branchId=${branchId}` : ''}`),
   createBranch: (name: string) => post<{ branch: Branch }>('/api/branches', { name }),
   updateBranch: (id: string, data: { name?: string; isActive?: boolean }) =>
     patch<{ branch: Branch & { isActive: boolean } }>(`/api/branches/${id}`, data),
