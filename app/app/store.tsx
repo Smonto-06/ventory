@@ -33,6 +33,7 @@ import {
   Settings,
   Branch,
   DailyReport,
+  RangeReport,
   AbonoReceipt,
   ShiftStat,
 } from './api'
@@ -358,6 +359,8 @@ export interface AppStore extends AppData {
 
   // reportes
   loadReport: (date: string) => Promise<void>
+  rangeReport: RangeReport | null
+  loadRangeReport: (from: string, to: string) => Promise<void>
 
   refreshCash: () => Promise<void>
   refreshAll: () => Promise<void>
@@ -402,6 +405,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastCierre, setLastCierre] = useState<CierreResult | null>(null)
   const [lastPurchase, setLastPurchase] = useState<Purchase | null>(null)
   const [pesoProduct, setPesoProduct] = useState<Product | null>(null)
+  const [rangeReport, setRangeReport] = useState<RangeReport | null>(null)
 
   const [saleDetId, setSaleDetId] = useState<string | null>(null)
   const [editProdId, setEditProdId] = useState<string | null>(null)
@@ -1366,6 +1370,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patch, toast, onError],
   )
 
+  const loadRangeReport = useCallback(
+    async (from: string, to: string) => {
+      try {
+        const r = await api.rangeReport(from, to)
+        setRangeReport(r)
+      } catch (e) {
+        onError(e)
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
   const loadReport = useCallback(
     async (date: string) => {
       try {
@@ -1511,6 +1528,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setEditUserId,
       saveSettings,
       loadReport,
+      rangeReport,
+      loadRangeReport,
       refreshCash,
       refreshAll,
     }),
@@ -1519,7 +1538,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
       turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
-      pay, amounts, received, lastSale, lastPurchase, pesoProduct, lastAbono, saleDetId, dscId, editProdId, editClientId,
+      pay, amounts, received, lastSale, lastPurchase, pesoProduct, rangeReport, lastAbono, saleDetId, dscId, editProdId, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,
       ncProv, ncItems, ncMethod, ncAbono, fmt,
     ],
