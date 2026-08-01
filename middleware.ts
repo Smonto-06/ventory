@@ -28,6 +28,7 @@ export default withAuth(
           pathname.startsWith('/verify') ||
           pathname.startsWith('/terminos') ||
           pathname.startsWith('/privacidad') ||
+          pathname.startsWith('/ayuda') ||
           pathname.startsWith('/api/auth') ||
           pathname.startsWith('/api/register') ||
           pathname.startsWith('/api/health') ||
@@ -45,6 +46,6 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|.*\\.png$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|.*\\.(?:png|webp|jpg|jpeg|svg|gif|ico)$).*)',
   ],
 }

@@ -3,8 +3,179 @@
 // Panel Principal — réplica 1:1 del prototipo (sección sPanel):
 // tarjetas de estadísticas, donut por método, línea 7 días, últimas ventas y top productos.
 
+import { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { tileFor, methodLabel } from '../ui'
+
+const GUIA_KEY = 'ventory-guia-oculta'
+
+// Guía de primeros pasos: aparece hasta que el negocio completa los 4 pasos
+// (o hasta que el usuario la oculta). El progreso sale de los datos reales.
+function GuiaInicio() {
+  const s = useApp()
+  const [hidden, setHidden] = useState(true)
+
+  useEffect(() => {
+    try {
+      setHidden(localStorage.getItem(GUIA_KEY) === '1')
+    } catch {
+      setHidden(false)
+    }
+  }, [])
+
+  const pasos = [
+    {
+      id: 'productos',
+      done: s.products.length > 0,
+      title: 'Carga tus productos',
+      desc: 'Créalos uno a uno o impórtalos desde un archivo de Excel.',
+      cta: 'Ir a Productos',
+      action: () => s.go('productos'),
+    },
+    {
+      id: 'factura',
+      done: !!(s.settings?.taxId || s.settings?.phone || s.settings?.address),
+      title: 'Completa los datos de tu factura',
+      desc: 'NIT, teléfono y dirección para que salgan impresos en los tickets.',
+      cta: 'Abrir Ajustes',
+      action: () => s.openModal('ajustes'),
+      adminOnly: true,
+    },
+    {
+      id: 'caja',
+      done: s.turnoAbierto || s.shifts.length > 0,
+      title: 'Abre la caja del día',
+      desc: 'Registra con cuánto dinero empiezas para poder cuadrar al cerrar.',
+      cta: 'Abrir caja',
+      action: () => s.openModal('aperturaCaja'),
+    },
+    {
+      id: 'venta',
+      done: s.sales.length > 0,
+      title: 'Haz tu primera venta',
+      desc: 'Busca el producto, cobra y entrega el ticket. El stock baja solo.',
+      cta: 'Ir al Punto de Venta',
+      action: () => s.go('pos'),
+    },
+  ].filter((p) => !p.adminOnly || s.isAdmin)
+
+  const hechos = pasos.filter((p) => p.done).length
+  const completa = hechos === pasos.length
+
+  if (hidden || completa) return null
+
+  const ocultar = () => {
+    try {
+      localStorage.setItem(GUIA_KEY, '1')
+    } catch {
+      /* almacenamiento no disponible */
+    }
+    setHidden(true)
+  }
+
+  const siguiente = pasos.find((p) => !p.done)
+
+  return (
+    <div
+      style={{
+        background: 'var(--surface)',
+        border: '1.5px solid #DDE2FB',
+        borderRadius: 16,
+        padding: 'clamp(16px,2.4vw,22px)',
+        boxShadow: '0 1px 2px rgba(15,23,42,.03),0 10px 26px -20px rgba(15,23,42,.14)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 16.5, letterSpacing: '-.3px' }}>Primeros pasos con Ventory</div>
+          <div style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 3 }}>
+            {hechos} de {pasos.length} completados
+            {siguiente ? ` · sigue: ${siguiente.title.toLowerCase()}` : ''}
+          </div>
+        </div>
+        <button
+          onClick={ocultar}
+          className="v-hover-underline"
+          style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600, cursor: 'pointer', background: 'none', whiteSpace: 'nowrap' }}
+        >
+          Ocultar guía
+        </button>
+      </div>
+
+      <div style={{ height: 7, borderRadius: 99, background: '#EEF2F7', marginTop: 14, overflow: 'hidden' }}>
+        <div
+          style={{
+            width: `${(hechos / pasos.length) * 100}%`,
+            height: '100%',
+            borderRadius: 99,
+            background: 'linear-gradient(90deg,#10B981,#6366F1)',
+            transition: 'width .3s ease',
+          }}
+        />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 12, marginTop: 16 }}>
+        {pasos.map((p, i) => (
+          <div
+            key={p.id}
+            style={{
+              border: `1px solid ${p.done ? '#D1FAE5' : 'var(--border)'}`,
+              background: p.done ? '#F3FCF8' : 'transparent',
+              borderRadius: 13,
+              padding: 14,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  flex: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  background: p.done ? '#10B981' : '#EEF0FE',
+                  color: p.done ? '#fff' : '#6366F1',
+                }}
+              >
+                {p.done ? '✓' : i + 1}
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-.2px' }}>{p.title}</span>
+            </div>
+            <div style={{ fontSize: 12.8, color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{p.desc}</div>
+            {!p.done && (
+              <button
+                onClick={p.action}
+                className="v-hover-underline"
+                style={{ alignSelf: 'flex-start', fontSize: 13, fontWeight: 700, color: '#6366F1', cursor: 'pointer', background: 'none' }}
+              >
+                {p.cta} →
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--muted)' }}>
+        ¿Dudas?{' '}
+        <a href="/ayuda" target="_blank" rel="noopener" style={{ color: '#6366F1', fontWeight: 700, textDecoration: 'none' }}>
+          Visita el centro de ayuda
+        </a>{' '}
+        o escríbenos a{' '}
+        <a href="mailto:ventorypos@gmail.com" style={{ color: '#6366F1', fontWeight: 700, textDecoration: 'none' }}>
+          ventorypos@gmail.com
+        </a>
+        .
+      </div>
+    </div>
+  )
+}
 
 export default function PanelScreen() {
   const s = useApp()
@@ -180,6 +351,8 @@ export default function PanelScreen() {
           </div>
         </div>
       </div>
+
+      <GuiaInicio />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(215px,1fr))', gap: 14 }}>
         {stats.map((st) => (

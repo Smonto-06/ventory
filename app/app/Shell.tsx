@@ -134,6 +134,14 @@ function NavIcon({ id }: { id: string }) {
           <circle cx="10" cy="11.5" r="1.7" fill="currentColor" />
         </svg>
       )
+    case 'ayuda':
+      return (
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M6.3 6.2a1.75 1.75 0 1 1 2.3 1.7c-.4.15-.6.5-.6.9v.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <circle cx="8" cy="11.4" r=".85" fill="currentColor" />
+        </svg>
+      )
     default:
       return null
   }
@@ -171,6 +179,7 @@ function Sidebar({ narrow }: { narrow: boolean }) {
     { id: 'clientes', label: 'Clientes', screen: 'clientes' },
     { id: 'cierre', label: 'Cerrar caja', onClick: () => s.go('cierre') },
     { id: 'ajustes', label: 'Ajustes', adminOnly: true, onClick: () => s.openModal('ajustes') },
+    { id: 'ayuda', label: 'Ayuda', onClick: () => window.open('/ayuda', '_blank', 'noopener') },
   ]
 
   const isActive = (item: (typeof items)[number]) => {

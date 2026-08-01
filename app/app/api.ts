@@ -291,6 +291,8 @@ export interface DailyReport {
   cashSummary: {
     openingBalance: number
     totalSales: number
+    /** Parte en efectivo de las ventas del turno — lo único que suma al cajón */
+    cashSales: number
     incomes: number
     expenses: number
     expectedBalance: number
