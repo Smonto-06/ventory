@@ -258,7 +258,11 @@ export default function ReportesScreen() {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14.5, padding: '8px 0' }}>
             <span style={{ color: 'var(--muted)' }}>Ventas del día</span>
-            <span style={{ color: '#6366F1', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>+ {s.fmt(cash?.totalSales ?? 0)}</span>
+            <span style={{ color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{s.fmt(cash?.totalSales ?? 0)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14.5, padding: '8px 0' }}>
+            <span style={{ color: 'var(--muted)' }}>Ventas en efectivo</span>
+            <span style={{ color: '#6366F1', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>+ {s.fmt(cash?.cashSales ?? 0)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14.5, padding: '8px 0' }}>
             <span style={{ color: 'var(--muted)' }}>Ingresos de caja</span>

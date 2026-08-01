@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { profitReport, expectedBalance } from '@/lib/pos'
+import { profitReport, expectedBalance, cashPortion } from '@/lib/pos'
 import { isAdmin } from '@/lib/api-helpers'
 import type { SessionUser } from '@/lib/get-session'
 
@@ -54,7 +54,12 @@ export async function GET(req: NextRequest) {
 
     db.cashSession.findFirst({
       where: { branch: { businessId }, status: 'OPEN' },
-      include: { sales: { where: { status: 'COMPLETED' }, select: { total: true } } },
+      include: {
+        sales: {
+          where: { status: 'COMPLETED' },
+          select: { total: true, paymentMethod: true, payments: { select: { method: true, amount: true } } },
+        },
+      },
       orderBy: { openedAt: 'desc' },
     }),
   ])
@@ -128,8 +133,10 @@ export async function GET(req: NextRequest) {
   const profit = profitReport(totalSales, costOfGoods, expenses)
 
   const openingBalance = activeCashSession ? Number(activeCashSession.openingBalance) : 0
-  const shiftSales = activeCashSession
-    ? activeCashSession.sales.reduce((sum, s) => sum + Number(s.total), 0)
+  // Solo el efectivo entra al cajón: el esperado debe coincidir con el que
+  // muestran la pantalla de cierre y /api/cash-registers/current
+  const shiftCashSales = activeCashSession
+    ? activeCashSession.sales.reduce((sum, s) => sum + cashPortion({ ...s, total: Number(s.total) }), 0)
     : 0
 
   return NextResponse.json({
@@ -157,8 +164,9 @@ export async function GET(req: NextRequest) {
       totalSales,
       incomes,
       expenses,
+      cashSales: shiftCashSales,
       expectedBalance: activeCashSession
-        ? expectedBalance(openingBalance, shiftSales, incomes, expenses)
+        ? expectedBalance(openingBalance, shiftCashSales, incomes, expenses)
         : 0,
       transactionCount,
     },
