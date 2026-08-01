@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useApp } from '../store'
 import { api } from '../api'
 import { Modal, ModalTitle } from '../ui'
+import { Icono } from '@/components/Icono'
 
 interface ParsedRow {
   name: string
@@ -201,9 +202,10 @@ export default function ImportarModal() {
         <button
           onClick={downloadTemplate}
           className="v-hover-bg"
-          style={{ height: 44, padding: '0 16px', borderRadius: 11, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}
+          style={{ height: 44, padding: '0 16px', borderRadius: 11, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
         >
-          ⬇ Descargar plantilla
+          <Icono n="descarga" tam={15} />
+          Descargar plantilla
         </button>
         <label
           style={{ height: 44, padding: '0 16px', borderRadius: 11, background: '#EEF0FE', color: '#4338CA', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}

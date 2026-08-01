@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { useApp } from '../store'
 import { tileFor, VLogo, fmtQty } from '../ui'
+import { Icono } from '@/components/Icono'
 import { useWindowWidth } from '../Shell'
 
 function CartItems() {
@@ -286,9 +287,10 @@ export default function PosScreen() {
             <button
               onClick={() => s.openModal('scanner')}
               title="Escanear con la cámara"
-              style={{ width: 52, height: 52, flex: 'none', borderRadius: 14, background: '#EEF0FE', color: '#4338CA', fontSize: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              aria-label="Escanear con la cámara"
+              style={{ width: 52, height: 52, flex: 'none', borderRadius: 14, background: '#EEF0FE', color: '#4338CA', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              📷
+              <Icono n="codigo" tam={22} />
             </button>
           </div>
 

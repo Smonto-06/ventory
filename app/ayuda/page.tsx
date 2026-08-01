@@ -1,22 +1,31 @@
 import Link from 'next/link'
-import Image from 'next/image'
+import { Icono, type NombreIcono } from '@/components/Icono'
+import { Encabezado, Pie } from '@/components/publico/Cascaron'
 import '../app/ventory.css'
+import '../publico.css'
 
 export const metadata = {
   title: 'Centro de ayuda — Ventory',
-  description: 'Guías rápidas y preguntas frecuentes sobre Ventory: ventas, inventario, caja, clientes y facturación.',
+  description:
+    'Guías y preguntas frecuentes sobre Ventory: primeros pasos, ventas y facturación, inventario, caja, cuenta y uso sin internet.',
 }
 
+const CORREO = 'ventorypos@gmail.com'
+
 interface Tema {
+  id: string
   titulo: string
-  icono: string
+  resumen: string
+  icono: NombreIcono
   preguntas: Array<{ p: string; r: React.ReactNode }>
 }
 
 const TEMAS: Tema[] = [
   {
+    id: 'primeros-pasos',
     titulo: 'Primeros pasos',
-    icono: '🚀',
+    resumen: 'Cómo dejar el sistema listo el primer día.',
+    icono: 'rayo',
     preguntas: [
       {
         p: '¿Cómo empiezo a usar Ventory?',
@@ -25,7 +34,7 @@ const TEMAS: Tema[] = [
             Son tres pasos: <b>1)</b> crea tus productos (uno a uno desde Productos → Nuevo producto,
             o todos juntos con <b>Importar</b> desde un archivo de Excel); <b>2)</b> abre la caja con el
             efectivo con el que arrancas el día; <b>3)</b> entra a Punto de Venta y cobra tu primera
-            venta. El sistema te va guiando desde el panel principal.
+            venta. La guía de primeros pasos del panel principal te va marcando lo que falta.
           </>
         ),
       },
@@ -52,8 +61,10 @@ const TEMAS: Tema[] = [
     ],
   },
   {
+    id: 'ventas',
     titulo: 'Ventas y facturación',
-    icono: '🛒',
+    resumen: 'Cobro, métodos de pago, tickets e impresión.',
+    icono: 'carrito',
     preguntas: [
       {
         p: '¿Cómo cobro con varios métodos de pago a la vez?',
@@ -80,7 +91,7 @@ const TEMAS: Tema[] = [
         r: (
           <>
             Sí. Conecta cualquier lector USB y escanea: el producto entra solo al carrito. Desde el celular
-            puedes usar el botón <b>📷</b> junto al buscador para escanear con la cámara.
+            puedes usar el botón de <b>cámara</b> junto al buscador para escanear sin lector.
           </>
         ),
       },
@@ -116,8 +127,10 @@ const TEMAS: Tema[] = [
     ],
   },
   {
+    id: 'inventario',
     titulo: 'Inventario',
-    icono: '📦',
+    resumen: 'Stock, kardex, ajustes y sucursales.',
+    icono: 'caja',
     preguntas: [
       {
         p: '¿El inventario se actualiza solo?',
@@ -160,8 +173,10 @@ const TEMAS: Tema[] = [
     ],
   },
   {
+    id: 'caja',
     titulo: 'Caja y dinero',
-    icono: '🧾',
+    resumen: 'Apertura, cierre, diferencias y fiados.',
+    icono: 'recibo',
     preguntas: [
       {
         p: '¿Qué significa el "saldo esperado" del cierre?',
@@ -204,8 +219,10 @@ const TEMAS: Tema[] = [
     ],
   },
   {
+    id: 'cuenta',
     titulo: 'Cuenta y seguridad',
-    icono: '🔒',
+    resumen: 'Usuarios, permisos, contraseñas y respaldos.',
+    icono: 'candado',
     preguntas: [
       {
         p: '¿Cómo creo usuarios para mis empleados?',
@@ -248,8 +265,10 @@ const TEMAS: Tema[] = [
     ],
   },
   {
+    id: 'sin-internet',
     titulo: 'Sin internet',
-    icono: '📶',
+    resumen: 'Qué sigue funcionando cuando se cae la red.',
+    icono: 'senal',
     preguntas: [
       {
         p: '¿Qué pasa si se cae el internet?',
@@ -274,150 +293,310 @@ const TEMAS: Tema[] = [
   },
 ]
 
-const card: React.CSSProperties = {
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 16,
-  padding: 'clamp(20px,3vw,28px)',
-}
+const TOTAL_PREGUNTAS = TEMAS.reduce((n, t) => n + t.preguntas.length, 0)
+
+const contenedor: React.CSSProperties = { maxWidth: 1140, margin: '0 auto', width: '100%' }
 
 export default function AyudaPage() {
   return (
-    <div className="vapp" data-theme="light">
-      <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
-        {/* Encabezado */}
-        <header
+    <div className="vapp v-pub" data-theme="light">
+      <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)', overflowX: 'hidden' }}>
+        <Encabezado />
+
+        {/* ══ Portada del centro de ayuda ══ */}
+        <section
+          className="v-pub-reticula"
           style={{
-            height: 66,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            padding: '0 clamp(16px,5vw,40px)',
+            padding: 'clamp(40px,6vw,72px) clamp(18px,5vw,36px) clamp(34px,5vw,54px)',
             borderBottom: '1px solid var(--border)',
-            background: 'var(--surface)',
+            background:
+              'radial-gradient(900px 420px at 22% -140px, rgba(99,102,241,.14) 0%, rgba(246,248,251,0) 72%)',
           }}
         >
-          <Link href="/">
-            <Image src="/brand/ventory-logo.png" alt="Ventory" width={130} height={34} />
-          </Link>
-          <div style={{ flex: 1 }} />
-          <Link href="/login" style={{ fontWeight: 700, fontSize: 14.5, color: '#6366F1', textDecoration: 'none' }}>
-            Entrar al sistema →
-          </Link>
-        </header>
+          <div style={contenedor}>
+            <nav
+              aria-label="Ruta de navegación"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.4, color: 'var(--muted)' }}
+            >
+              <Link href="/" className="v-pub-nav">
+                Inicio
+              </Link>
+              <span aria-hidden="true">/</span>
+              <span style={{ color: 'var(--text)', fontWeight: 600 }}>Centro de ayuda</span>
+            </nav>
 
-        <div style={{ maxWidth: 860, margin: '0 auto', padding: 'clamp(30px,5vw,56px) clamp(20px,5vw,32px) 70px' }}>
-          <h1 style={{ margin: 0, fontSize: 'clamp(28px,5vw,40px)', fontWeight: 800, letterSpacing: '-1px' }}>
-            Centro de ayuda
-          </h1>
-          <p style={{ fontSize: 16.5, color: 'var(--muted)', lineHeight: 1.7, marginTop: 12 }}>
-            Respuestas cortas a las preguntas más comunes. Si no encuentras lo que buscas, escríbenos a{' '}
-            <a href="mailto:ventorypos@gmail.com" style={{ color: '#6366F1', fontWeight: 700 }}>
-              ventorypos@gmail.com
-            </a>{' '}
-            y te respondemos.
-          </p>
+            <h1
+              style={{
+                margin: '18px 0 0',
+                fontSize: 'clamp(30px,4.6vw,46px)',
+                fontWeight: 700,
+                letterSpacing: '-1.5px',
+                lineHeight: 1.1,
+              }}
+            >
+              Centro de ayuda
+            </h1>
+            <p
+              style={{
+                fontSize: 17,
+                color: 'var(--muted)',
+                lineHeight: 1.72,
+                margin: '16px 0 0',
+                maxWidth: 660,
+              }}
+            >
+              {TOTAL_PREGUNTAS} respuestas cortas a lo que más se pregunta, organizadas por tema. Si no
+              encuentras lo que buscas, escríbenos y te respondemos.
+            </p>
 
-          {/* Índice */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '26px 0 8px' }}>
-            {TEMAS.map((t) => (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 26 }}>
               <a
-                key={t.titulo}
-                href={`#${t.titulo.replace(/\s+/g, '-').toLowerCase()}`}
-                className="v-hover-bg"
+                href={`mailto:${CORREO}`}
+                className="v-pub-btn-primario"
                 style={{
+                  height: 48,
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 7,
-                  height: 40,
-                  padding: '0 14px',
-                  borderRadius: 11,
+                  gap: 9,
+                  padding: '0 22px',
+                  borderRadius: 12,
+                  background: 'var(--acento)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  textDecoration: 'none',
+                  boxShadow: '0 14px 30px -18px rgba(79,70,229,.95)',
+                }}
+              >
+                <Icono n="correo" tam={17} />
+                Escríbenos
+              </a>
+              <Link
+                href="/login"
+                className="v-pub-btn-borde"
+                style={{
+                  height: 48,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 9,
+                  padding: '0 20px',
+                  borderRadius: 12,
                   background: 'var(--surface)',
                   border: '1.5px solid var(--border)',
                   color: 'var(--text)',
                   fontWeight: 700,
-                  fontSize: 13.5,
+                  fontSize: 15,
                   textDecoration: 'none',
                 }}
               >
-                <span>{t.icono}</span> {t.titulo}
-              </a>
-            ))}
+                Entrar al sistema
+                <Icono n="flecha" tam={17} />
+              </Link>
+            </div>
           </div>
+        </section>
 
-          {/* Temas */}
-          {TEMAS.map((t) => (
-            <section key={t.titulo} id={t.titulo.replace(/\s+/g, '-').toLowerCase()} style={{ marginTop: 38, scrollMarginTop: 80 }}>
-              <h2 style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-.4px', margin: '0 0 16px' }}>
-                {t.icono} {t.titulo}
-              </h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {t.preguntas.map((q) => (
-                  <details key={q.p} style={card}>
-                    <summary
-                      style={{
-                        cursor: 'pointer',
-                        fontWeight: 700,
-                        fontSize: 15.5,
-                        listStyle: 'none',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        gap: 12,
-                        alignItems: 'center',
-                      }}
-                    >
-                      {q.p}
-                      <span style={{ color: '#6366F1', fontWeight: 800, flex: 'none' }}>+</span>
-                    </summary>
-                    <div style={{ fontSize: 14.8, color: 'var(--muted)', lineHeight: 1.75, marginTop: 12 }}>{q.r}</div>
-                  </details>
-                ))}
-              </div>
-            </section>
-          ))}
-
-          {/* Contacto */}
+        {/* ══ Índice + contenido ══ */}
+        <div style={{ padding: 'clamp(32px,5vw,56px) clamp(18px,5vw,36px) clamp(56px,7vw,84px)' }}>
           <div
+            className="v-pub-columnas"
             style={{
-              ...card,
-              marginTop: 44,
-              textAlign: 'center',
-              background: '#EEF0FE',
-              border: '1px solid #C7D0FB',
+              ...contenedor,
+              display: 'grid',
+              gridTemplateColumns: 'minmax(230px,268px) minmax(0,1fr)',
+              gap: 'clamp(28px,4vw,52px)',
+              alignItems: 'start',
             }}
           >
-            <div style={{ fontSize: 19, fontWeight: 800, color: '#312E81' }}>¿Necesitas ayuda con algo más?</div>
-            <p style={{ fontSize: 15, color: '#4338CA', lineHeight: 1.7, margin: '10px 0 18px' }}>
-              Escríbenos y te respondemos. Si eres cliente, también puedes usar el botón{' '}
-              <b>Contáctanos</b> dentro del sistema — así sabemos de qué negocio nos escribes.
-            </p>
-            <a
-              href="mailto:ventorypos@gmail.com"
-              className="v-hover-primary"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                height: 50,
-                padding: '0 26px',
-                borderRadius: 13,
-                background: '#6366F1',
-                color: '#fff',
-                fontWeight: 800,
-                fontSize: 15,
-                textDecoration: 'none',
-                boxShadow: '0 12px 26px -14px #6366F1',
-              }}
-            >
-              ventorypos@gmail.com
-            </a>
-          </div>
+            {/* Índice fijo (se oculta en pantallas angostas) */}
+            <aside className="v-pub-lateral" style={{ position: 'sticky', top: 92 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '1.2px',
+                  textTransform: 'uppercase',
+                  color: 'var(--muted)',
+                  padding: '0 12px 12px',
+                }}
+              >
+                Temas
+              </div>
+              <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {TEMAS.map((t) => (
+                  <a
+                    key={t.id}
+                    href={`#${t.id}`}
+                    className="v-pub-indice"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 11,
+                      padding: '11px 12px',
+                      borderRadius: 11,
+                      color: 'var(--text)',
+                      fontSize: 14.4,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Icono n={t.icono} tam={18} />
+                    <span style={{ flex: 1 }}>{t.titulo}</span>
+                    <span style={{ fontSize: 12.5, color: 'var(--muted)', fontWeight: 600 }}>
+                      {t.preguntas.length}
+                    </span>
+                  </a>
+                ))}
+              </nav>
 
-          <div style={{ marginTop: 34, display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 14, color: 'var(--muted)' }}>
-            <Link href="/" style={{ color: 'var(--muted)' }}>← Inicio</Link>
-            <Link href="/terminos" style={{ color: 'var(--muted)' }}>Términos de servicio</Link>
-            <Link href="/privacidad" style={{ color: 'var(--muted)' }}>Tratamiento de datos</Link>
+              <div
+                style={{
+                  marginTop: 22,
+                  padding: 18,
+                  borderRadius: 14,
+                  background: 'var(--acento-suave)',
+                  border: '1px solid var(--acento-borde)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: 'var(--acento-fuerte)' }}>
+                  <Icono n="ayuda" tam={18} />
+                  <span style={{ fontSize: 14.2, fontWeight: 700 }}>¿No lo encuentras?</span>
+                </div>
+                <p style={{ fontSize: 13.4, color: 'var(--acento-fuerte)', lineHeight: 1.65, margin: '9px 0 0' }}>
+                  Escríbenos a{' '}
+                  <a href={`mailto:${CORREO}`} style={{ color: 'var(--acento)', fontWeight: 700, textDecoration: 'none' }}>
+                    {CORREO}
+                  </a>{' '}
+                  y te respondemos.
+                </p>
+              </div>
+            </aside>
+
+            {/* Temas */}
+            <main style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 'clamp(30px,4vw,44px)' }}>
+              {TEMAS.map((t) => (
+                <section key={t.id} id={t.id} style={{ scrollMarginTop: 88 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                    <span
+                      style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 12,
+                        background: 'var(--acento-suave)',
+                        color: 'var(--acento)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flex: 'none',
+                      }}
+                    >
+                      <Icono n={t.icono} tam={21} />
+                    </span>
+                    <div style={{ minWidth: 0 }}>
+                      <h2 style={{ fontSize: 21.5, fontWeight: 700, letterSpacing: '-.5px', margin: 0 }}>
+                        {t.titulo}
+                      </h2>
+                      <p style={{ fontSize: 14.4, color: 'var(--muted)', margin: '4px 0 0', lineHeight: 1.6 }}>
+                        {t.resumen}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 18,
+                      border: '1px solid var(--border)',
+                      borderRadius: 16,
+                      background: 'var(--surface)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {t.preguntas.map((q, i) => (
+                      <details
+                        key={q.p}
+                        className="v-pub-faq"
+                        style={{
+                          padding: 'clamp(17px,2.2vw,21px) clamp(18px,2.4vw,24px)',
+                          borderTop: i === 0 ? 'none' : '1px solid var(--linea)',
+                        }}
+                      >
+                        <summary
+                          style={{
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: 15.4,
+                            letterSpacing: '-.2px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: 14,
+                            transition: 'color .14s ease',
+                          }}
+                        >
+                          {q.p}
+                          <span className="v-pub-chevron" style={{ color: 'var(--acento)' }}>
+                            <Icono n="chevron" tam={18} />
+                          </span>
+                        </summary>
+                        <div style={{ fontSize: 14.8, color: 'var(--muted)', lineHeight: 1.78, marginTop: 13 }}>
+                          {q.r}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </section>
+              ))}
+
+              {/* Contacto */}
+              <div
+                style={{
+                  border: '1px solid var(--acento-borde)',
+                  background: 'var(--acento-suave)',
+                  borderRadius: 18,
+                  padding: 'clamp(24px,3.4vw,34px)',
+                  display: 'flex',
+                  gap: 20,
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ minWidth: 240, flex: 1 }}>
+                  <div style={{ fontSize: 18.5, fontWeight: 700, color: 'var(--acento-fuerte)', letterSpacing: '-.4px' }}>
+                    ¿Necesitas ayuda con algo más?
+                  </div>
+                  <p style={{ fontSize: 14.6, color: 'var(--acento-fuerte)', lineHeight: 1.72, margin: '9px 0 0' }}>
+                    Escríbenos y te respondemos. Si ya eres cliente, también puedes usar el botón{' '}
+                    <b>Contáctanos</b> dentro del sistema — así sabemos de qué negocio nos escribes.
+                  </p>
+                </div>
+                <a
+                  href={`mailto:${CORREO}`}
+                  className="v-pub-btn-primario"
+                  style={{
+                    height: 50,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 9,
+                    padding: '0 24px',
+                    borderRadius: 13,
+                    background: 'var(--acento)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: 15,
+                    textDecoration: 'none',
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 14px 30px -18px rgba(79,70,229,.95)',
+                  }}
+                >
+                  <Icono n="correo" tam={17} />
+                  {CORREO}
+                </a>
+              </div>
+            </main>
           </div>
         </div>
+
+        <Pie />
       </div>
     </div>
   )

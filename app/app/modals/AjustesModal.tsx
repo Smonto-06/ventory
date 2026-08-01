@@ -6,6 +6,7 @@ import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
 import { Modal, ModalTitle } from '../ui'
 import { connectUsb, connectBt, forgetPrinter, printerPref, testPrint } from '../printer'
+import { Icono } from '@/components/Icono'
 
 const sectionStyle: CSSProperties = {
   fontSize: 11,
@@ -221,7 +222,10 @@ export default function AjustesModal() {
       {printerState ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ flex: 1, fontSize: 13.5, color: 'var(--text)', fontWeight: 600 }}>
-            🖨 Conectada por {printerState === 'usb' ? 'USB' : 'Bluetooth'}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <Icono n="impresora" tam={16} />
+              Conectada por {printerState === 'usb' ? 'USB' : 'Bluetooth'}
+            </span>
           </div>
           <button
             onClick={async () => {
@@ -340,9 +344,10 @@ export default function AjustesModal() {
                       setEditBranchName(b.name)
                     }}
                     title="Renombrar"
-                    style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--bg)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14 }}
+                    aria-label="Renombrar sucursal"
+                    style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--bg)', color: 'var(--muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
-                    ✎
+                    <Icono n="lapiz" tam={15} />
                   </button>
                 </>
               )}
@@ -396,7 +401,8 @@ export default function AjustesModal() {
                 className="v-hover-bg"
                 style={{ ...rowBtnStyle, height: 40, fontSize: 13, textDecoration: 'none', justifyContent: 'center' }}
               >
-                ⬇ {label}
+                <Icono n="descarga" tam={15} />
+                {label}
               </a>
             ))}
           </div>
@@ -406,7 +412,10 @@ export default function AjustesModal() {
             className="v-hover-bg"
             style={{ ...rowBtnStyle, marginTop: 8, textDecoration: 'none' }}
           >
-            Respaldo completo del negocio (JSON) <span style={{ color: '#6366F1' }}>⬇</span>
+            Respaldo completo del negocio (JSON)
+            <span style={{ color: '#6366F1', display: 'inline-flex' }}>
+              <Icono n="descarga" tam={16} />
+            </span>
           </a>
           <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8' }}>
             Los CSV abren en Excel. El respaldo incluye productos, clientes, ventas, compras y caja.
