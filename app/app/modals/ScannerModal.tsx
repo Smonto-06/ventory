@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../store'
+import { Icono } from '@/components/Icono'
 
 interface DetectedBarcode {
   rawValue: string
@@ -102,7 +103,12 @@ export default function ScannerModal() {
         onClick={(e) => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', borderRadius: 18, padding: 20, boxShadow: '0 30px 60px -30px rgba(15,25,23,.6)', animation: 'vpop .25s ease' }}
       >
-        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, letterSpacing: '-.3px' }}>📷 Escanear código</h2>
+        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, letterSpacing: '-.3px', display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ color: '#6366F1' }}>
+            <Icono n="codigo" tam={20} />
+          </span>
+          Escanear código
+        </h2>
 
         {status === 'sin-soporte' && (
           <div style={{ marginTop: 14, background: '#FDF4E5', borderRadius: 12, padding: '14px 16px', fontSize: 14, color: '#8A6B2E', lineHeight: 1.6 }}>

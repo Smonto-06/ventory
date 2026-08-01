@@ -1,0 +1,97 @@
+/* Estilos de las páginas públicas (inicio, centro de ayuda, legales).
+   Se apoyan en el tema de .vapp pero suavizan el borde y añaden los
+   estados de interacción que no existen dentro del sistema. */
+
+.v-pub {
+  --border: #e2e8f0;
+  --linea: #eef2f7;
+  --acento: #4f46e5;
+  --acento-fuerte: #3730a3;
+  --acento-suave: #eef0fe;
+  --acento-borde: #d5d9fb;
+}
+
+/* Navegación superior */
+.v-pub-nav {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.14s ease;
+}
+.v-pub-nav:hover {
+  color: var(--text);
+}
+
+/* Tarjetas que reaccionan al puntero */
+.v-pub-tarjeta {
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+.v-pub-tarjeta:hover {
+  border-color: var(--acento-borde);
+  box-shadow: 0 22px 44px -30px rgba(79, 70, 229, 0.5);
+  transform: translateY(-3px);
+}
+
+/* Botones */
+.v-pub-btn-primario {
+  transition: background 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
+}
+.v-pub-btn-primario:hover {
+  background: var(--acento-fuerte);
+  transform: translateY(-1px);
+}
+.v-pub-btn-borde {
+  transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+.v-pub-btn-borde:hover {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+/* Acordeón de preguntas */
+.v-pub-faq summary {
+  list-style: none;
+}
+.v-pub-faq summary::-webkit-details-marker {
+  display: none;
+}
+.v-pub-faq summary:hover {
+  color: var(--acento);
+}
+.v-pub-chevron {
+  transition: transform 0.2s ease;
+}
+.v-pub-faq[open] .v-pub-chevron {
+  transform: rotate(180deg);
+}
+
+/* Índice lateral del centro de ayuda */
+.v-pub-indice {
+  text-decoration: none;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.v-pub-indice:hover {
+  background: var(--acento-suave);
+  color: var(--acento);
+}
+
+/* Retícula de puntos del encabezado */
+.v-pub-reticula {
+  background-image: radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.075) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+/* En pantallas angostas el índice fijo estorba: se oculta */
+@media (max-width: 900px) {
+  .v-pub-lateral {
+    display: none !important;
+  }
+  .v-pub-columnas {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .v-pub-ocultar-movil {
+    display: none !important;
+  }
+}

@@ -5,6 +5,7 @@
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
 import { catChipStyle, tileFor, fmtQty } from '../ui'
+import { Icono } from '@/components/Icono'
 
 const gridCols = 'minmax(220px,1.8fr) minmax(120px,1fr) 110px 110px 70px 60px 140px'
 
@@ -86,9 +87,10 @@ export default function ProductosScreen() {
             <button
               className="v-hover-bg"
               onClick={() => s.openModal('importar')}
-              style={{ height: 44, padding: '0 16px', borderRadius: 11, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+              style={{ height: 44, padding: '0 16px', borderRadius: 11, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
-              ⬆ Importar
+              <Icono n="subida" tam={15} />
+              Importar
             </button>
           )}
           <button

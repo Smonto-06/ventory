@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { tileFor, methodLabel } from '../ui'
+import { Icono } from '@/components/Icono'
 
 const GUIA_KEY = 'ventory-guia-oculta'
 
@@ -300,7 +301,9 @@ export default function PanelScreen() {
           onClick={() => s.go('productos')}
           style={{ display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', background: '#FDF4E5', border: '1.5px solid #F3DCB0', borderRadius: 14, padding: '12px 18px', cursor: 'pointer' }}
         >
-          <span style={{ fontSize: 20 }}>⚠️</span>
+          <span style={{ color: '#B4740A', display: 'flex' }}>
+            <Icono n="alerta" tam={20} />
+          </span>
           <span style={{ flex: 1, fontSize: 13.5, color: '#8A6B2E', lineHeight: 1.5 }}>
             <b>
               {lowStock.length} producto{lowStock.length === 1 ? '' : 's'} con stock bajo:

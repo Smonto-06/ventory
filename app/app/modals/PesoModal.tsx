@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { fmtQty, parseQty } from '../ui'
+import { Icono } from '@/components/Icono'
 
 const KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', ',', '0', '⌫'] as const
 
@@ -58,7 +59,12 @@ export default function PesoModal() {
         onClick={(e) => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 360, background: 'var(--surface)', borderRadius: 18, padding: 20, boxShadow: '0 30px 60px -30px rgba(15,25,23,.5)', animation: 'vpop .25s ease' }}
       >
-        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, letterSpacing: '-.3px' }}>⚖ {p.name}</h2>
+        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, letterSpacing: '-.3px', display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ color: '#6366F1' }}>
+            <Icono n="balanza" tam={20} />
+          </span>
+          {p.name}
+        </h2>
         <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--muted)' }}>
           {s.fmt(p.price)} por kilo
         </div>
