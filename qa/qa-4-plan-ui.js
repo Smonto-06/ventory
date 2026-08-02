@@ -124,6 +124,35 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE } = requir
 
   check('interfaz', 'ningún error de JavaScript durante el recorrido', errores.length === 0, errores.slice(0, 2).join(' | '))
 
+  // ── PANTALLA COMPLETA (terminales táctiles sin teclado) ──
+  // el recorrido termina en "Cerrar caja", que es a pantalla completa y no
+  // tiene menú lateral: hay que volver al panel antes de seguir
+  await page.goto(BASE + '/app')
+  await page.waitForTimeout(2500)
+  if (await page.locator('text=Omitir por ahora').count()) {
+    await page.locator('text=Omitir por ahora').first().click()
+    await page.waitForTimeout(500)
+  }
+  // el menú lateral se revisa desde el panel: el punto de venta es a
+  // pantalla completa y no lo muestra
+  check('pantalla', 'el menú lateral ofrece pantalla completa', (await page.locator('nav button', { hasText: 'Pantalla completa' }).count()) > 0)
+  await page.locator('nav button', { hasText: 'Punto de Venta' }).first().click()
+  await page.waitForTimeout(1500)
+  const btnFull = page.locator('button[aria-label="Pantalla completa"]')
+  check('pantalla', 'el punto de venta ofrece el botón de pantalla completa', (await btnFull.count()) > 0)
+  if (await btnFull.count()) {
+    await btnFull.first().click()
+    await page.waitForTimeout(700)
+    check('pantalla', 'entra en pantalla completa', await page.evaluate(() => !!document.fullscreenElement))
+    const btnSalir = page.locator('button[aria-label="Salir de pantalla completa"]')
+    check('pantalla', 'el botón cambia a "salir"', (await btnSalir.count()) > 0)
+    if (await btnSalir.count()) {
+      await btnSalir.first().click()
+      await page.waitForTimeout(700)
+      check('pantalla', 'sale de pantalla completa', !(await page.evaluate(() => !!document.fullscreenElement)))
+    }
+  }
+
   await browser.close()
   process.exit(summary() > 0 ? 1 : 0)
 })().catch(e => { console.error('ERROR EN LA PRUEBA:', e.message); process.exit(2) })

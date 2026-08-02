@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { useApp } from '../store'
 import { tileFor, VLogo, fmtQty } from '../ui'
 import { Icono } from '@/components/Icono'
+import { BotonPantallaCompleta } from '../Pantalla'
 import { useWindowWidth } from '../Shell'
 
 function CartItems() {
@@ -256,6 +257,7 @@ export default function PosScreen() {
               </div>
             )}
           </div>
+          <BotonPantallaCompleta />
           <button
             onClick={() => s.go('cierre')}
             title="Cerrar caja"

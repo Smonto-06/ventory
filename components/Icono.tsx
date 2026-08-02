@@ -34,6 +34,8 @@ export type NombreIcono =
   | 'subida'
   | 'lapiz'
   | 'alerta'
+  | 'expandir'
+  | 'contraer'
 
 const TRAZOS: Record<NombreIcono, ReactNode> = {
   carrito: (
@@ -210,6 +212,22 @@ const TRAZOS: Record<NombreIcono, ReactNode> = {
       <path d="M10.6 3.7 2.5 17.6a1.6 1.6 0 0 0 1.4 2.4h16.2a1.6 1.6 0 0 0 1.4-2.4L13.4 3.7a1.6 1.6 0 0 0-2.8 0Z" />
       <path d="M12 9.3v4.2" />
       <circle cx="12" cy="16.8" r="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  expandir: (
+    <>
+      <path d="M9 3.4H4.8a1.4 1.4 0 0 0-1.4 1.4V9" />
+      <path d="M15 3.4h4.2a1.4 1.4 0 0 1 1.4 1.4V9" />
+      <path d="M20.6 15v4.2a1.4 1.4 0 0 1-1.4 1.4H15" />
+      <path d="M9 20.6H4.8a1.4 1.4 0 0 1-1.4-1.4V15" />
+    </>
+  ),
+  contraer: (
+    <>
+      <path d="M3.4 9h4.2A1.4 1.4 0 0 0 9 7.6V3.4" />
+      <path d="M20.6 9h-4.2A1.4 1.4 0 0 1 15 7.6V3.4" />
+      <path d="M15 20.6v-4.2a1.4 1.4 0 0 1 1.4-1.4h4.2" />
+      <path d="M9 20.6v-4.2A1.4 1.4 0 0 0 7.6 15H3.4" />
     </>
   ),
 }
