@@ -34,8 +34,45 @@ async function registerAndLogin(browser, { businessName, name, email, password }
   await inputs.nth(4).fill(password)
   await page.locator('input[type=checkbox]').check()
   await page.locator('button[type=submit]').click()
-  await page.waitForURL('**/login**', { timeout: 20000 })
+
+  // Si el servidor tiene correo configurado, el registro pide verificar la
+  // cuenta antes de entrar. En las pruebas el correo va a un buzón local: se
+  // saca el enlace de ahí y se verifica, igual que haría una persona.
+  try {
+    await page.waitForURL('**/login**', { timeout: 12000 })
+  } catch {
+    const enlace = await enlaceDeVerificacion(email)
+    if (!enlace) throw new Error('El registro pidió verificar el correo y no se encontró el enlace')
+    await page.goto(enlace)
+    await page.waitForTimeout(1200)
+  }
   return loginExisting(ctx, page, email, password)
+}
+
+/** Busca en el buzón local el enlace de verificación del correo indicado */
+async function enlaceDeVerificacion(email) {
+  const buzon = process.env.VENTORY_BUZON
+  if (!buzon) return null
+  const fs = require('fs')
+  for (let intento = 0; intento < 12; intento++) {
+    await new Promise((r) => setTimeout(r, 500))
+    if (!fs.existsSync(buzon)) continue
+    const correos = fs
+      .readFileSync(buzon, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l).cuerpo)
+      .reverse()
+    for (const crudo of correos) {
+      const texto = crudo
+        .replace(/=\r\n/g, '')
+        .replace(/=([0-9A-F]{2})/g, (_, h) => Buffer.from(h, 'hex').toString('utf8'))
+      if (!texto.includes(email)) continue
+      const m = texto.match(/https?:\/\/[^\s"'<>]*\/verify\?token=[A-Za-z0-9]+/)
+      if (m) return m[0]
+    }
+  }
+  return null
 }
 
 async function loginExisting(ctx, page, email, password) {
@@ -66,4 +103,4 @@ async function loginOnly(browser, email, password) {
   return loginExisting(ctx, page, email, password)
 }
 
-module.exports = { BASE, check, summary, newBrowser, registerAndLogin, loginOnly, results }
+module.exports = { BASE, check, summary, newBrowser, registerAndLogin, loginOnly, enlaceDeVerificacion, results }

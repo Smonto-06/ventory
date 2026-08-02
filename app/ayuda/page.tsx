@@ -49,6 +49,16 @@ const TEMAS: Tema[] = [
         ),
       },
       {
+        p: 'Uso una pantalla táctil sin teclado, ¿cómo quito la barra del navegador?',
+        r: (
+          <>
+            Con el botón de <b>pantalla completa</b>: está en la barra superior del punto de venta y
+            también en el menú lateral. Como en un POS táctil no hay teclado para pulsar F11, ese botón
+            hace lo mismo con un toque. Vuelve a tocarlo para salir.
+          </>
+        ),
+      },
+      {
         p: '¿Necesito instalar algo?',
         r: (
           <>
@@ -83,6 +93,29 @@ const TEMAS: Tema[] = [
             Al crear el producto elige <b>Se vende por: Peso (kg)</b> y pon el <b>precio por kilo</b>. Al
             venderlo se abre un teclado para digitar el peso (por ejemplo 0,750) y el sistema calcula el
             valor. El inventario también se descuenta en kilos.
+          </>
+        ),
+      },
+      {
+        p: 'Vendo ropa o calzado, ¿cómo manejo tallas y colores?',
+        r: (
+          <>
+            Al crear el producto marca <b>&quot;Tiene variantes&quot;</b> y define las opciones (por ejemplo
+            Talla: S, M, L y Color: Azul, Negro). El sistema arma todas las combinaciones y cada una
+            queda con <b>su propio inventario, precio, SKU y código de barras</b>. En el punto de venta
+            aparece una sola tarjeta del producto: al tocarla eliges la talla y el color, y ves cuántas
+            unidades quedan de cada una.
+          </>
+        ),
+      },
+      {
+        p: 'Ya tenía un producto creado, ¿puedo agregarle variantes después?',
+        r: (
+          <>
+            Sí. Entra a <b>Productos → Editar</b> en ese producto y agrega las combinaciones. El stock
+            que ya tenía se traslada a la primera variante, para que no se pierda ni se duplique
+            mercancía. De ahí en adelante el producto pasa a ser el agrupador y lo que se vende son sus
+            variantes.
           </>
         ),
       },
@@ -185,6 +218,18 @@ const TEMAS: Tema[] = [
             Es el efectivo que debería haber en el cajón: <b>apertura + ventas en efectivo + ingresos −
             gastos</b>. Las ventas con tarjeta, transferencia o a crédito no entran ahí porque ese dinero
             no está en la caja — pero sí aparecen en el informe del turno.
+          </>
+        ),
+      },
+      {
+        p: '¿Puedo recibir un resumen del día sin entrar al sistema?',
+        r: (
+          <>
+            Sí. En <b>Ajustes → Notificaciones</b> activa <b>&quot;Resumen del día por correo&quot;</b> y cada
+            noche recibes las ventas del día, el desglose por método de pago, la utilidad, el cierre de
+            caja con su diferencia, las compras y los abonos. Si además dejas encendido{' '}
+            <b>&quot;Avisar qué hay que reponer&quot;</b>, el mismo correo trae la lista de lo agotado y lo
+            que está por acabarse. Puedes elegir a qué correo llega y enviarte una prueba de una vez.
           </>
         ),
       },

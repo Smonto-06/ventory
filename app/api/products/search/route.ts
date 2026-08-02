@@ -21,11 +21,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ products: [] })
     }
 
+    // hasVariants: los productos "padre" agrupan variantes pero no se venden
+    // ni tienen stock, así que nunca deben salir en una búsqueda de cobro.
     const where = barcode
-      ? { barcode, businessId: session.user.businessId, status: 'ACTIVE' as const }
+      ? { barcode, businessId: session.user.businessId, status: 'ACTIVE' as const, hasVariants: false }
       : {
           businessId: session.user.businessId,
           status: 'ACTIVE' as const,
+          hasVariants: false,
           OR: [
             { name: { contains: q!, mode: 'insensitive' as const } },
             { sku: { contains: q!, mode: 'insensitive' as const } },

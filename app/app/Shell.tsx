@@ -5,6 +5,8 @@
 
 import { useEffect, useState } from 'react'
 import { useApp, Screen } from './store'
+import { usePantallaCompleta } from './Pantalla'
+import { Icono } from '@/components/Icono'
 import { VLogo } from './ui'
 import Modals from './Modals'
 
@@ -134,6 +136,10 @@ function NavIcon({ id }: { id: string }) {
           <circle cx="10" cy="11.5" r="1.7" fill="currentColor" />
         </svg>
       )
+    case 'expandir':
+      return <Icono n="expandir" tam={17} />
+    case 'contraer':
+      return <Icono n="contraer" tam={17} />
     case 'ayuda':
       return (
         <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
@@ -149,6 +155,7 @@ function NavIcon({ id }: { id: string }) {
 
 function Sidebar({ narrow }: { narrow: boolean }) {
   const s = useApp()
+  const pantalla = usePantallaCompleta()
 
   const navBtn = (active: boolean): React.CSSProperties => ({
     display: 'flex',
@@ -181,6 +188,17 @@ function Sidebar({ narrow }: { narrow: boolean }) {
     { id: 'ajustes', label: 'Ajustes', adminOnly: true, onClick: () => s.openModal('ajustes') },
     { id: 'ayuda', label: 'Ayuda', onClick: () => window.open('/ayuda', '_blank', 'noopener') },
   ]
+
+  // Terminales táctiles: sin teclado no se puede pulsar F11, así que la
+  // pantalla completa necesita un botón. Solo aparece si el navegador la
+  // soporta (Safari en iPhone no).
+  if (pantalla.disponible) {
+    items.push({
+      id: pantalla.activa ? 'contraer' : 'expandir',
+      label: pantalla.activa ? 'Salir de pantalla' : 'Pantalla completa',
+      onClick: pantalla.alternar,
+    })
+  }
 
   const isActive = (item: (typeof items)[number]) => {
     if (!item.screen) return false

@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { useApp } from '../store'
 import { tileFor, VLogo, fmtQty } from '../ui'
 import { Icono } from '@/components/Icono'
+import { BotonPantallaCompleta } from '../Pantalla'
 import { useWindowWidth } from '../Shell'
 
 function CartItems() {
@@ -184,21 +185,36 @@ export default function PosScreen() {
   const [cartOpen, setCartOpen] = useState(false)
 
   const q = query.trim().toLowerCase()
-  const results = s.products.filter(
-    (p) =>
-      !q ||
-      p.name.toLowerCase().includes(q) ||
-      (p.sku ?? '').toLowerCase().includes(q) ||
-      (p.barcode ?? '').includes(q),
-  )
+  const coincide = (p: (typeof s.products)[number]) =>
+    !q ||
+    p.name.toLowerCase().includes(q) ||
+    (p.sku ?? '').toLowerCase().includes(q) ||
+    (p.barcode ?? '').includes(q)
+
+  // Las variantes no se muestran sueltas en la parrilla: se llega a ellas
+  // tocando su producto, que abre el selector. Así no aparecen doce tarjetas
+  // casi idénticas de la misma camiseta.
+  const variantesDe = (id: string) => s.products.filter((p) => p.parentId === id)
+
+  const results = s.products
+    .filter((p) => !p.parentId)
+    .filter((p) => coincide(p) || (p.hasVariants && variantesDe(p.id).some(coincide)))
+
+  /** Stock que se muestra en la tarjeta: el suyo, o la suma de sus variantes */
+  const stockDe = (p: (typeof s.products)[number]) =>
+    p.hasVariants ? variantesDe(p.id).reduce((a, v) => a + v.stock, 0) : p.stock
 
   // Lector de código de barras USB: el lector "escribe" el código y envía Enter.
   // Enter agrega directo al carrito por código/SKU exacto (o si hay un único resultado).
   const onSearchEnter = () => {
     const code = query.trim()
     if (!code) return
+    // el código exacto puede ser el de una variante, así que aquí sí se buscan
+    // todas: escanear la talla M debe agregar la talla M, sin abrir el selector
     const exact = s.products.find(
-      (p) => p.barcode === code || (p.sku ?? '').toLowerCase() === code.toLowerCase(),
+      (p) =>
+        !p.hasVariants &&
+        (p.barcode === code || (p.sku ?? '').toLowerCase() === code.toLowerCase()),
     )
     const target = exact ?? (results.length === 1 ? results[0] : undefined)
     if (target) {
@@ -256,6 +272,7 @@ export default function PosScreen() {
               </div>
             )}
           </div>
+          <BotonPantallaCompleta />
           <button
             onClick={() => s.go('cierre')}
             title="Cerrar caja"
@@ -297,7 +314,14 @@ export default function PosScreen() {
           {results.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill,minmax(${narrow ? 140 : 158}px,1fr))`, gap: 12, alignContent: 'start' }}>
               {results.map((p) => {
-                const inCart = s.cart.find((i) => i.productId === p.id)
+                const vs = p.hasVariants ? variantesDe(p.id) : []
+                // en el carrito puede haber varias variantes del mismo producto
+                const enCarrito = p.hasVariants
+                  ? s.cart.filter((i) => vs.some((v) => v.id === i.productId))
+                  : s.cart.filter((i) => i.productId === p.id)
+                const cantidad = enCarrito.reduce((a, i) => a + i.qty, 0)
+                const agotado = p.hasVariants && stockDe(p) <= 0
+                const precios = vs.map((v) => v.price)
                 const t = tileFor(p)
                 return (
                   <button
@@ -312,13 +336,28 @@ export default function PosScreen() {
                     <div>
                       <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.28, minHeight: 35 }}>{p.name}</div>
                       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 5, gap: 6 }}>
-                        <span style={{ fontWeight: 800, fontSize: 15, fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>{s.fmt(p.price)}</span>
-                        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{p.sku}</span>
+                        <span style={{ fontWeight: 800, fontSize: p.hasVariants && precios.length ? 13 : 15, fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>
+                          {p.hasVariants && precios.length
+                            ? Math.min(...precios) === Math.max(...precios)
+                              ? s.fmt(precios[0])
+                              : `${s.fmt(Math.min(...precios))}+`
+                            : s.fmt(p.price)}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
+                          {p.hasVariants ? `${vs.length} variantes` : p.sku}
+                        </span>
                       </div>
                     </div>
-                    {inCart && (
+                    {p.hasVariants && (
+                      <div
+                        style={{ position: 'absolute', top: 8, left: 8, height: 20, padding: '0 7px', borderRadius: 7, background: agotado ? '#FDECEC' : 'rgba(255,255,255,.92)', color: agotado ? '#C9433B' : '#4338CA', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', letterSpacing: '.2px' }}
+                      >
+                        {agotado ? 'AGOTADO' : 'ELEGIR'}
+                      </div>
+                    )}
+                    {cantidad > 0 && (
                       <div style={{ position: 'absolute', top: 8, right: 8, minWidth: 22, height: 22, padding: '0 6px', borderRadius: 11, background: '#6366F1', color: '#fff', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {inCart.qty}
+                        {cantidad}
                       </div>
                     )}
                   </button>

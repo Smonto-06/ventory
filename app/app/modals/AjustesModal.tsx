@@ -91,6 +91,10 @@ export default function AjustesModal() {
   const [phone, setPhone] = useState(s.settings?.phone ?? '')
   const [address, setAddress] = useState(s.settings?.address ?? '')
   const [receiptFooter, setReceiptFooter] = useState(s.settings?.receiptFooter ?? '')
+  const [resumenDiario, setResumenDiario] = useState(!!s.settings?.notifyDailySummary)
+  const [avisoStock, setAvisoStock] = useState(s.settings?.notifyLowStock !== false)
+  const [correoAviso, setCorreoAviso] = useState(s.settings?.notifyEmail ?? '')
+  const [probando, setProbando] = useState(false)
   const [printerState, setPrinterState] = useState<string | null>(printerPref())
   // Gestión de sucursales
   const [newBranch, setNewBranch] = useState('')
@@ -216,6 +220,102 @@ export default function AjustesModal() {
       </div>
       <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8' }}>
         IVA incluido en el precio · desglose informativo
+      </div>
+
+      <div style={sectionStyle}>Notificaciones</div>
+      <button
+        onClick={() => setResumenDiario(!resumenDiario)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 14px',
+          borderRadius: 11,
+          border: `1.5px solid ${resumenDiario ? '#6366F1' : 'var(--border)'}`,
+          background: resumenDiario ? '#EEF0FE' : 'var(--surface)',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <span
+          style={{
+            width: 20, height: 20, borderRadius: 6, flex: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: resumenDiario ? '#6366F1' : 'var(--input)',
+            border: resumenDiario ? 'none' : '1.5px solid var(--border)',
+            color: '#fff', fontSize: 12, fontWeight: 800,
+          }}
+        >
+          {resumenDiario ? '✓' : ''}
+        </span>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700 }}>Resumen del día por correo</span>
+          <span style={{ display: 'block', fontSize: 12.3, color: 'var(--muted)', marginTop: 2, lineHeight: 1.45 }}>
+            Ventas, utilidad, cierre de caja y compras, cada noche
+          </span>
+        </span>
+      </button>
+
+      <button
+        onClick={() => setAvisoStock(!avisoStock)}
+        style={{
+          marginTop: 8,
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 14px',
+          borderRadius: 11,
+          border: `1.5px solid ${avisoStock ? '#6366F1' : 'var(--border)'}`,
+          background: avisoStock ? '#EEF0FE' : 'var(--surface)',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <span
+          style={{
+            width: 20, height: 20, borderRadius: 6, flex: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: avisoStock ? '#6366F1' : 'var(--input)',
+            border: avisoStock ? 'none' : '1.5px solid var(--border)',
+            color: '#fff', fontSize: 12, fontWeight: 800,
+          }}
+        >
+          {avisoStock ? '✓' : ''}
+        </span>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700 }}>Avisar qué hay que reponer</span>
+          <span style={{ display: 'block', fontSize: 12.3, color: 'var(--muted)', marginTop: 2, lineHeight: 1.45 }}>
+            Incluye en el mismo correo lo agotado y lo que está por acabarse
+          </span>
+        </span>
+      </button>
+
+      <label style={{ ...fieldLabelStyle, marginTop: 12 }}>Correo donde llega el resumen</label>
+      <input
+        value={correoAviso}
+        onChange={(e) => setCorreoAviso(e.target.value)}
+        type="email"
+        placeholder="Si lo dejas vacío, llega al correo del administrador"
+        style={textInputStyle}
+      />
+
+      <button
+        onClick={async () => {
+          setProbando(true)
+          await s.probarNotificacion()
+          setProbando(false)
+        }}
+        disabled={probando}
+        className="v-hover-bg"
+        style={{ ...rowBtnStyle, marginTop: 10, opacity: probando ? 0.6 : 1, cursor: probando ? 'wait' : 'pointer' }}
+      >
+        {probando ? 'Enviando…' : 'Enviarme una prueba ahora'}
+        <span style={{ color: '#6366F1' }}>→</span>
+      </button>
+      <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8', lineHeight: 1.55 }}>
+        El resumen se envía cada noche después del cierre. Guarda los ajustes antes de probar.
       </div>
 
       <div style={sectionStyle}>Impresora de tickets</div>
@@ -476,6 +576,9 @@ export default function AjustesModal() {
             phone: phone.trim(),
             address: address.trim(),
             receiptFooter: receiptFooter.trim(),
+            notifyDailySummary: resumenDiario,
+            notifyLowStock: avisoStock,
+            notifyEmail: correoAviso.trim(),
           })
         }
         className="v-hover-primary"

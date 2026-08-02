@@ -55,6 +55,14 @@ export interface Product {
   category: { id: string; name: string } | null
   stock: number
   minStock: number
+  /** true = producto agrupador: no se vende, solo reúne a sus variantes */
+  hasVariants?: boolean
+  /** id del producto agrupador, si esto es una variante */
+  parentId?: string | null
+  /** combinación de esta variante, p. ej. "M / Azul" */
+  variantLabel?: string | null
+  /** definición de opciones del agrupador: [{ nombre, valores[] }] */
+  variantOptions?: Array<{ nombre: string; valores: string[] }> | null
 }
 
 export interface Category {
@@ -259,6 +267,10 @@ export interface Settings {
   phone?: string | null
   address?: string | null
   receiptFooter?: string | null
+  // Notificaciones automáticas
+  notifyDailySummary?: boolean
+  notifyLowStock?: boolean
+  notifyEmail?: string | null
   plan?: PlanInfo
   isSuperAdmin?: boolean
 }
@@ -350,6 +362,8 @@ export const api = {
     ),
   createProduct: (data: unknown) => post<{ product: Product }>('/api/products', data),
   updateProduct: (id: string, data: unknown) => patch<{ product: Product }>(`/api/products/${id}`, data),
+  addVariants: (id: string, data: unknown) =>
+    post<{ creadas: number; convertido: boolean }>(`/api/products/${id}/variants`, data),
   archiveProduct: (id: string) => del<{ ok: boolean }>(`/api/products/${id}`),
 
   categories: () => get<{ categories: Category[] }>('/api/categories'),
@@ -456,6 +470,7 @@ export const api = {
 
   settings: () => get<{ settings: Settings }>('/api/settings'),
   updateSettings: (data: unknown) => put<{ settings: Settings }>('/api/settings', data),
+  testNotification: () => post<{ enviado: boolean; destino: string }>('/api/notifications/test', {}),
 
   branches: () => get<{ branches: Branch[] }>('/api/branches'),
 

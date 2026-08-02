@@ -85,6 +85,7 @@ export type ModalId =
   | 'novedades'
   | 'contact'
   | 'peso'
+  | 'variante'
   | 'importar'
   | 'scanner'
   | 'auditoria'
@@ -260,6 +261,8 @@ export interface AppStore extends AppData {
   changeQty: (productId: string, d: number) => void
   /** Producto en el modal de peso (ventas por kg) */
   pesoProduct: Product | null
+  /** Producto agrupador cuyo selector de variante está abierto */
+  varianteProduct: Product | null
   confirmPeso: (kg: number) => void
   editPeso: (productId: string) => void
   setItemDsc: (productId: string, pct: number) => void
@@ -312,6 +315,7 @@ export interface AppStore extends AppData {
 
   // productos / catálogo
   saveProduct: (data: Record<string, unknown>, editId: string | null) => Promise<boolean>
+  addVariants: (productId: string, data: Record<string, unknown>) => Promise<boolean>
   archiveProduct: (id: string) => Promise<void>
   addCategory: (name: string) => Promise<void>
   deleteCategory: (id: string) => Promise<void>
@@ -365,6 +369,8 @@ export interface AppStore extends AppData {
   editUserId: string | null
   setEditUserId: (id: string | null) => void
   saveSettings: (data: Record<string, unknown>) => Promise<void>
+  /** Envía el resumen diario de prueba al correo configurado */
+  probarNotificacion: () => Promise<void>
 
   // reportes
   loadReport: (date: string) => Promise<void>
@@ -414,6 +420,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastCierre, setLastCierre] = useState<CierreResult | null>(null)
   const [lastPurchase, setLastPurchase] = useState<Purchase | null>(null)
   const [pesoProduct, setPesoProduct] = useState<Product | null>(null)
+  const [varianteProduct, setVarianteProduct] = useState<Product | null>(null)
   const [rangeReport, setRangeReport] = useState<RangeReport | null>(null)
   // Ventas guardadas sin conexión, pendientes de enviar
   const [pendingCount, setPendingCount] = useState(0)
@@ -611,6 +618,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ─── Carrito ───────────────────────────────────────────────────────────────
 
   const addToCart = useCallback((p: Product) => {
+    // Producto con variantes: no se vende el agrupador, hay que elegir cuál
+    if (p.hasVariants) {
+      setVarianteProduct(p)
+      setModal('variante')
+      return
+    }
     // Productos por peso: se digita el peso en el modal en vez de sumar 1
     if (p.unitOfMeasure === 'kg') {
       setPesoProduct(p)
@@ -973,8 +986,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           await api.updateProduct(editId, payload)
           toast('Cambios guardados')
         } else {
-          await api.createProduct({ ...payload, branchId: data.branches[0]?.id })
-          toast('Producto creado')
+          // el stock inicial entra en la sucursal donde se está trabajando,
+          // no siempre en la primera de la lista
+          const sucursal = data.branches.find((b) => b.id === branchId) ?? data.branches[0]
+          await api.createProduct({ ...payload, branchId: sucursal?.id })
+          toast(payload.variantes ? 'Producto con variantes creado' : 'Producto creado')
         }
         await refreshProducts()
         return true
@@ -983,7 +999,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return false
       }
     },
-    [data.branches, toast, refreshProducts, onError],
+    [data.branches, branchId, toast, refreshProducts, onError],
+  )
+
+  /** Agrega variantes a un producto existente (o lo convierte en agrupador) */
+  const addVariants = useCallback(
+    async (productId: string, payload: Record<string, unknown>) => {
+      try {
+        const sucursal = data.branches.find((b) => b.id === branchId) ?? data.branches[0]
+        await api.addVariants(productId, { ...payload, branchId: sucursal?.id })
+        toast('Variantes agregadas')
+        await refreshProducts()
+        return true
+      } catch (e) {
+        onError(e)
+        return false
+      }
+    },
+    [data.branches, branchId, toast, refreshProducts, onError],
   )
 
   const archiveProduct = useCallback(
@@ -1470,6 +1503,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patch, toast, onError],
   )
 
+  const probarNotificacion = useCallback(async () => {
+    try {
+      const r = await api.testNotification()
+      toast(`Resumen enviado a ${r.destino}`)
+    } catch (e) {
+      onError(e)
+    }
+  }, [toast, onError])
+
   const loadRangeReport = useCallback(
     async (from: string, to: string) => {
       try {
@@ -1547,6 +1589,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addToCart,
       changeQty,
       pesoProduct,
+      varianteProduct,
       confirmPeso,
       editPeso,
       setItemDsc,
@@ -1587,6 +1630,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       doVoid,
       refreshSales,
       saveProduct,
+      addVariants,
       archiveProduct,
       addCategory,
       deleteCategory,
@@ -1632,6 +1676,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editUserId,
       setEditUserId,
       saveSettings,
+      probarNotificacion,
       loadReport,
       rangeReport,
       loadRangeReport,
@@ -1643,7 +1688,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
       turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre, branchId,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
-      pay, amounts, received, lastSale, lastPurchase, pesoProduct, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, editClientId,
+      pay, amounts, received, lastSale, lastPurchase, pesoProduct, varianteProduct, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,
       ncProv, ncItems, ncMethod, ncAbono, fmt,
     ],

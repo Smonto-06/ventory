@@ -32,6 +32,10 @@ export default withAuth(
           pathname.startsWith('/api/auth') ||
           pathname.startsWith('/api/register') ||
           pathname.startsWith('/api/health') ||
+          // El cron de Vercel llama sin sesión: la ruta se protege sola con
+          // CRON_SECRET. Sin esta excepción el middleware lo redirigiría al
+          // login y el resumen diario nunca se enviaría.
+          pathname.startsWith('/api/cron') ||
           pathname === '/'
         ) {
           return true

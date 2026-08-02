@@ -126,6 +126,33 @@ export async function PATCH(request: Request, { params }: Params) {
       })
     }
 
+    // El nombre de una variante es "Padre · Etiqueta": si cambia el nombre del
+    // padre hay que rehacer el de todas, o quedarían con el nombre viejo en
+    // tickets, kardex y reportes.
+    if (existing.hasVariants && rest.name && rest.name !== existing.name) {
+      const hijas = await db.product.findMany({
+        where: { parentId: params.id, businessId: session.user.businessId },
+        select: { id: true, variantLabel: true },
+      })
+      await Promise.all(
+        hijas.map((h) =>
+          db.product.update({
+            where: { id: h.id },
+            data: { name: h.variantLabel ? `${rest.name} · ${h.variantLabel}` : rest.name! },
+          }),
+        ),
+      )
+    }
+
+    // Archivar o reactivar el padre arrastra a sus variantes: dejarlas sueltas
+    // haría que siguieran apareciendo en el punto de venta sin su grupo.
+    if (existing.hasVariants && rest.status && rest.status !== existing.status) {
+      await db.product.updateMany({
+        where: { parentId: params.id, businessId: session.user.businessId },
+        data: { status: rest.status },
+      })
+    }
+
     return NextResponse.json({
       product: {
         ...product,
@@ -160,11 +187,18 @@ export async function DELETE(_request: Request, { params }: Params) {
       return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
     }
 
-    // Archive instead of delete to preserve financial records
+    // Se archiva en vez de borrar, para no romper el histórico de ventas.
+    // Si es un producto con variantes, se archivan también sus variantes.
     await db.product.update({
       where: { id: params.id },
       data: { status: 'ARCHIVED' },
     })
+    if (existing.hasVariants) {
+      await db.product.updateMany({
+        where: { parentId: params.id, businessId: session.user.businessId },
+        data: { status: 'ARCHIVED' },
+      })
+    }
 
     return NextResponse.json({ message: 'Producto archivado exitosamente' })
   } catch (error) {
