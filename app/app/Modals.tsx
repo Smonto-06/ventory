@@ -29,6 +29,7 @@ import ImportarModal from './modals/ImportarModal'
 import ScannerModal from './modals/ScannerModal'
 import AuditoriaModal from './modals/AuditoriaModal'
 import NovedadesModal from './modals/NovedadesModal'
+import VarianteModal from './modals/VarianteModal'
 
 export default function Modals() {
   const s = useApp()
@@ -73,6 +74,8 @@ export default function Modals() {
       return <ConfirmModal />
     case 'contact':
       return <ContactModal />
+    case 'variante':
+      return <VarianteModal />
     case 'peso':
       return <PesoModal />
     case 'importar':

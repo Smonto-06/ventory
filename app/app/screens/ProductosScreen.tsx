@@ -54,16 +54,58 @@ export default function ProductosScreen() {
   const [query, setQuery] = useState('')
   const [catId, setCatId] = useState('')
 
+  const [abiertos, setAbiertos] = useState<Set<string>>(new Set())
+
   const pq = query.trim().toLowerCase()
+  const coincide = (p: (typeof s.products)[number]) =>
+    !pq ||
+    p.name.toLowerCase().includes(pq) ||
+    (p.sku ?? '').toLowerCase().includes(pq) ||
+    (p.barcode ?? '').includes(pq)
+
+  // Las variantes se listan bajo su producto, no sueltas: la tabla muestra
+  // una fila por producto y las variantes se despliegan al tocarla.
+  const variantesPorPadre = new Map<string, typeof s.products>()
+  for (const p of s.products) {
+    if (!p.parentId) continue
+    const lista = variantesPorPadre.get(p.parentId) ?? []
+    lista.push(p)
+    variantesPorPadre.set(p.parentId, lista)
+  }
+
   const rows = s.products
-    .filter(
-      (p) =>
-        !pq ||
-        p.name.toLowerCase().includes(pq) ||
-        (p.sku ?? '').toLowerCase().includes(pq) ||
-        (p.barcode ?? '').includes(pq),
-    )
+    .filter((p) => !p.parentId)
+    .filter((p) => {
+      if (coincide(p)) return true
+      // buscar también dentro de las variantes: "RH005" debe encontrar su grupo
+      return (variantesPorPadre.get(p.id) ?? []).some(coincide)
+    })
     .filter((p) => !catId || p.category?.id === catId)
+
+  const alternar = (id: string) =>
+    setAbiertos((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  // Un producto agrupador no tiene stock ni precio propios: se muestran los de
+  // sus variantes (suma del stock, rango de precios).
+  const resumen = (p: (typeof s.products)[number]) => {
+    const vs = variantesPorPadre.get(p.id) ?? []
+    if (!p.hasVariants || !vs.length) return null
+    const precios = vs.map((v) => v.price)
+    const min = Math.min(...precios)
+    const max = Math.max(...precios)
+    return {
+      variantes: vs,
+      stock: vs.reduce((a, v) => a + v.stock, 0),
+      minStock: vs.reduce((a, v) => a + v.minStock, 0),
+      precio: min === max ? s.fmt(min) : `${s.fmt(min)} – ${s.fmt(max)}`,
+      agotadas: vs.filter((v) => v.stock <= 0).length,
+    }
+  }
 
   return (
     <div style={{ padding: 'clamp(16px,3vw,28px)', display: 'flex', flexDirection: 'column', gap: 16, animation: 'vfade .3s ease' }}>
@@ -186,9 +228,11 @@ export default function ProductosScreen() {
           </div>
           {rows.map((p) => {
             const { tileStyle, tileText, tileFg } = tileFor(p)
+            const grupo = resumen(p)
+            const abierto = abiertos.has(p.id)
             return (
+              <div key={p.id}>
               <div
-                key={p.id}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: gridCols,
@@ -217,26 +261,50 @@ export default function ProductosScreen() {
                     {tileText}
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {p.name}
+                      {grupo && (
+                        <button
+                          onClick={() => alternar(p.id)}
+                          className="v-hover-bg"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px', borderRadius: 7, background: '#EEF0FE', color: '#4338CA', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', flex: 'none' }}
+                        >
+                          {grupo.variantes.length} variantes
+                          <span style={{ display: 'flex', transform: abierto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+                            <Icono n="chevron" tam={11} grosor={2.4} />
+                          </span>
+                        </button>
+                      )}
+                    </div>
                     <div style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 2 }}>
-                      SKU: {p.sku ?? '—'} · {p.supplier ?? '—'}
+                      {grupo
+                        ? `${grupo.agotadas ? `${grupo.agotadas} agotada${grupo.agotadas === 1 ? '' : 's'} · ` : ''}${p.supplier ?? '—'}`
+                        : `SKU: ${p.sku ?? '—'} · ${p.supplier ?? '—'}`}
                     </div>
                   </div>
                 </div>
                 <div style={{ padding: '13px 10px' }}>
                   <span style={catChipStyle(p.category?.name ?? '—')}>{p.category?.name ?? '—'}</span>
                 </div>
-                <div style={{ padding: '13px 10px', textAlign: 'right', fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>
-                  {s.fmt(p.price)}
+                <div style={{ padding: '13px 10px', textAlign: 'right', fontWeight: 700, fontSize: grupo ? 12.5 : 14, fontVariantNumeric: 'tabular-nums' }}>
+                  {grupo ? grupo.precio : s.fmt(p.price)}
                 </div>
                 <div style={{ padding: '13px 10px', textAlign: 'right', fontSize: 13.5, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
                   {s.isAdmin ? s.fmt(p.cost ?? 0) : '—'}
                 </div>
                 <div style={{ padding: '13px 10px', textAlign: 'right' }}>
-                  <span style={p.stock <= p.minStock ? stockLowStyle : stockOkStyle}>{p.unitOfMeasure === 'kg' ? `${fmtQty(p.stock)} kg` : p.stock}</span>
+                  {grupo ? (
+                    <span style={grupo.stock <= 0 ? stockLowStyle : stockOkStyle}>
+                      {p.unitOfMeasure === 'kg' ? `${fmtQty(grupo.stock)} kg` : grupo.stock}
+                    </span>
+                  ) : (
+                    <span style={p.stock <= p.minStock ? stockLowStyle : stockOkStyle}>
+                      {p.unitOfMeasure === 'kg' ? `${fmtQty(p.stock)} kg` : p.stock}
+                    </span>
+                  )}
                 </div>
                 <div style={{ padding: '13px 10px', textAlign: 'right', fontSize: 13.5, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
-                  {p.minStock}
+                  {grupo ? '—' : p.minStock}
                 </div>
                 <div style={{ padding: '13px 10px', textAlign: 'right', whiteSpace: 'nowrap', display: 'flex', gap: 14, justifyContent: 'flex-end' }}>
                   <button
@@ -257,6 +325,59 @@ export default function ProductosScreen() {
                     Archivar
                   </button>
                 </div>
+              </div>
+
+              {grupo && abierto && (
+                <div style={{ background: 'var(--bg)', borderBottom: '1px solid #EEF2F7' }}>
+                  {grupo.variantes.map((v) => (
+                    <div
+                      key={v.id}
+                      style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'center', padding: '0 10px' }}
+                    >
+                      <div style={{ padding: '9px 10px 9px 58px', display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+                        <span style={{ fontWeight: 700, fontSize: 13.3 }}>{v.variantLabel}</span>
+                        <span style={{ color: 'var(--muted)', fontSize: 12.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          SKU: {v.sku ?? '—'}
+                        </span>
+                      </div>
+                      <div />
+                      <div style={{ padding: '9px 10px', textAlign: 'right', fontWeight: 700, fontSize: 13.3, fontVariantNumeric: 'tabular-nums' }}>
+                        {s.fmt(v.price)}
+                      </div>
+                      <div style={{ padding: '9px 10px', textAlign: 'right', fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                        {s.isAdmin ? s.fmt(v.cost ?? 0) : '—'}
+                      </div>
+                      <div style={{ padding: '9px 10px', textAlign: 'right' }}>
+                        <span style={v.stock <= v.minStock ? stockLowStyle : stockOkStyle}>
+                          {v.unitOfMeasure === 'kg' ? `${fmtQty(v.stock)} kg` : v.stock}
+                        </span>
+                      </div>
+                      <div style={{ padding: '9px 10px', textAlign: 'right', fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                        {v.minStock}
+                      </div>
+                      <div style={{ padding: '9px 10px', textAlign: 'right', display: 'flex', gap: 14, justifyContent: 'flex-end' }}>
+                        <button
+                          className="v-hover-underline"
+                          onClick={() => {
+                            s.setEditProdId(v.id)
+                            s.openModal('producto')
+                          }}
+                          style={{ color: '#6366F1', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="v-hover-danger"
+                          onClick={() => s.archiveProduct(v.id)}
+                          style={{ color: 'var(--muted)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                        >
+                          Archivar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               </div>
             )
           })}

@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // Con Neon: DATABASE_URL = conexión "pooled" (para la app en Vercel)
   // y DIRECT_URL = conexión directa (para migraciones). En local usa la misma en ambas.
   url       = env("DATABASE_URL")
@@ -48,90 +48,90 @@ enum CashSessionStatus {
 }
 
 enum BusinessStatus {
-  TRIAL     // prueba gratis — funcional hasta trialEndsAt
-  ACTIVE    // plan activo (activado por el super-admin tras el pago)
+  TRIAL // prueba gratis — funcional hasta trialEndsAt
+  ACTIVE // plan activo (activado por el super-admin tras el pago)
   SUSPENDED // suspendido — solo lectura hasta reactivar
 }
 
 enum MovementType {
-  SALE        // decremented by a sale
-  RETURN      // incremented by a return/refund
-  ADJUSTMENT  // manual stock correction
-  PURCHASE    // stock received from supplier
+  SALE // decremented by a sale
+  RETURN // incremented by a return/refund
+  ADJUSTMENT // manual stock correction
+  PURCHASE // stock received from supplier
 }
 
 enum CashMovementType {
-  INCOME      // ingreso — base de caja, abono de cliente, otro ingreso
-  EXPENSE     // gasto — pago a proveedor, servicios, domicilios, devolución, anulación, otro
-  WITHDRAWAL  // retiro — efectivo retirado de la caja (legado)
+  INCOME // ingreso — base de caja, abono de cliente, otro ingreso
+  EXPENSE // gasto — pago a proveedor, servicios, domicilios, devolución, anulación, otro
+  WITHDRAWAL // retiro — efectivo retirado de la caja (legado)
 }
 
 enum PurchaseMethod {
-  CASH      // contado — pagada completa + gasto de caja "Pago a proveedor"
-  TRANSFER  // transferencia — pagada completa sin afectar caja física
-  CREDIT    // crédito — saldo pendiente al proveedor (abono inicial opcional)
+  CASH // contado — pagada completa + gasto de caja "Pago a proveedor"
+  TRANSFER // transferencia — pagada completa sin afectar caja física
+  CREDIT // crédito — saldo pendiente al proveedor (abono inicial opcional)
 }
 
 enum ReturnType {
-  REFUND    // devolución — reembolso en efectivo (gasto de caja)
-  EXCHANGE  // cambio — el valor devuelto se aplica como descuento en una nueva venta
+  REFUND // devolución — reembolso en efectivo (gasto de caja)
+  EXCHANGE // cambio — el valor devuelto se aplica como descuento en una nueva venta
 }
 
 // ─── Core Models ────────────────────────────────────────────────────────────
 
 model Business {
-  id                 String    @id @default(cuid())
-  name               String
-  slug               String    @unique
-  taxId              String?
-  phone              String?
-  address            String?
+  id                   String  @id @default(cuid())
+  name                 String
+  slug                 String  @unique
+  taxId                String?
+  phone                String?
+  address              String?
   // Mensaje final impreso en la factura de venta (p. ej. "¡Gracias por su compra!")
-  receiptFooter      String?
-  currency           String    @default("COP")
-  locale             String    @default("es-CO")
-  isActive           Boolean   @default(true)
-  allowNegativeStock Boolean   @default(false)
-  barcodeEnabled     Boolean   @default(true)
+  receiptFooter        String?
+  currency             String  @default("COP")
+  locale               String  @default("es-CO")
+  isActive             Boolean @default(true)
+  allowNegativeStock   Boolean @default(false)
+  barcodeEnabled       Boolean @default(true)
   // IVA incluido en el precio: desglose informativo = total × pct / (100 + pct)
   ivaPct               Decimal @default(0) @db.Decimal(5, 2)
   defaultOpeningAmount Decimal @default(0) @db.Decimal(12, 2)
 
   // Plan comercial: los negocios nuevos entran en prueba (el registro lo fija);
   // los existentes quedan ACTIVE por el default
-  status       BusinessStatus @default(ACTIVE)
-  trialEndsAt  DateTime?
-  activatedAt  DateTime?
-  adminNotes   String?
+  status      BusinessStatus @default(ACTIVE)
+  trialEndsAt DateTime?
+  activatedAt DateTime?
+  adminNotes  String?
 
-  branches     Branch[]
-  users        User[]
-  products     Product[]
-  categories   Category[]
-  customers    Customer[]
-  suppliers    Supplier[]
-  purchases    Purchase[]
-  heldSales    HeldSale[]
+  branches      Branch[]
+  users         User[]
+  products      Product[]
+  categories    Category[]
+  customers     Customer[]
+  suppliers     Supplier[]
+  purchases     Purchase[]
+  heldSales     HeldSale[]
   heldPurchases HeldPurchase[]
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("businesses")
 }
 
 model Branch {
-  id           String    @id @default(cuid())
-  name         String
+  id       String  @id @default(cuid())
+  name     String
   // Consecutivo de facturación atómico: se incrementa con UPDATE … RETURNING,
   // así dos cajas vendiendo a la vez nunca generan el mismo folio
-  saleSeq      Int       @default(0)
-  address      String?
-  phone        String?
-  isActive     Boolean   @default(true)
+  saleSeq  Int     @default(0)
+  address  String?
+  phone    String?
+  isActive Boolean @default(true)
 
-  businessId   String
-  business     Business  @relation(fields: [businessId], references: [id])
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
 
   users        User[]
   inventory    Inventory[]
@@ -139,22 +139,22 @@ model Branch {
   cashSessions CashSession[]
   purchases    Purchase[]
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("branches")
 }
 
 model User {
-  id             String       @id @default(cuid())
-  email          String       @unique
-  password       String
-  name           String?
-  role           UserRole     @default(CASHIER)
-  pin            String?
-  isActive       Boolean      @default(true)
-  failedAttempts Int          @default(0)
-  lockedAt       DateTime?
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  name              String?
+  role              UserRole  @default(CASHIER)
+  pin               String?
+  isActive          Boolean   @default(true)
+  failedAttempts    Int       @default(0)
+  lockedAt          DateTime?
   // Recuperación de contraseña (token de un solo uso, con vencimiento)
   resetToken        String?   @unique
   resetTokenExpires DateTime?
@@ -162,30 +162,30 @@ model User {
   emailVerified     DateTime?
   verifyToken       String?   @unique
 
-  businessId     String
-  business       Business     @relation(fields: [businessId], references: [id])
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
 
-  branchId       String?
-  branch         Branch?      @relation(fields: [branchId], references: [id])
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
 
-  accounts            Account[]
-  sessions            Session[]
-  sales               Sale[]
-  voidedSales         Sale[]             @relation("SaleVoidedBy")
-  cashSessions        CashSession[]      @relation("CashSessionOpenedBy")
-  cashSessionsClosed  CashSession[]      @relation("CashSessionClosedBy")
-  cashMovements       CashMovement[]
-  inventoryMovements  InventoryMovement[]
-  auditLogs           AuditLog[]
-  purchases           Purchase[]
-  purchasePayments    PurchasePayment[]
-  customerPayments    CustomerPayment[]
-  saleReturns         SaleReturn[]
-  heldSales           HeldSale[]
-  heldPurchases       HeldPurchase[]
+  accounts           Account[]
+  sessions           Session[]
+  sales              Sale[]
+  voidedSales        Sale[]              @relation("SaleVoidedBy")
+  cashSessions       CashSession[]       @relation("CashSessionOpenedBy")
+  cashSessionsClosed CashSession[]       @relation("CashSessionClosedBy")
+  cashMovements      CashMovement[]
+  inventoryMovements InventoryMovement[]
+  auditLogs          AuditLog[]
+  purchases          Purchase[]
+  purchasePayments   PurchasePayment[]
+  customerPayments   CustomerPayment[]
+  saleReturns        SaleReturn[]
+  heldSales          HeldSale[]
+  heldPurchases      HeldPurchase[]
 
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("users")
 }
@@ -193,18 +193,18 @@ model User {
 // ─── Products & Inventory ───────────────────────────────────────────────────
 
 model Category {
-  id           String    @id @default(cuid())
-  name         String
-  description  String?
-  isActive     Boolean   @default(true)
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean @default(true)
 
-  businessId   String
-  business     Business  @relation(fields: [businessId], references: [id])
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
 
-  products     Product[]
+  products Product[]
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([businessId, name])
   @@map("categories")
@@ -220,72 +220,86 @@ model Product {
   cost          Decimal?      @db.Decimal(12, 2)
   taxRate       Decimal       @default(0.16) @db.Decimal(5, 4)
   unitOfMeasure String?
-  supplier      String?       // legado: nombre libre — usar supplierId
+  supplier      String? // legado: nombre libre — usar supplierId
   imageUrl      String?
   status        ProductStatus @default(ACTIVE)
 
-  businessId    String
-  business      Business      @relation(fields: [businessId], references: [id])
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
 
-  categoryId    String?
-  category      Category?     @relation(fields: [categoryId], references: [id])
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
 
-  supplierId    String?
-  supplierRef   Supplier?     @relation(fields: [supplierId], references: [id])
+  supplierId  String?
+  supplierRef Supplier? @relation(fields: [supplierId], references: [id])
+
+  // ── Variantes (talla, color, presentación…) ──
+  // El "padre" (hasVariants) solo agrupa: no se vende ni tiene inventario.
+  // Las variantes son productos normales con su propio stock, SKU y precio,
+  // de modo que ventas, compras, kardex y reportes siguen funcionando igual.
+  hasVariants    Boolean   @default(false)
+  /// Definición de las opciones del padre: [{ nombre, valores[] }]
+  variantOptions Json?
+  parentId       String?
+  parent         Product?  @relation("VariantesProducto", fields: [parentId], references: [id])
+  variants       Product[] @relation("VariantesProducto")
+  /// Combinación de esta variante, p. ej. "M / Azul"
+  variantLabel   String?
 
   inventory     Inventory[]
   saleItems     SaleItem[]
   purchaseItems PurchaseItem[]
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([businessId, sku])
   @@index([businessId, status])
+  @@index([businessId, parentId])
   @@index([barcode])
   @@map("products")
 }
 
 model Inventory {
-  id           String    @id @default(cuid())
-  quantity     Decimal   @default(0) @db.Decimal(12, 3)
-  minStock     Decimal   @default(0) @db.Decimal(12, 3)
-  maxStock     Int?
-  lowStock     Boolean   @default(false)
+  id       String  @id @default(cuid())
+  quantity Decimal @default(0) @db.Decimal(12, 3)
+  minStock Decimal @default(0) @db.Decimal(12, 3)
+  maxStock Int?
+  lowStock Boolean @default(false)
 
-  productId    String
-  product      Product   @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
-  branchId     String
-  branch       Branch    @relation(fields: [branchId], references: [id])
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
 
-  movements    InventoryMovement[]
+  movements InventoryMovement[]
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([productId, branchId])
   @@map("inventory")
 }
 
 model InventoryMovement {
-  id           String       @id @default(cuid())
-  type         MovementType
-  quantity     Decimal @db.Decimal(12, 3)
-  quantityBefore Decimal @db.Decimal(12, 3)
-  quantityAfter  Decimal @db.Decimal(12, 3)
-  reason       String?
+  id             String       @id @default(cuid())
+  type           MovementType
+  quantity       Decimal      @db.Decimal(12, 3)
+  quantityBefore Decimal      @db.Decimal(12, 3)
+  quantityAfter  Decimal      @db.Decimal(12, 3)
+  reason         String?
 
-  inventoryId  String
-  inventory    Inventory    @relation(fields: [inventoryId], references: [id])
+  inventoryId String
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
 
-  saleItemId   String?
-  saleItem     SaleItem?    @relation(fields: [saleItemId], references: [id])
+  saleItemId String?
+  saleItem   SaleItem? @relation(fields: [saleItemId], references: [id])
 
-  createdById  String
-  createdBy    User         @relation(fields: [createdById], references: [id])
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
 
-  createdAt    DateTime     @default(now())
+  createdAt DateTime @default(now())
 
   @@index([inventoryId, createdAt])
   @@map("inventory_movements")
@@ -310,27 +324,27 @@ model Sale {
   voidedAt       DateTime?
   voidReason     String?
 
-  branchId       String
-  branch         Branch        @relation(fields: [branchId], references: [id])
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
 
-  cashierId      String
-  cashier        User          @relation(fields: [cashierId], references: [id])
+  cashierId String
+  cashier   User   @relation(fields: [cashierId], references: [id])
 
-  cashSessionId  String
-  cashSession    CashSession   @relation(fields: [cashSessionId], references: [id])
+  cashSessionId String
+  cashSession   CashSession @relation(fields: [cashSessionId], references: [id])
 
-  customerId     String?
-  customer       Customer?     @relation(fields: [customerId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
 
-  voidedById     String?
-  voidedBy       User?         @relation("SaleVoidedBy", fields: [voidedById], references: [id])
+  voidedById String?
+  voidedBy   User?   @relation("SaleVoidedBy", fields: [voidedById], references: [id])
 
-  items          SaleItem[]
-  payments       SalePayment[]
-  returns        SaleReturn[]
+  items    SaleItem[]
+  payments SalePayment[]
+  returns  SaleReturn[]
 
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([branchId, folio])
   @@index([branchId, createdAt])
@@ -339,37 +353,37 @@ model Sale {
 }
 
 model SaleItem {
-  id           String    @id @default(cuid())
-  quantity     Decimal @db.Decimal(12, 3)
-  unitPrice    Decimal   @db.Decimal(12, 2)
-  taxRate      Decimal   @db.Decimal(5, 4)
-  taxAmount    Decimal   @db.Decimal(12, 2)
-  subtotal     Decimal   @db.Decimal(12, 2)
-  total        Decimal   @db.Decimal(12, 2)
-  discountPct  Decimal   @default(0) @db.Decimal(5, 2)
-  returnedQty  Decimal   @default(0) @db.Decimal(12, 3)
-  costPrice    Decimal?  @db.Decimal(12, 2)
+  id          String   @id @default(cuid())
+  quantity    Decimal  @db.Decimal(12, 3)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  taxRate     Decimal  @db.Decimal(5, 4)
+  taxAmount   Decimal  @db.Decimal(12, 2)
+  subtotal    Decimal  @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+  discountPct Decimal  @default(0) @db.Decimal(5, 2)
+  returnedQty Decimal  @default(0) @db.Decimal(12, 3)
+  costPrice   Decimal? @db.Decimal(12, 2)
 
-  saleId       String
-  sale         Sale      @relation(fields: [saleId], references: [id])
+  saleId String
+  sale   Sale   @relation(fields: [saleId], references: [id])
 
-  productId    String
-  product      Product   @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
-  movements    InventoryMovement[]
-  returnItems  SaleReturnItem[]
+  movements   InventoryMovement[]
+  returnItems SaleReturnItem[]
 
   @@map("sale_items")
 }
 
 // Métodos de cobro combinados de una venta (Efectivo + Tarjeta + Transferencia con montos)
 model SalePayment {
-  id       String        @id @default(cuid())
-  method   PaymentMethod
-  amount   Decimal       @db.Decimal(12, 2)
+  id     String        @id @default(cuid())
+  method PaymentMethod
+  amount Decimal       @db.Decimal(12, 2)
 
-  saleId   String
-  sale     Sale          @relation(fields: [saleId], references: [id])
+  saleId String
+  sale   Sale   @relation(fields: [saleId], references: [id])
 
   @@index([saleId])
   @@map("sale_payments")
@@ -377,38 +391,38 @@ model SalePayment {
 
 // Devolución o cambio sobre una venta histórica
 model SaleReturn {
-  id             String        @id @default(cuid())
-  type           ReturnType
-  totalRefund    Decimal       @db.Decimal(12, 2)
-  notes          String?
+  id          String     @id @default(cuid())
+  type        ReturnType
+  totalRefund Decimal    @db.Decimal(12, 2)
+  notes       String?
 
-  saleId         String
-  sale           Sale          @relation(fields: [saleId], references: [id])
+  saleId String
+  sale   Sale   @relation(fields: [saleId], references: [id])
 
   cashMovementId String?       @unique
   cashMovement   CashMovement? @relation(fields: [cashMovementId], references: [id])
 
-  createdById    String
-  createdBy      User          @relation(fields: [createdById], references: [id])
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
 
-  items          SaleReturnItem[]
+  items SaleReturnItem[]
 
-  createdAt      DateTime      @default(now())
+  createdAt DateTime @default(now())
 
   @@index([saleId])
   @@map("sale_returns")
 }
 
 model SaleReturnItem {
-  id           String     @id @default(cuid())
+  id           String  @id @default(cuid())
   quantity     Decimal @db.Decimal(12, 3)
-  refundAmount Decimal    @db.Decimal(12, 2)
+  refundAmount Decimal @db.Decimal(12, 2)
 
-  returnId     String
-  return       SaleReturn @relation(fields: [returnId], references: [id])
+  returnId String
+  return   SaleReturn @relation(fields: [returnId], references: [id])
 
-  saleItemId   String
-  saleItem     SaleItem   @relation(fields: [saleItemId], references: [id])
+  saleItemId String
+  saleItem   SaleItem @relation(fields: [saleItemId], references: [id])
 
   @@map("sale_return_items")
 }
@@ -428,20 +442,20 @@ model CashSession {
   openedAt        DateTime          @default(now())
   closedAt        DateTime?
 
-  branchId        String
-  branch          Branch            @relation(fields: [branchId], references: [id])
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
 
-  openedById      String
-  openedBy        User              @relation("CashSessionOpenedBy", fields: [openedById], references: [id])
+  openedById String
+  openedBy   User   @relation("CashSessionOpenedBy", fields: [openedById], references: [id])
 
-  closedById      String?
-  closedBy        User?             @relation("CashSessionClosedBy", fields: [closedById], references: [id])
+  closedById String?
+  closedBy   User?   @relation("CashSessionClosedBy", fields: [closedById], references: [id])
 
-  sales           Sale[]
-  movements       CashMovement[]
+  sales     Sale[]
+  movements CashMovement[]
 
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([branchId, status])
   @@index([openedById, status])
@@ -449,25 +463,25 @@ model CashSession {
 }
 
 model CashMovement {
-  id            String           @id @default(cuid())
-  type          CashMovementType
-  amount        Decimal          @db.Decimal(12, 2)
+  id          String           @id @default(cuid())
+  type        CashMovementType
+  amount      Decimal          @db.Decimal(12, 2)
   // Descripciones del prototipo — ingresos: Base de caja, Abono de cliente, Otro ingreso;
   // gastos: Pago a proveedor, Servicios públicos, Domicilios, Devolución, Anulación de venta, Otro gasto
-  description   String
-  comment       String?
+  description String
+  comment     String?
 
   cashSessionId String
-  cashSession   CashSession      @relation(fields: [cashSessionId], references: [id])
+  cashSession   CashSession @relation(fields: [cashSessionId], references: [id])
 
-  createdById   String
-  createdBy     User             @relation(fields: [createdById], references: [id])
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
 
   purchasePayment PurchasePayment?
   customerPayment CustomerPayment?
   saleReturn      SaleReturn?
 
-  createdAt     DateTime         @default(now())
+  createdAt DateTime @default(now())
 
   @@index([cashSessionId])
   @@map("cash_movements")
@@ -476,23 +490,23 @@ model CashMovement {
 // ─── Customers ──────────────────────────────────────────────────────────────
 
 model Customer {
-  id         String   @id @default(cuid())
-  name       String
-  phone      String?
-  email      String?
-  document   String?
-  address    String?
-  notes      String?
-  balance    Decimal  @default(0) @db.Decimal(12, 2)
+  id       String  @id @default(cuid())
+  name     String
+  phone    String?
+  email    String?
+  document String?
+  address  String?
+  notes    String?
+  balance  Decimal @default(0) @db.Decimal(12, 2)
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])
 
-  sales      Sale[]
-  payments   CustomerPayment[]
+  sales    Sale[]
+  payments CustomerPayment[]
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([businessId, name])
   @@map("customers")
@@ -500,21 +514,21 @@ model Customer {
 
 // Abono de cliente: descuenta su saldo de crédito; si es en efectivo genera ingreso de caja
 model CustomerPayment {
-  id             String        @id @default(cuid())
-  amount         Decimal       @db.Decimal(12, 2)
-  method         PaymentMethod @default(CASH)
-  balanceAfter   Decimal       @db.Decimal(12, 2)
+  id           String        @id @default(cuid())
+  amount       Decimal       @db.Decimal(12, 2)
+  method       PaymentMethod @default(CASH)
+  balanceAfter Decimal       @db.Decimal(12, 2)
 
-  customerId     String
-  customer       Customer      @relation(fields: [customerId], references: [id])
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
 
   cashMovementId String?       @unique
   cashMovement   CashMovement? @relation(fields: [cashMovementId], references: [id])
 
-  createdById    String
-  createdBy      User          @relation(fields: [createdById], references: [id])
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
 
-  createdAt      DateTime      @default(now())
+  createdAt DateTime @default(now())
 
   @@index([customerId, createdAt])
   @@map("customer_payments")
@@ -523,19 +537,19 @@ model CustomerPayment {
 // ─── Suppliers & Purchases ──────────────────────────────────────────────────
 
 model Supplier {
-  id         String   @id @default(cuid())
-  name       String
-  phone      String?
-  isActive   Boolean  @default(true)
+  id       String  @id @default(cuid())
+  name     String
+  phone    String?
+  isActive Boolean @default(true)
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])
 
-  products   Product[]
-  purchases  Purchase[]
+  products  Product[]
+  purchases Purchase[]
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([businessId, name])
   @@map("suppliers")
@@ -543,68 +557,68 @@ model Supplier {
 
 // Compra a proveedor: por producto actualiza stock += qty, costo y precio nuevos
 model Purchase {
-  id          String         @id @default(cuid())
-  method      PurchaseMethod @default(CASH)
-  total       Decimal        @db.Decimal(12, 2)
+  id         String         @id @default(cuid())
+  method     PurchaseMethod @default(CASH)
+  total      Decimal        @db.Decimal(12, 2)
   // Abono acumulado. Saldo pendiente = total − paidAmount
-  paidAmount  Decimal        @default(0) @db.Decimal(12, 2)
-  notes       String?
+  paidAmount Decimal        @default(0) @db.Decimal(12, 2)
+  notes      String?
 
-  businessId  String
-  business    Business       @relation(fields: [businessId], references: [id])
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
 
-  branchId    String
-  branch      Branch         @relation(fields: [branchId], references: [id])
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
 
-  supplierId  String
-  supplier    Supplier       @relation(fields: [supplierId], references: [id])
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
 
   createdById String
-  createdBy   User           @relation(fields: [createdById], references: [id])
+  createdBy   User   @relation(fields: [createdById], references: [id])
 
-  items       PurchaseItem[]
-  payments    PurchasePayment[]
+  items    PurchaseItem[]
+  payments PurchasePayment[]
 
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([businessId, createdAt])
   @@map("purchases")
 }
 
 model PurchaseItem {
-  id         String   @id @default(cuid())
-  quantity   Decimal @db.Decimal(12, 3)
-  unitCost   Decimal  @db.Decimal(12, 2)
-  totalCost  Decimal  @db.Decimal(12, 2)
+  id        String   @id @default(cuid())
+  quantity  Decimal  @db.Decimal(12, 3)
+  unitCost  Decimal  @db.Decimal(12, 2)
+  totalCost Decimal  @db.Decimal(12, 2)
   // Nuevo precio de venta del producto tras la compra (ganancia % ↔ precio enlazados en el frontend)
-  newPrice   Decimal? @db.Decimal(12, 2)
+  newPrice  Decimal? @db.Decimal(12, 2)
 
   purchaseId String
   purchase   Purchase @relation(fields: [purchaseId], references: [id])
 
-  productId  String
-  product    Product  @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
   @@map("purchase_items")
 }
 
 // Pago/abono a una compra a crédito; si es en efectivo genera gasto de caja "Pago a proveedor"
 model PurchasePayment {
-  id             String        @id @default(cuid())
-  amount         Decimal       @db.Decimal(12, 2)
-  method         PaymentMethod @default(CASH)
+  id     String        @id @default(cuid())
+  amount Decimal       @db.Decimal(12, 2)
+  method PaymentMethod @default(CASH)
 
-  purchaseId     String
-  purchase       Purchase      @relation(fields: [purchaseId], references: [id])
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id])
 
   cashMovementId String?       @unique
   cashMovement   CashMovement? @relation(fields: [cashMovementId], references: [id])
 
-  createdById    String
-  createdBy      User          @relation(fields: [createdById], references: [id])
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
 
-  createdAt      DateTime      @default(now())
+  createdAt DateTime @default(now())
 
   @@index([purchaseId])
   @@map("purchase_payments")
@@ -613,38 +627,38 @@ model PurchasePayment {
 // ─── Esperas (ventas y compras en pausa) ────────────────────────────────────
 
 model HeldSale {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   customerName String?
-  itemCount    Int      @default(0)
-  total        Decimal  @default(0) @db.Decimal(12, 2)
+  itemCount    Int     @default(0)
+  total        Decimal @default(0) @db.Decimal(12, 2)
   // Carrito serializado: [{ productId, quantity, unitPrice, discountPct }], descuento total, etc.
   payload      Json
 
-  businessId   String
-  business     Business @relation(fields: [businessId], references: [id])
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
 
-  userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  createdAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([businessId, createdAt])
   @@map("held_sales")
 }
 
 model HeldPurchase {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   supplierName String?
-  total        Decimal  @default(0) @db.Decimal(12, 2)
+  total        Decimal @default(0) @db.Decimal(12, 2)
   payload      Json
 
-  businessId   String
-  business     Business @relation(fields: [businessId], references: [id])
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
 
-  userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  createdAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([businessId, createdAt])
   @@map("held_purchases")
@@ -653,18 +667,18 @@ model HeldPurchase {
 // ─── Audit ──────────────────────────────────────────────────────────────────
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  action     String
-  entity     String
-  entityId   String
-  payload    Json?
-  ipAddress  String?
-  userAgent  String?
+  id        String  @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String
+  payload   Json?
+  ipAddress String?
+  userAgent String?
 
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([entity, entityId])
   @@index([userId, createdAt])
