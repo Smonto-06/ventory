@@ -20,9 +20,13 @@ const UpdateSettingsSchema = z.object({
   phone: z.string().trim().max(40).optional(),
   address: z.string().trim().max(160).optional(),
   receiptFooter: z.string().trim().max(160).optional(),
+  // Notificaciones automáticas
+  notifyDailySummary: z.boolean().optional(),
+  notifyLowStock: z.boolean().optional(),
+  notifyEmail: z.string().trim().max(160).optional(),
 })
 
-const BILLING_FIELDS = ['taxId', 'phone', 'address', 'receiptFooter'] as const
+const BILLING_FIELDS = ['taxId', 'phone', 'address', 'receiptFooter', 'notifyEmail'] as const
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser(req)
@@ -43,6 +47,9 @@ export async function GET(req: NextRequest) {
       phone: true,
       address: true,
       receiptFooter: true,
+      notifyDailySummary: true,
+      notifyLowStock: true,
+      notifyEmail: true,
       status: true,
       trialEndsAt: true,
     },
@@ -97,6 +104,9 @@ export async function PUT(req: NextRequest) {
         phone: true,
         address: true,
         receiptFooter: true,
+        notifyDailySummary: true,
+        notifyLowStock: true,
+        notifyEmail: true,
       },
     })
 

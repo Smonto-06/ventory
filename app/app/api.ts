@@ -267,6 +267,10 @@ export interface Settings {
   phone?: string | null
   address?: string | null
   receiptFooter?: string | null
+  // Notificaciones automáticas
+  notifyDailySummary?: boolean
+  notifyLowStock?: boolean
+  notifyEmail?: string | null
   plan?: PlanInfo
   isSuperAdmin?: boolean
 }
@@ -466,6 +470,7 @@ export const api = {
 
   settings: () => get<{ settings: Settings }>('/api/settings'),
   updateSettings: (data: unknown) => put<{ settings: Settings }>('/api/settings', data),
+  testNotification: () => post<{ enviado: boolean; destino: string }>('/api/notifications/test', {}),
 
   branches: () => get<{ branches: Branch[] }>('/api/branches'),
 

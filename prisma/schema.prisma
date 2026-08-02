@@ -97,6 +97,14 @@ model Business {
   ivaPct               Decimal @default(0) @db.Decimal(5, 2)
   defaultOpeningAmount Decimal @default(0) @db.Decimal(12, 2)
 
+  // ── Notificaciones automáticas ──
+  // Resumen del día por correo al cierre y aviso de productos agotados.
+  // Van juntos en un mismo correo para no llenar la bandeja del dueño.
+  notifyDailySummary Boolean @default(false)
+  notifyLowStock     Boolean @default(true)
+  /// Destino del resumen; si está vacío se usa el correo del dueño
+  notifyEmail        String?
+
   // Plan comercial: los negocios nuevos entran en prueba (el registro lo fija);
   // los existentes quedan ACTIVE por el default
   status      BusinessStatus @default(ACTIVE)

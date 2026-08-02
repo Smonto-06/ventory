@@ -222,6 +222,18 @@ const TEMAS: Tema[] = [
         ),
       },
       {
+        p: '¿Puedo recibir un resumen del día sin entrar al sistema?',
+        r: (
+          <>
+            Sí. En <b>Ajustes → Notificaciones</b> activa <b>&quot;Resumen del día por correo&quot;</b> y cada
+            noche recibes las ventas del día, el desglose por método de pago, la utilidad, el cierre de
+            caja con su diferencia, las compras y los abonos. Si además dejas encendido{' '}
+            <b>&quot;Avisar qué hay que reponer&quot;</b>, el mismo correo trae la lista de lo agotado y lo
+            que está por acabarse. Puedes elegir a qué correo llega y enviarte una prueba de una vez.
+          </>
+        ),
+      },
+      {
         p: '¿Qué pasa si al cerrar hay diferencia?',
         r: (
           <>

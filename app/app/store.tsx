@@ -369,6 +369,8 @@ export interface AppStore extends AppData {
   editUserId: string | null
   setEditUserId: (id: string | null) => void
   saveSettings: (data: Record<string, unknown>) => Promise<void>
+  /** Envía el resumen diario de prueba al correo configurado */
+  probarNotificacion: () => Promise<void>
 
   // reportes
   loadReport: (date: string) => Promise<void>
@@ -1501,6 +1503,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patch, toast, onError],
   )
 
+  const probarNotificacion = useCallback(async () => {
+    try {
+      const r = await api.testNotification()
+      toast(`Resumen enviado a ${r.destino}`)
+    } catch (e) {
+      onError(e)
+    }
+  }, [toast, onError])
+
   const loadRangeReport = useCallback(
     async (from: string, to: string) => {
       try {
@@ -1665,6 +1676,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editUserId,
       setEditUserId,
       saveSettings,
+      probarNotificacion,
       loadReport,
       rangeReport,
       loadRangeReport,
