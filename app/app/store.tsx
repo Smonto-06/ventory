@@ -314,6 +314,10 @@ export interface AppStore extends AppData {
   quoteId: string | null
   quoteDet: Quote | null
   setQuoteDet: (q: Quote | null) => void
+  /** Líneas de la cotización cargada que hoy no alcanzan en inventario */
+  quoteFaltantes: Array<{ name: string; disponible: number; pedido: number }>
+  /** Cuánto falta para poder cumplir una cotización con el stock de hoy */
+  faltantesDe: (q: Quote) => Array<{ name: string; disponible: number; pedido: number }>
   crearCotizacion: (datos: { customerId?: string | null; customerName?: string; notes?: string; validDays: number }) => Promise<boolean>
   cargarCotizaciones: () => Promise<void>
   convertirCotizacion: (id: string) => Promise<void>
@@ -440,6 +444,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // para que al cobrar quede ligada y no se pueda convertir dos veces.
   const [quoteId, setQuoteId] = useState<string | null>(null)
   const [quoteDet, setQuoteDet] = useState<Quote | null>(null)
+  // Productos de la cotización cargada que hoy no alcanzan en bodega. Se
+  // guarda para mostrarlo fijo en el carrito: un toast se va y el cajero se
+  // entera del faltante solo al pulsar Cobrar, con el pago ya digitado.
+  const [quoteFaltantes, setQuoteFaltantes] = useState<
+    Array<{ name: string; disponible: number; pedido: number }>
+  >([])
   const [rangeReport, setRangeReport] = useState<RangeReport | null>(null)
   // Ventas guardadas sin conexión, pendientes de enviar
   const [pendingCount, setPendingCount] = useState(0)
@@ -729,6 +739,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clearCart = useCallback(() => {
     setCart([])
     setDiscount(0)
+    setQuoteId(null)
+    setQuoteFaltantes([])
   }, [])
 
   const cartLines = cart.map((i) => ({ unitPrice: i.price, quantity: i.qty, discountPct: i.dscPct }))
@@ -777,6 +789,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setReceived(0)
     setNote('')
     setCustomerName('')
+    setQuoteId(null)
+    setQuoteFaltantes([])
     setScreen('pos')
   }, [])
 
@@ -945,6 +959,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [cart, data.branches, branchId, discount, discountIsPct, cargarCotizaciones, toast, onError],
   )
 
+  /**
+   * Qué líneas de una cotización no alcanzan con el inventario de hoy.
+   * Es informativo: cotizar mercancía que no se tiene es legítimo (encargos),
+   * pero al ir a cobrar hay que saberlo antes de digitar el pago.
+   */
+  const faltantesDe = useCallback(
+    (q: Quote) =>
+      q.items
+        .map((i) => {
+          const p = data.products.find((x) => x.id === i.productId)
+          const disponible = p?.stock ?? 0
+          return { name: i.product.name, disponible, pedido: i.quantity }
+        })
+        .filter((f) => f.pedido > f.disponible),
+    [data.products],
+  )
+
   /** Carga la cotización en el carrito con los precios que se le prometieron */
   const convertirCotizacion = useCallback(
     async (id: string) => {
@@ -980,14 +1011,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setDiscountIsPct(cot.discountIsPct)
       setCustomerName(cot.customer?.name ?? cot.customerName ?? '')
       setQuoteId(cot.id)
+
+      // Faltantes de inventario: se avisa AQUÍ, antes de digitar el pago.
+      const faltan = faltantesDe(cot)
+      setQuoteFaltantes(faltan)
+
       setScreen('pos')
-      toast(
-        cambiados.length
-          ? `${cot.folio} cargada · ${cambiados.length} producto(s) cambiaron de precio, se respeta el cotizado`
-          : `${cot.folio} cargada en el carrito`,
-      )
+      if (faltan.length) {
+        toast(
+          faltan.length === 1
+            ? `Ojo: de "${faltan[0].name}" solo hay ${faltan[0].disponible} y la cotización pide ${faltan[0].pedido}`
+            : `Ojo: ${faltan.length} productos de esta cotización no alcanzan en inventario`,
+        )
+      } else {
+        toast(
+          cambiados.length
+            ? `${cot.folio} cargada · ${cambiados.length} producto(s) cambiaron de precio, se respeta el cotizado`
+            : `${cot.folio} cargada en el carrito`,
+        )
+      }
     },
-    [data.quotes, data.products, toast],
+    [data.quotes, data.products, faltantesDe, toast],
   )
 
   const anularCotizacion = useCallback(
@@ -1761,6 +1805,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       quoteId,
       quoteDet,
       setQuoteDet,
+      quoteFaltantes,
+      faltantesDe,
       crearCotizacion,
       cargarCotizaciones,
       convertirCotizacion,
@@ -1831,7 +1877,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
       turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre, branchId,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
-      pay, amounts, received, lastSale, lastPurchase, pesoProduct, varianteProduct, quoteId, quoteDet, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, editClientId,
+      pay, amounts, received, lastSale, lastPurchase, pesoProduct, varianteProduct, quoteId, quoteDet, quoteFaltantes, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,
       ncProv, ncItems, ncMethod, ncAbono, fmt,
     ],

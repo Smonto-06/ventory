@@ -143,6 +143,9 @@ export default function CotizacionesScreen() {
             filas.map((c) => {
               const chip = CHIPS[c.status] ?? CHIPS.OPEN
               const convertible = c.status === 'OPEN' || c.status === 'EXPIRED'
+              // Solo informativo: cotizar lo que no se tiene es legítimo, pero
+              // conviene verlo antes de llamar al cliente a recogerlo.
+              const faltan = convertible ? s.faltantesDe(c) : []
               return (
                 <div key={c.id} style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'center', borderBottom: '1px solid #EEF2F7', padding: '0 10px' }}>
                   <div style={{ padding: '13px 10px' }}>
@@ -153,8 +156,11 @@ export default function CotizacionesScreen() {
                     <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {c.customer?.name ?? c.customerName ?? 'Sin cliente'}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                      {c.items.length} {c.items.length === 1 ? 'producto' : 'productos'}
+                    <div style={{ fontSize: 12, color: faltan.length ? '#C9433B' : 'var(--muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {faltan.length > 0 && <Icono n="alerta" tam={12} />}
+                      {faltan.length
+                        ? `Falta inventario para ${faltan.length} producto${faltan.length === 1 ? '' : 's'}`
+                        : `${c.items.length} ${c.items.length === 1 ? 'producto' : 'productos'}`}
                     </div>
                   </div>
                   <div style={{ padding: '13px 10px' }}>

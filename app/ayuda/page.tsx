@@ -172,6 +172,19 @@ const TEMAS: Tema[] = [
         ),
       },
       {
+        p: 'Coticé más de lo que tengo en bodega, ¿qué pasa al cobrarla?',
+        r: (
+          <>
+            Cotizar lo que no se tiene es normal —así se registran los encargos—, así que el sistema lo
+            permite. Pero al cargar la cotización en el carrito te avisa de una vez, en rojo, cuáles
+            productos no alcanzan y cuánto hay de cada uno. Y si intentas cobrarla igual, la venta
+            <b> se rechaza</b>: no se descuenta nada y la cotización queda abierta para cobrarla cuando
+            llegue la mercancía. La única excepción es si activaste <b>&quot;Permitir stock negativo&quot;</b>
+            en Ajustes, que es justamente decirle al sistema que puede vender sin existencias.
+          </>
+        ),
+      },
+      {
         p: '¿Qué pasa si el precio cambió desde que coticé?',
         r: (
           <>
