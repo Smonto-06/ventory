@@ -18,6 +18,14 @@ import { moveStock, InsufficientStockError } from '@/lib/inventory'
 
 export const dynamic = 'force-dynamic'
 
+/** La cotización ya estaba convertida o anulada: se aborta toda la venta */
+class QuoteNoConvertible extends Error {
+  constructor() {
+    super('Cotización no convertible')
+    this.name = 'QuoteNoConvertible'
+  }
+}
+
 const ItemSchema = z.object({
   productId: z.string().min(1),
   // Decimal para productos vendidos por peso (p. ej. 0.75 kg)
@@ -50,6 +58,9 @@ const CreateSaleSchema = z.object({
   discountAmount: z.number().nonnegative().optional(),
   notes: z.string().optional(),
   customerId: z.string().optional(),
+  // Cotización de la que sale esta venta: al cobrarla queda marcada como
+  // convertida y ligada a la venta, dentro de la misma transacción.
+  quoteId: z.string().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -70,7 +81,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
-  const { cashSessionId, items, paymentMethod, payments, notes, customerId } = parsed.data
+  const { cashSessionId, items, paymentMethod, payments, notes, customerId, quoteId } = parsed.data
   const discount = parsed.data.discountAmount ?? parsed.data.discount
   const discountIsPct = parsed.data.discountAmount !== undefined ? false : parsed.data.discountIsPct
   const businessId = session.user.businessId
@@ -288,6 +299,20 @@ export async function POST(req: NextRequest) {
         })
       }
 
+      // Cotización convertida. El updateMany con status OPEN es la garantía de
+      // que solo se convierte una vez: si dos cajas cobran la misma cotización
+      // al tiempo, la segunda no encuentra fila que actualizar y se revierte
+      // toda la venta, en vez de duplicar el cobro.
+      if (quoteId) {
+        const marcadas = await tx.quote.updateMany({
+          where: { id: quoteId, businessId, status: 'OPEN' },
+          data: { status: 'CONVERTED', convertedAt: new Date(), saleId: newSale.id },
+        })
+        if (marcadas.count === 0) {
+          throw new QuoteNoConvertible()
+        }
+      }
+
       return tx.sale.findUnique({
         where: { id: newSale.id },
         include: {
@@ -324,6 +349,12 @@ export async function POST(req: NextRequest) {
           required: error.required,
         },
         { status: 422 },
+      )
+    }
+    if (error instanceof QuoteNoConvertible) {
+      return NextResponse.json(
+        { error: 'Esa cotización ya no está disponible: puede estar anulada o ya convertida', code: 'QUOTE_UNAVAILABLE' },
+        { status: 409 },
       )
     }
     console.error('[POST /api/sales]', error)

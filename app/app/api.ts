@@ -65,6 +65,40 @@ export interface Product {
   variantOptions?: Array<{ nombre: string; valores: string[] }> | null
 }
 
+export interface QuoteItem {
+  id: string
+  productId: string
+  product: { id: string; name: string; sku: string | null; unitOfMeasure?: string | null; imageUrl?: string | null }
+  quantity: number
+  unitPrice: number
+  discountPct: number
+  total: number
+}
+
+export interface Quote {
+  id: string
+  folio: string
+  /** OPEN · EXPIRED (derivado) · CONVERTED · CANCELLED */
+  status: string
+  rawStatus: string
+  subtotal: number
+  discountAmount: number
+  discountIsPct: boolean
+  discountPct: number
+  total: number
+  notes: string | null
+  validUntil: string
+  convertedAt: string | null
+  cancelledAt: string | null
+  createdAt: string
+  customer: { id: string; name: string; phone?: string | null } | null
+  customerName: string | null
+  createdBy: { id: string; name: string | null } | null
+  branch: { id: string; name: string } | null
+  sale: { id: string; folio: string } | null
+  items: QuoteItem[]
+}
+
 export interface Category {
   id: string
   name: string
@@ -362,6 +396,9 @@ export const api = {
     ),
   createProduct: (data: unknown) => post<{ product: Product }>('/api/products', data),
   updateProduct: (id: string, data: unknown) => patch<{ product: Product }>(`/api/products/${id}`, data),
+  quotes: (params = '') => get<{ quotes: Quote[] }>(`/api/quotes${params}`),
+  createQuote: (data: unknown) => post<{ quote: Quote }>('/api/quotes', data),
+  updateQuote: (id: string, data: unknown) => patch<{ quote: Quote }>(`/api/quotes/${id}`, data),
   addVariants: (id: string, data: unknown) =>
     post<{ creadas: number; convertido: boolean }>(`/api/products/${id}/variants`, data),
   archiveProduct: (id: string) => del<{ ok: boolean }>(`/api/products/${id}`),

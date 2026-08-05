@@ -130,6 +130,11 @@ function CartFooter({ onAction }: { onAction?: () => void }) {
           ))}
         </datalist>
       </div>
+      {s.quoteId && (
+        <div style={{ marginBottom: 10, background: '#EEF0FE', border: '1px solid #C7D0FB', borderRadius: 10, padding: '9px 12px', fontSize: 12.3, color: '#4338CA', lineHeight: 1.45 }}>
+          Cobrando una <b>cotización</b>: al confirmar queda marcada como convertida.
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         <button
           onClick={() => {
@@ -165,6 +170,19 @@ function CartFooter({ onAction }: { onAction?: () => void }) {
           Devolución
         </button>
       </div>
+      <button
+        onClick={() => {
+          if (s.cart.length) s.openModal('cotizar')
+          else {
+            onAction?.()
+            s.go('cotizaciones')
+          }
+        }}
+        style={{ width: '100%', height: 42, marginBottom: 8, borderRadius: 11, background: 'var(--bg)', border: '1.5px solid var(--border)', color: s.cart.length ? 'var(--text)' : 'var(--muted)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+      >
+        <Icono n="documento" tam={15} />
+        {s.cart.length ? 'Cotizar (no descuenta inventario)' : 'Ver cotizaciones'}
+      </button>
       <button
         onClick={() => s.cart.length > 0 && s.go('cobro')}
         disabled={s.cart.length === 0}

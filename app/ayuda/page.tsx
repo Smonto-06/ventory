@@ -129,6 +129,17 @@ const TEMAS: Tema[] = [
         ),
       },
       {
+        p: 'Un cliente me devuelve solo una parte de lo que pesé, ¿se puede?',
+        r: (
+          <>
+            Sí. En la devolución, los productos por kilo abren el mismo teclado numérico de la venta:
+            digitas <b>0,800</b> y el sistema reembolsa lo proporcional y devuelve al inventario
+            exactamente esos 800 gramos. Puedes devolver por partes —primero 800 g, después 700 g— y el
+            sistema lleva la cuenta para que nunca se devuelva más de lo que se vendió en esa factura.
+          </>
+        ),
+      },
+      {
         p: '¿Cómo cambio los datos que salen en la factura?',
         r: (
           <>
@@ -144,6 +155,30 @@ const TEMAS: Tema[] = [
             En <b>Ajustes → Impresora de tickets</b> elige <b>Conectar USB</b> o <b>Conectar Bluetooth</b> y
             selecciona tu impresora (58 o 80 mm). Usa el botón <b>Probar</b> para verificar. Sin impresora
             conectada, imprimir abre el diálogo normal del navegador.
+          </>
+        ),
+      },
+      {
+        p: 'Un cliente me pide una cotización, ¿cómo se la doy?',
+        r: (
+          <>
+            Arma el carrito normal en el punto de venta y en vez de cobrar pulsa <b>Cotizar</b>.
+            Escribes a nombre de quién va y por cuántos días se respeta el precio, y se imprime un
+            documento con número propio (COT-000001). <b>No descuenta inventario ni mueve la caja</b>:
+            es solo una promesa de precio. Cuando el cliente vuelva, en <b>Cotizaciones</b> pulsas
+            &quot;Convertir en venta&quot;, el carrito se carga con los precios cotizados y cobras normal
+            — ahí sí baja el stock.
+          </>
+        ),
+      },
+      {
+        p: '¿Qué pasa si el precio cambió desde que coticé?',
+        r: (
+          <>
+            Se respeta el precio que le prometiste al cliente, y el sistema te avisa cuántos productos
+            cambiaron de precio para que decidas. Si prefieres no sostenerlo, borras la línea y la
+            vuelves a agregar al precio de hoy. Una cotización vencida también se puede convertir: el
+            vencimiento es una guía para el cliente, no un candado.
           </>
         ),
       },

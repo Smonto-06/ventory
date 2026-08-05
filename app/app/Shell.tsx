@@ -30,6 +30,8 @@ import ComprasScreen from './screens/ComprasScreen'
 import NuevaCompraScreen from './screens/NuevaCompraScreen'
 import MovimientosScreen from './screens/MovimientosScreen'
 import ProveedoresScreen from './screens/ProveedoresScreen'
+import CotizacionesScreen from './screens/CotizacionesScreen'
+import CotizacionReciboScreen from './screens/CotizacionReciboScreen'
 
 const ADMIN_SET: Screen[] = [
   'panel',
@@ -41,6 +43,7 @@ const ADMIN_SET: Screen[] = [
   'movimientos',
   'proveedores',
   'clienteperfil',
+  'cotizaciones',
 ]
 
 export function useWindowWidth() {
@@ -136,6 +139,8 @@ function NavIcon({ id }: { id: string }) {
           <circle cx="10" cy="11.5" r="1.7" fill="currentColor" />
         </svg>
       )
+    case 'cotizaciones':
+      return <Icono n="documento" tam={17} />
     case 'expandir':
       return <Icono n="expandir" tam={17} />
     case 'contraer':
@@ -181,6 +186,7 @@ function Sidebar({ narrow }: { narrow: boolean }) {
     { id: 'compras', label: 'Compras', screen: 'compras', adminOnly: true },
     { id: 'proveedores', label: 'Proveedores', screen: 'proveedores', adminOnly: true },
     { id: 'ventas', label: 'Ventas', screen: 'ventas' },
+    { id: 'cotizaciones', label: 'Cotizaciones', screen: 'cotizaciones' },
     { id: 'movimientos', label: 'Movimientos', screen: 'movimientos', adminOnly: true },
     { id: 'reportes', label: 'Reportes', screen: 'reportes', adminOnly: true },
     { id: 'clientes', label: 'Clientes', screen: 'clientes' },
@@ -398,6 +404,8 @@ export default function Shell() {
     ticket: <TicketScreen />,
     cierre: <CierreScreen />,
     esperas: <EsperasScreen />,
+    cotizaciones: <CotizacionesScreen />,
+    cotizacionRecibo: <CotizacionReciboScreen />,
     devoluciones: <DevolucionesScreen />,
     reciboAbono: <ReciboAbonoScreen />,
     cierreRecibo: <CierreReciboScreen />,
