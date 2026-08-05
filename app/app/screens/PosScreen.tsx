@@ -130,9 +130,26 @@ function CartFooter({ onAction }: { onAction?: () => void }) {
           ))}
         </datalist>
       </div>
-      {s.quoteId && (
+      {s.quoteId && s.quoteFaltantes.length === 0 && (
         <div style={{ marginBottom: 10, background: '#EEF0FE', border: '1px solid #C7D0FB', borderRadius: 10, padding: '9px 12px', fontSize: 12.3, color: '#4338CA', lineHeight: 1.45 }}>
           Cobrando una <b>cotización</b>: al confirmar queda marcada como convertida.
+        </div>
+      )}
+      {s.quoteId && s.quoteFaltantes.length > 0 && (
+        <div style={{ marginBottom: 10, background: '#FDECEC', border: '1.5px solid #F5C6C6', borderRadius: 10, padding: '10px 12px', fontSize: 12.3, color: '#8F2F2A', lineHeight: 1.5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 800, marginBottom: 4 }}>
+            <Icono n="alerta" tam={14} />
+            No alcanza el inventario
+          </div>
+          {s.quoteFaltantes.slice(0, 3).map((f) => (
+            <div key={f.name}>
+              {f.name}: hay <b>{fmtQty(f.disponible)}</b> y la cotización pide <b>{fmtQty(f.pedido)}</b>
+            </div>
+          ))}
+          {s.quoteFaltantes.length > 3 && <div>y {s.quoteFaltantes.length - 3} producto(s) más</div>}
+          <div style={{ marginTop: 5, fontSize: 11.8 }}>
+            Ajusta las cantidades, o registra primero la compra que falta.
+          </div>
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>

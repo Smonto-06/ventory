@@ -169,6 +169,49 @@ const stockDe = async (S, id) => {
   check('cotizaciones', 'no se convierte una cotización anulada', deAnulada.status === 409, `status ${deAnulada.status}`)
   check('cotizaciones', 'y no descontó inventario', (await stockDe(S, pid)) === 70)
 
+  // ══ CONVERTIR UNA COTIZACIÓN QUE NO ALCANZA EN INVENTARIO ══
+  // Cotizar 500 teniendo 100 es legítimo (un encargo), pero al cobrarla el
+  // sistema tiene que frenar en vez de dejar el inventario en negativo.
+  const grande = await S.post('/api/quotes', {
+    branchId,
+    customerName: 'Pedido grande',
+    items: [{ productId: pid, quantity: 500, unitPrice: 1500 }],
+  })
+  const stockAntesGrande = await stockDe(S, pid)
+  const intentoGrande = await S.post('/api/sales', {
+    cashSessionId: sid,
+    quoteId: grande.data.quote.id,
+    items: [{ productId: pid, quantity: 500, unitPrice: 1500 }],
+    paymentMethod: 'CASH',
+    payments: { cashActive: true, cashReceived: 750000, card: 0, transfer: 0 },
+  })
+  check(
+    'cotizaciones',
+    'convertir más de lo que hay se RECHAZA',
+    intentoGrande.status === 422,
+    `status ${intentoGrande.status}`,
+  )
+  check(
+    'cotizaciones',
+    'el mensaje dice cuánto hay y cuánto se pide',
+    /Disponible/.test(intentoGrande.data?.error ?? '') && intentoGrande.data?.code === 'INSUFFICIENT_STOCK',
+    intentoGrande.data?.error,
+  )
+  check(
+    'cotizaciones',
+    'el inventario NO se movió tras el rechazo',
+    (await stockDe(S, pid)) === stockAntesGrande,
+    `${stockAntesGrande} → ${await stockDe(S, pid)}`,
+  )
+  const grandeTras = await S.get(`/api/quotes/${grande.data.quote.id}`)
+  check(
+    'cotizaciones',
+    'la cotización sigue abierta para cobrarla cuando llegue la mercancía',
+    grandeTras.data?.quote?.status === 'OPEN',
+    grandeTras.data?.quote?.status,
+  )
+  await S.patch(`/api/quotes/${grande.data.quote.id}`, { action: 'cancel' })
+
   // ══ DOS CAJAS CONVIRTIENDO LA MISMA COTIZACIÓN A LA VEZ ══
   // Es el caso que descuadraría el inventario: si las dos pasaran, se
   // descontaría el doble por una sola venta real.
@@ -289,11 +332,49 @@ const stockDe = async (S, id) => {
   check('cotizaciones/ui', 'muestra la cotización convertida', cuerpo.includes('Convertida'))
   check('cotizaciones/ui', 'muestra la anulada', cuerpo.includes('Anulada'))
 
-  // el punto de venta ofrece cotizar
-  await page.locator('nav button', { hasText: 'Punto de Venta' }).first().click()
-  await page.waitForTimeout(2000)
-  const pos = await page.textContent('body')
-  check('cotizaciones/ui', 'el punto de venta ofrece cotizar', /Cotizar|Ver cotizaciones/.test(pos))
+  // aviso de faltante al cargar una cotización que no alcanza
+  const faltante = await S.post('/api/quotes', {
+    branchId,
+    customerName: 'Encargo sin stock',
+    items: [{ productId: pid, quantity: 999, unitPrice: 1500 }],
+  })
+  await page.reload({ waitUntil: 'networkidle' })
+  await page.waitForTimeout(2500)
+  if (await page.locator('text=Omitir por ahora').count()) {
+    await page.locator('text=Omitir por ahora').first().click()
+    await page.waitForTimeout(500)
+  }
+  await page.locator('nav button', { hasText: 'Cotizaciones' }).first().click()
+  await page.waitForTimeout(1800)
+  const listaConFaltante = await page.textContent('body')
+  check(
+    'cotizaciones/ui',
+    'la lista marca las cotizaciones sin inventario suficiente',
+    /Falta inventario para/.test(listaConFaltante),
+    'no aparece la advertencia',
+  )
+
+  await page
+    .locator('div', { hasText: faltante.data.quote.folio })
+    .locator('button', { hasText: 'Convertir en venta' })
+    .first()
+    .click()
+  await page.waitForTimeout(1800)
+  const carritoConFaltante = await page.textContent('body')
+  check(
+    'cotizaciones/ui',
+    'AL CARGARLA avisa que no alcanza el inventario, antes de cobrar',
+    carritoConFaltante.includes('No alcanza el inventario'),
+    'no aparece el aviso en el carrito',
+  )
+  check(
+    'cotizaciones/ui',
+    'el aviso dice cuánto hay y cuánto pide',
+    /la cotización pide/.test(carritoConFaltante),
+  )
+
+  // al convertir ya quedamos en el punto de venta, que es a pantalla completa
+  check('cotizaciones/ui', 'el punto de venta ofrece cotizar', /Cotizar|Ver cotizaciones/.test(carritoConFaltante))
   check('cotizaciones/ui', 'ningún error de JavaScript', errores.length === 0, errores.join(' | '))
 
   await S.ctx.close()
