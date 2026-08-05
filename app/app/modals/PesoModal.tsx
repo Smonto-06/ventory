@@ -4,12 +4,11 @@
 // calculadora (solo dígitos, coma decimal y borrar) con el valor calculado
 // en vivo al precio por kilo. También acepta el teclado físico.
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useApp } from '../store'
 import { fmtQty, parseQty } from '../ui'
 import { Icono } from '@/components/Icono'
-
-const KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', ',', '0', '⌫'] as const
+import TecladoPeso, { aplicarTecla, useTecladoFisico } from './TecladoPeso'
 
 export default function PesoModal() {
   const s = useApp()
@@ -17,31 +16,8 @@ export default function PesoModal() {
   const existing = p ? s.cart.find((i) => i.productId === p.id) : undefined
   const [raw, setRaw] = useState<string>(existing ? String(existing.qty).replace('.', ',') : '')
 
-  const press = (k: string) => {
-    setRaw((r) => {
-      if (k === '⌫') return r.slice(0, -1)
-      if (k === ',') {
-        if (r.includes(',')) return r
-        return r === '' ? '0,' : r + ','
-      }
-      // máximo 3 decimales (gramos)
-      const dec = r.split(',')[1]
-      if (dec !== undefined && dec.length >= 3) return r
-      if (r.replace(',', '').length >= 6) return r
-      return r + k
-    })
-  }
-
-  // Teclado físico: dígitos, coma/punto y Backspace
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (/^[0-9]$/.test(e.key)) press(e.key)
-      else if (e.key === ',' || e.key === '.') press(',')
-      else if (e.key === 'Backspace') press('⌫')
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  const press = (k: string) => setRaw((r) => aplicarTecla(r, k))
+  useTecladoFisico(press)
 
   if (!p) return null
 
@@ -87,27 +63,8 @@ export default function PesoModal() {
           </div>
         </div>
 
-        {/* Teclado numérico: solo dígitos, coma y borrar */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 14 }}>
-          {KEYS.map((k) => (
-            <button
-              key={k}
-              onClick={() => press(k)}
-              style={{
-                height: 52,
-                borderRadius: 12,
-                fontWeight: 800,
-                fontSize: k === '⌫' ? 17 : 19,
-                cursor: 'pointer',
-                transition: 'all .1s',
-                background: k === '⌫' ? '#FDECEC' : 'var(--bg)',
-                color: k === '⌫' ? '#C9433B' : 'var(--text)',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              {k}
-            </button>
-          ))}
+        <div style={{ marginTop: 14 }}>
+          <TecladoPeso onTecla={press} />
         </div>
 
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>

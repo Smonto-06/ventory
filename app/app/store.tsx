@@ -27,6 +27,7 @@ import {
   CashMovement,
   CashSessionSummary,
   Shift,
+  Quote,
   HeldSale,
   HeldPurchase,
   AppUser,
@@ -61,6 +62,8 @@ export type Screen =
   | 'reciboAbono'
   | 'cierreRecibo'
   | 'compraRecibo'
+  | 'cotizaciones'
+  | 'cotizacionRecibo'
 
 export type ModalId =
   | 'producto'
@@ -86,6 +89,8 @@ export type ModalId =
   | 'contact'
   | 'peso'
   | 'variante'
+  | 'cotizar'
+  | 'cotizacionDetalle'
   | 'importar'
   | 'scanner'
   | 'auditoria'
@@ -180,6 +185,7 @@ interface AppData {
   movements: CashMovement[]
   movementDescriptions: { INCOME: string[]; EXPENSE: string[] }
   heldSales: HeldSale[]
+  quotes: Quote[]
   heldPurchases: HeldPurchase[]
   shifts: Shift[]
   users: AppUser[]
@@ -205,6 +211,7 @@ const initialData: AppData = {
     EXPENSE: ['Pago a proveedor', 'Servicios públicos', 'Domicilios', 'Otro gasto'],
   },
   heldSales: [],
+  quotes: [],
   heldPurchases: [],
   shifts: [],
   users: [],
@@ -303,6 +310,14 @@ export interface AppStore extends AppData {
 
   // esperas
   holdSale: () => Promise<void>
+  /** Cotización que se está viendo o de la que salió el carrito actual */
+  quoteId: string | null
+  quoteDet: Quote | null
+  setQuoteDet: (q: Quote | null) => void
+  crearCotizacion: (datos: { customerId?: string | null; customerName?: string; notes?: string; validDays: number }) => Promise<boolean>
+  cargarCotizaciones: () => Promise<void>
+  convertirCotizacion: (id: string) => Promise<void>
+  anularCotizacion: (id: string) => Promise<void>
   resumeSale: (id: string) => Promise<void>
   discardHeldSale: (id: string) => Promise<void>
 
@@ -421,6 +436,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastPurchase, setLastPurchase] = useState<Purchase | null>(null)
   const [pesoProduct, setPesoProduct] = useState<Product | null>(null)
   const [varianteProduct, setVarianteProduct] = useState<Product | null>(null)
+  // Cotizaciones: quoteId marca que el carrito actual salió de una cotización,
+  // para que al cobrar quede ligada y no se pueda convertir dos veces.
+  const [quoteId, setQuoteId] = useState<string | null>(null)
+  const [quoteDet, setQuoteDet] = useState<Quote | null>(null)
   const [rangeReport, setRangeReport] = useState<RangeReport | null>(null)
   // Ventas guardadas sin conexión, pendientes de enviar
   const [pendingCount, setPendingCount] = useState(0)
@@ -821,6 +840,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       discount,
       discountIsPct,
       customerId: matchCustomerId(),
+      quoteId: quoteId ?? undefined,
       notes: [note, !matchCustomerId() && customerName.trim() ? `Cliente: ${customerName.trim()}` : '']
         .filter(Boolean)
         .join(' · ') || undefined,
@@ -839,7 +859,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       onError(e)
     }
-  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, buildSaleItems, matchCustomerId, afterSale, newSale, toast, onError])
+  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, quoteId, buildSaleItems, matchCustomerId, afterSale, newSale, toast, onError])
 
   const finalizeCredito = useCallback(
     async (customerId: string) => {
@@ -857,6 +877,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           discount,
           discountIsPct,
           customerId,
+          quoteId: quoteId ?? undefined,
           notes: note || undefined,
         })
         await afterSale(r.sale)
@@ -864,7 +885,122 @@ export function AppProvider({ children }: { children: ReactNode }) {
         onError(e)
       }
     },
-    [cart, data.cash.session, discount, discountIsPct, note, buildSaleItems, afterSale, toast, onError],
+    [cart, data.cash.session, discount, discountIsPct, note, quoteId, buildSaleItems, afterSale, toast, onError],
+  )
+
+  // ─── Cotizaciones ─────────────────────────────────────────────────────────
+  // Una cotización no mueve inventario ni caja: solo guarda precios. El
+  // inventario se toca al cobrarla, por el mismo camino que cualquier venta.
+
+  const cargarCotizaciones = useCallback(async () => {
+    try {
+      const r = await api.quotes()
+      patch({ quotes: r.quotes })
+    } catch (e) {
+      onError(e)
+    }
+  }, [patch, onError])
+
+  const crearCotizacion = useCallback(
+    async (datos: { customerId?: string | null; customerName?: string; notes?: string; validDays: number }) => {
+      if (!cart.length) {
+        toast('Agrega productos antes de cotizar')
+        return false
+      }
+      const sucursal = data.branches.find((b) => b.id === branchId) ?? data.branches[0]
+      if (!sucursal) {
+        toast('No hay sucursal configurada')
+        return false
+      }
+      try {
+        const r = await api.createQuote({
+          branchId: sucursal.id,
+          customerId: datos.customerId ?? undefined,
+          customerName: datos.customerName?.trim() || undefined,
+          notes: datos.notes?.trim() || undefined,
+          validDays: datos.validDays,
+          discount,
+          discountIsPct,
+          items: cart.map((i) => ({
+            productId: i.productId,
+            quantity: i.qty,
+            unitPrice: i.price,
+            discountPct: i.dscPct || 0,
+          })),
+        })
+        setCart([])
+        setDiscount(0)
+        setCustomerName('')
+        setQuoteId(null)
+        setQuoteDet(r.quote)
+        await cargarCotizaciones()
+        toast(`Cotización ${r.quote.folio} creada`)
+        setScreen('cotizacionRecibo')
+        return true
+      } catch (e) {
+        onError(e)
+        return false
+      }
+    },
+    [cart, data.branches, branchId, discount, discountIsPct, cargarCotizaciones, toast, onError],
+  )
+
+  /** Carga la cotización en el carrito con los precios que se le prometieron */
+  const convertirCotizacion = useCallback(
+    async (id: string) => {
+      const cot = data.quotes.find((q) => q.id === id)
+      if (!cot) return
+      if (cot.status === 'CONVERTED') return toast('Esa cotización ya se convirtió en venta')
+      if (cot.status === 'CANCELLED') return toast('Esa cotización está anulada')
+
+      // Aviso, no bloqueo: el precio se respeta, pero el cajero debe saber que
+      // cambió para poder decidir.
+      const cambiados = cot.items.filter((i) => {
+        const actual = data.products.find((p) => p.id === i.productId)
+        return actual && actual.price !== i.unitPrice
+      })
+
+      setCart(
+        cot.items.map((i) => {
+          const p = data.products.find((x) => x.id === i.productId)
+          return {
+            productId: i.productId,
+            name: i.product.name,
+            sku: i.product.sku,
+            price: i.unitPrice,
+            cost: p?.cost ?? null,
+            imageUrl: i.product.imageUrl ?? null,
+            qty: i.quantity,
+            dscPct: i.discountPct,
+            unit: i.product.unitOfMeasure === 'kg' ? 'kg' : null,
+          }
+        }),
+      )
+      setDiscount(cot.discountIsPct ? cot.discountPct : cot.discountAmount)
+      setDiscountIsPct(cot.discountIsPct)
+      setCustomerName(cot.customer?.name ?? cot.customerName ?? '')
+      setQuoteId(cot.id)
+      setScreen('pos')
+      toast(
+        cambiados.length
+          ? `${cot.folio} cargada · ${cambiados.length} producto(s) cambiaron de precio, se respeta el cotizado`
+          : `${cot.folio} cargada en el carrito`,
+      )
+    },
+    [data.quotes, data.products, toast],
+  )
+
+  const anularCotizacion = useCallback(
+    async (id: string) => {
+      try {
+        await api.updateQuote(id, { action: 'cancel' })
+        await cargarCotizaciones()
+        toast('Cotización anulada')
+      } catch (e) {
+        onError(e)
+      }
+    },
+    [cargarCotizaciones, toast, onError],
   )
 
   // ─── Esperas de venta ─────────────────────────────────────────────────────
@@ -1622,6 +1758,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       newSale,
       lastPurchase,
       holdSale,
+      quoteId,
+      quoteDet,
+      setQuoteDet,
+      crearCotizacion,
+      cargarCotizaciones,
+      convertirCotizacion,
+      anularCotizacion,
       resumeSale,
       discardHeldSale,
       saleDetId,
@@ -1688,7 +1831,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
       turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre, branchId,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
-      pay, amounts, received, lastSale, lastPurchase, pesoProduct, varianteProduct, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, editClientId,
+      pay, amounts, received, lastSale, lastPurchase, pesoProduct, varianteProduct, quoteId, quoteDet, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,
       ncProv, ncItems, ncMethod, ncAbono, fmt,
     ],

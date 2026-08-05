@@ -3,7 +3,7 @@
 Pruebas de extremo a extremo contra un servidor real, complementarias a
 `npm test` (que cubre las reglas de negocio con Jest).
 
-## Qué cubre — 235 pruebas
+## Qué cubre — 280 pruebas
 
 | Archivo | Área | Pruebas |
 |---|---|---|
@@ -15,6 +15,7 @@ Pruebas de extremo a extremo contra un servidor real, complementarias a
 | `qa-6-landing-ayuda-guia.js` | Página comercial, centro de ayuda y guía de primeros pasos | 33 |
 | `qa-7-variantes.js` | Variantes de producto: creación, venta, stock por variante, conversión y archivado | 34 |
 | `qa-8-notificaciones.js` | Resumen diario por correo, aviso de reposición, cron y envío real | 30 |
+| `qa-9-cotizaciones.js` | Cotizaciones (sin tocar inventario) y devolución parcial por peso | 45 |
 
 ## Cómo ejecutarlas
 

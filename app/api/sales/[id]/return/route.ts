@@ -52,17 +52,41 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!sale) return NextResponse.json({ error: 'Venta no encontrada' }, { status: 404 })
     if (sale.status === 'CANCELLED') return badRequest('La venta está anulada')
 
-    // Validar cantidades: tope disponible = qty − retQty; reembolso proporcional al valor de línea
+    // Tope por línea: lo vendido menos lo ya devuelto. Es un límite del
+    // documento, no del inventario: sirve para no reembolsar más plata de la
+    // que se cobró en esa factura.
+    //
+    // Las cantidades se comparan en gramos (enteros) porque los productos por
+    // peso llevan decimales, y sumar 0,8 + 0,7 en coma flotante puede dar
+    // 1,4999999 y rechazar una devolución legítima.
+    const aMil = (n: unknown) => Math.round(Number(n) * 1000)
+
     const itemMap = new Map(sale.items.map((i) => [i.id, i]))
     const toReturn: Array<{ saleItemId: string; productId: string; quantity: number; refund: number }> = []
     for (const r of parsed.data.items) {
       const item = itemMap.get(r.saleItemId)
       if (!item) return badRequest('Artículo no pertenece a esta venta')
-      const available = Number(item.quantity) - Number(item.returnedQty)
-      const q = Math.min(r.quantity, available)
-      if (q <= 0) continue
-      const unitValue = Math.round(Number(item.total) / Number(item.quantity))
-      toReturn.push({ saleItemId: item.id, productId: item.productId, quantity: q, refund: unitValue * q })
+
+      const disponibleMil = aMil(item.quantity) - aMil(item.returnedQty)
+      const pedidoMil = aMil(r.quantity)
+      if (pedidoMil <= 0) continue
+      if (pedidoMil > disponibleMil) {
+        return badRequest(
+          `No se puede devolver más de lo vendido en esa línea (quedan ${disponibleMil / 1000})`,
+        )
+      }
+
+      // Reembolso proporcional al valor de la línea, redondeado UNA sola vez.
+      // Calcularlo como precio_unitario × cantidad dejaría centavos con
+      // cantidades decimales, y perdería pesos cuando el total de la línea no
+      // es divisible exacto entre las unidades.
+      const refund = Math.round((Number(item.total) * pedidoMil) / aMil(item.quantity))
+      toReturn.push({
+        saleItemId: item.id,
+        productId: item.productId,
+        quantity: pedidoMil / 1000,
+        refund,
+      })
     }
     const totalRefund = toReturn.reduce((sum, r) => sum + r.refund, 0)
     if (totalRefund <= 0 && toReturn.length === 0) {
