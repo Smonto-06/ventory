@@ -152,20 +152,23 @@ model Business {
   @@map("businesses")
 }
 
-/// Pago de la mensualidad vía Wompi. La referencia es única: el webhook y la
-/// consulta de respaldo pueden llegar por el mismo pago sin duplicar los 30
-/// días (la extensión solo se aplica al pasar de PENDING a APPROVED).
+/// Pago de la mensualidad vía pasarela. La referencia es única: el webhook y
+/// la consulta de respaldo pueden llegar por el mismo pago sin duplicar los
+/// 30 días (la extensión solo se aplica al pasar de PENDING a APPROVED).
 model PlanPayment {
   id            String            @id @default(cuid())
   businessId    String
   business      Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  /// Referencia enviada a Wompi (VEN-…), con la que vuelve el evento
+  /// Pasarela que procesó este pago: 'wompi' o 'mercadopago'
+  gateway       String            @default("wompi")
+  /// Referencia enviada a la pasarela (VEN-…), con la que vuelve el evento
   reference     String            @unique
   /// Monto en centavos como lo exige Wompi ($49.900 → 4990000)
   amountInCents Int
   currency      String            @default("COP")
   status        PlanPaymentStatus @default(PENDING)
-  /// Id de la transacción en Wompi (para rastrear en su panel)
+  /// Id de la transacción en la pasarela (Wompi o Mercado Pago), para
+  /// rastrear en su panel. El nombre quedó de cuando solo existía Wompi.
   wompiId       String?
   /// Método reportado por Wompi: CARD, NEQUI, PSE, BANCOLOMBIA_TRANSFER…
   paymentMethod String?

@@ -3,7 +3,7 @@
 Pruebas de extremo a extremo contra un servidor real, complementarias a
 `npm test` (que cubre las reglas de negocio con Jest).
 
-## Qué cubre — 373 pruebas
+## Qué cubre — 398 pruebas
 
 | Archivo | Área | Pruebas |
 |---|---|---|
@@ -20,6 +20,7 @@ Pruebas de extremo a extremo contra un servidor real, complementarias a
 | `qa-11-imprimir.js` | Ventana de impresión propia: térmica directa o impresora del computador | 21 |
 | `qa-12-offline-ampliado.js` | Offline ampliado: compras, crédito y crear productos sin red, cola en orden con remapeo de ids | 24 |
 | `qa-13-pagos.js` | Pasarela Wompi: checkout firmado, webhook con firma, activación automática sin duplicar, respaldo sin webhook | 31 |
+| `qa-14-pagos-mp.js` | Pasarela Mercado Pago (interina): webhook verificado contra su API, monto exacto, idempotencia, respaldo por referencia | 25 |
 
 ## Cómo ejecutarlas
 
@@ -55,6 +56,13 @@ prueba de la pasarela:
       WOMPI_API_BASE=http://127.0.0.1:2526 \
       WOMPI_CHECKOUT_BASE=http://127.0.0.1:2526/p/ node server.js
     node qa/qa-13-pagos.js
+
+La 14 igual, pero con Mercado Pago de mentira y el servidor SIN llaves de
+Wompi (si están, Wompi tiene prioridad y la prueba no aplica):
+
+    node qa/mercadopago-falso.js &
+    MP_ACCESS_TOKEN=TEST-qa MP_API_BASE=http://127.0.0.1:2527 node server.js
+    node qa/qa-14-pagos-mp.js
 
 Cada archivo imprime ✓/✗ por prueba y termina con código distinto de cero
 si algo falla, de modo que sirve en integración continua.

@@ -74,10 +74,11 @@ cd .next/standalone && DATABASE_URL=... DIRECT_URL=... NEXTAUTH_SECRET=dev-secre
 # puerto ocupado: fuser -k 3100/tcp
 ```
 
-- **QA de sistema**: `qa/` — 373 pruebas end-to-end (ver `qa/README.md`).
+- **QA de sistema**: `qa/` — 398 pruebas end-to-end (ver `qa/README.md`).
   qa-13 necesita `qa/wompi-falso.js` (puerto 2526) y el servidor con llaves
   Wompi de prueba (`WOMPI_*` + `WOMPI_API_BASE`/`WOMPI_CHECKOUT_BASE`
-  apuntando al falso).
+  apuntando al falso). qa-14 necesita `qa/mercadopago-falso.js` (2527) y el
+  servidor con `MP_ACCESS_TOKEN=TEST-…` + `MP_API_BASE` SIN llaves Wompi.
   Requieren Playwright: `NODE_PATH=<scratchpad>/node_modules` con
   `npm install playwright` hecho en el scratchpad; Chromium en
   `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` (qa-lib ya lo apunta).
@@ -110,8 +111,15 @@ force-with-lease. Mensajes de commit en español, explicando el porqué.
   super admin. Cada pago aprobado suma 30 días (`Business.paidUntil`;
   `paidUntil` null en ACTIVE = activación manual sin vencimiento). Webhook
   `/api/wompi/eventos` (exento de middleware, protegido por firma); respaldo
-  GET `/api/plan/checkout?ref=`. Samuel eligió Wompi (botón Nequi directo) y
-  está sacando el RUT; Mercado Pago fue considerado y descartado por ahora.
+  GET `/api/plan/checkout?ref=`.
+- **Mercado Pago como pasarela INTERINA** (`lib/mercadopago.ts`): Samuel la
+  eligió mientras completa el registro de Wompi (MP acepta persona natural
+  solo con cédula; él ya tiene RUT creado en la DIAN, le falta recuperar el
+  acceso). Se enciende con una sola variable `MP_ACCESS_TOKEN` (TEST-… o
+  APP_USR-…). **Prioridad: si las llaves de Wompi están, Wompi manda**
+  (`lib/pasarela.ts`). Su webhook `/api/mercadopago/eventos` no confía en el
+  cuerpo: consulta el pago a la API de MP con nuestro token y exige monto
+  exacto. `PlanPayment.gateway` distingue la pasarela de cada pago.
 - Sin facturación DIAN todavía (requiere RUT + habilitación del usuario);
   descartados: promociones/combos, reportes por cajero, gastos fuera de caja.
 - Cotizaciones sin apartar inventario y sin abonos (versión simple, a
@@ -128,7 +136,8 @@ force-with-lease. Mensajes de commit en español, explicando el porqué.
   `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`,
   `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `SUPER_ADMIN_EMAIL`, `CRON_SECRET`;
   opcionales (pasarela): `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY`,
-  `WOMPI_INTEGRITY_SECRET`, `WOMPI_EVENTS_SECRET`.
+  `WOMPI_INTEGRITY_SECRET`, `WOMPI_EVENTS_SECRET`; o bien `MP_ACCESS_TOKEN`
+  (Mercado Pago, la interina).
 - Pendiente confirmar por el usuario: rotación de la contraseña de Neon (se
   expuso una vieja en chat) y que `CRON_SECRET` esté puesto en Vercel (sin él
   no sale el resumen diario).
@@ -150,10 +159,16 @@ primeros pasos, pantalla completa para táctiles, refresco automático
 multi-dispositivo.
 
 Pendientes conocidos:
-1. **Activar la pasarela Wompi**: Samuel está sacando el RUT; cuando tenga
-   las llaves las pone en Vercel + URL de eventos en el panel de Wompi, y se
-   prueba el ciclo en sandbox antes de pasar a llaves de producción.
-2. **Nivel 4 restante**: facturación electrónica DIAN (requiere RUT,
+1. **Activar Mercado Pago (interina)**: Samuel se registra en Mercado Pago
+   con su cédula, saca el token de prueba (TEST-…) y lo pone en Vercel como
+   `MP_ACCESS_TOKEN`; se prueba el ciclo y luego cambia al token APP_USR-….
+   En el panel de MP conviene registrar la URL de notificaciones:
+   `https://ventory-ten.vercel.app/api/mercadopago/eventos` (igual el
+   respaldo por referencia funciona sin webhook).
+2. **Migrar a Wompi cuando recupere el RUT** (ya existe en la DIAN, le falta
+   recuperar el acceso en muisca.dian.gov.co): pone las 4 llaves `WOMPI_*` y
+   Wompi toma prioridad automáticamente, sin tocar código.
+3. **Nivel 4 restante**: facturación electrónica DIAN (requiere RUT,
    certificado y habilitación DIAN del usuario — no es solo código).
-3. Ofrecido sin decidir: devolución sin factura de referencia (nota crédito
+4. Ofrecido sin decidir: devolución sin factura de referencia (nota crédito
    suelta); modelo de caja compartida por sucursal.

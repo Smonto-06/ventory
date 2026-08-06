@@ -308,8 +308,10 @@ export interface Settings {
   notifyLowStock?: boolean
   notifyEmail?: string | null
   plan?: PlanInfo
-  /** true si las llaves de Wompi están configuradas (aparece el botón de pago) */
+  /** true si hay una pasarela configurada (aparece el botón de pago) */
   pagoEnLinea?: boolean
+  /** cuál pasarela cobra: Wompi tiene prioridad; Mercado Pago es la interina */
+  pasarela?: 'wompi' | 'mercadopago' | null
   isSuperAdmin?: boolean
 }
 
@@ -512,7 +514,7 @@ export const api = {
   settings: () => get<{ settings: Settings }>('/api/settings'),
   // Pago del plan por Wompi
   crearPagoPlan: () =>
-    post<{ url: string; reference: string; amount: number; sandbox: boolean }>('/api/plan/checkout'),
+    post<{ url: string; reference: string; amount: number; gateway: string; sandbox: boolean }>('/api/plan/checkout'),
   estadoPagoPlan: (ref: string) =>
     get<{ status: string; paidAt: string | null; amount: number; plan: PlanInfo }>(
       `/api/plan/checkout?ref=${encodeURIComponent(ref)}`,
