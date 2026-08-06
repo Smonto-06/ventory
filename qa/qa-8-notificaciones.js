@@ -200,6 +200,84 @@ const { check, summary, newBrowser, registerAndLogin, BASE } = require('./qa-lib
   check('avisos/ui', 'ofrece enviarse una prueba', cuerpo.includes('Enviarme una prueba ahora'))
   check('avisos/ui', 'ningún error de JavaScript', errores.length === 0, errores.join(' | '))
 
+  // ── REENVÍO DEL CORREO DE VERIFICACIÓN ──
+  // Si el correo del registro se pierde (spam, filtro), el usuario no puede
+  // quedar atascado: el login ofrece reenviarlo, con token nuevo, límite de
+  // uno por minuto y respuesta genérica que no revela cuentas ajenas.
+  if (process.env.VENTORY_BUZON) {
+    const fs = require('fs')
+    const correoR = `reenvio_${t}@test.com`
+    const enlacesDe = (email) => {
+      if (!fs.existsSync(process.env.VENTORY_BUZON)) return []
+      const out = []
+      for (const linea of fs.readFileSync(process.env.VENTORY_BUZON, 'utf8').split('\n').filter(Boolean)) {
+        const texto = JSON.parse(linea).cuerpo
+          .replace(/=\r\n/g, '')
+          .replace(/=([0-9A-F]{2})/g, (_, h) => Buffer.from(h, 'hex').toString('utf8'))
+        if (!texto.includes(email)) continue
+        const m = texto.match(/https?:\/\/[^\s"'<>]*\/verify\?token=[A-Za-z0-9]+/)
+        if (m) out.push(m[0])
+      }
+      return out
+    }
+    const reg = await fetch(BASE + '/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Reenvio', email: correoR, password: 'ClaveSegura99', businessName: `Reenvio ${t}` }),
+    })
+    check('reenvío', 'el registro queda pendiente de verificar', reg.status === 201)
+
+    const ctxR = await browser.newContext()
+    const pageR = await ctxR.newPage()
+    await pageR.goto(BASE + '/login')
+    await pageR.fill('input[type=email]', correoR)
+    await pageR.fill('input[placeholder="Contraseña"]', 'ClaveSegura99')
+    await pageR.click('button[type=submit]')
+    await pageR.waitForTimeout(2500)
+    check('reenvío', 'el login sin verificar pide confirmar el correo', (await pageR.textContent('body')).includes('Confirma tu correo'))
+    const btnR = pageR.locator('button:has-text("Reenviar correo de verificación")')
+    check('reenvío', 'y ofrece reenviarlo ahí mismo', (await btnR.count()) > 0)
+
+    const antesR = enlacesDe(correoR)
+    await btnR.first().click()
+    await pageR.waitForTimeout(2500)
+    const despuesR = enlacesDe(correoR)
+    check('reenvío', 'el reenvío manda un correo nuevo', despuesR.length === antesR.length + 1, `${antesR.length} → ${despuesR.length}`)
+    check('reenvío', 'con un token distinto al original', despuesR[despuesR.length - 1] !== antesR[antesR.length - 1])
+
+    await fetch(BASE + '/api/auth/verify/resend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: correoR }),
+    })
+    await new Promise((r) => setTimeout(r, 800))
+    check('reenvío', 'pedir otro de inmediato no manda nada (límite 1/min)', enlacesDe(correoR).length === despuesR.length)
+
+    const ajeno = await fetch(BASE + '/api/auth/verify/resend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: `noexiste_${t}@test.com` }),
+    })
+    check('reenvío', 'un correo ajeno recibe la misma respuesta (no revela cuentas)', ajeno.status === 200)
+
+    await pageR.goto(despuesR[despuesR.length - 1])
+    await pageR.waitForTimeout(3000)
+    await pageR.goto(BASE + '/login')
+    await pageR.fill('input[type=email]', correoR)
+    await pageR.fill('input[placeholder="Contraseña"]', 'ClaveSegura99')
+    await pageR.click('button[type=submit]')
+    await pageR.waitForURL('**/app', { timeout: 20000 }).catch(() => {})
+    check('reenvío', 'con el enlace reenviado, la cuenta entra', pageR.url().includes('/app'))
+
+    const viejo = await fetch(BASE + '/api/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: (antesR[antesR.length - 1] ?? 'token=x').split('token=')[1] }),
+    })
+    check('reenvío', 'el enlace viejo quedó invalidado', viejo.status === 400)
+    await ctxR.close()
+  }
+
   await S.ctx.close()
   await browser.close()
   process.exit(summary() ? 1 : 0)

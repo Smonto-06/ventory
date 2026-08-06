@@ -17,6 +17,22 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [accepted, setAccepted] = useState(false)
   const [verifySent, setVerifySent] = useState(false)
+  // Reenvío del correo de verificación: '' | 'enviando' | 'enviado'
+  const [resend, setResend] = useState<'' | 'enviando' | 'enviado'>('')
+
+  async function reenviarCorreo() {
+    setResend('enviando')
+    try {
+      await fetch('/api/auth/verify/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email }),
+      })
+    } catch {
+      // la pantalla igual muestra "enviado": el servidor responde genérico
+    }
+    setResend('enviado')
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -74,13 +90,32 @@ export default function RegisterPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
         <div className="max-w-md w-full text-center bg-white rounded-2xl shadow-sm p-10">
-          <div className="text-5xl">📬</div>
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" className="mx-auto text-indigo-500">
+            <rect x="3" y="5.5" width="18" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.7" />
+            <path d="M4 7.5l7.3 5.4a1.2 1.2 0 0 0 1.4 0L20 7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+          </svg>
           <h1 className="text-2xl font-bold text-gray-900 mt-4">Revisa tu correo</h1>
           <p className="text-gray-600 mt-3 leading-relaxed">
             Te enviamos un enlace de confirmación a <b>{form.email}</b>. Ábrelo para activar tu
             cuenta y empezar tu prueba gratis de 15 días.
           </p>
           <p className="text-gray-400 text-sm mt-4">Si no lo ves, revisa la carpeta de spam.</p>
+          <button
+            onClick={reenviarCorreo}
+            disabled={resend === 'enviando' || resend === 'enviado'}
+            className="mt-5 w-full rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-600 disabled:opacity-60"
+          >
+            {resend === 'enviado'
+              ? 'Correo reenviado — dale un minuto y revisa de nuevo'
+              : resend === 'enviando'
+                ? 'Reenviando…'
+                : '¿No te llegó? Reenviar correo'}
+          </button>
+          {resend === 'enviado' && (
+            <button onClick={() => setResend('')} className="mt-3 text-sm font-semibold text-gray-400">
+              ¿Aún nada? Vuelve a intentarlo en un minuto
+            </button>
+          )}
         </div>
       </div>
     )
