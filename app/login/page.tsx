@@ -21,6 +21,22 @@ function LoginContent() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPass, setShowPass] = useState(false)
+  // Reenvío del correo de verificación (aparece si el error es "confirma tu correo")
+  const [reenvio, setReenvio] = useState<'' | 'enviando' | 'enviado'>('')
+
+  async function reenviarVerificacion() {
+    setReenvio('enviando')
+    try {
+      await fetch('/api/auth/verify/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+    } catch {
+      // el servidor responde genérico; el mensaje de abajo aplica igual
+    }
+    setReenvio('enviado')
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -79,6 +95,20 @@ function LoginContent() {
             {error && (
               <div style={{ marginBottom: 16, padding: '10px 14px', background: '#FDECEC', border: '1px solid #F5C6C2', color: '#C9433B', borderRadius: 11, fontSize: 13.5, fontWeight: 600 }}>
                 {error}
+                {error.startsWith('Confirma tu correo') && (
+                  <button
+                    type="button"
+                    onClick={reenviarVerificacion}
+                    disabled={reenvio !== ''}
+                    style={{ display: 'block', width: '100%', marginTop: 10, padding: '9px 12px', borderRadius: 9, background: '#fff', border: '1px solid #F5C6C2', color: '#C9433B', fontWeight: 700, fontSize: 13, cursor: reenvio === '' ? 'pointer' : 'default' }}
+                  >
+                    {reenvio === 'enviado'
+                      ? 'Correo reenviado — revisa tu bandeja y el spam'
+                      : reenvio === 'enviando'
+                        ? 'Reenviando…'
+                        : 'Reenviar correo de verificación'}
+                  </button>
+                )}
               </div>
             )}
 
