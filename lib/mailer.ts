@@ -1,28 +1,53 @@
-// Envío de correos del sistema vía Gmail (nodemailer).
-// Requiere GMAIL_USER y GMAIL_APP_PASSWORD (contraseña de aplicación de Google).
+// Envío de correos del sistema (nodemailer).
+//
+// Dos maneras de configurarlo:
+//  - Gmail (la original): GMAIL_USER + GMAIL_APP_PASSWORD. Gmail no está
+//    hecho para correo transaccional: demora y manda a spam los envíos a
+//    terceros — sirve para arrancar, no para operar.
+//  - Cualquier SMTP (recomendado Brevo): SMTP_HOST + SMTP_PORT + SMTP_USER +
+//    SMTP_PASS. El remitente visible sale de MAIL_FROM (o de GMAIL_USER si
+//    sigue puesta) — en Brevo debe ser un remitente verificado en su panel.
+//
+// El SMTP falso de las pruebas usa SMTP_HOST + SMTP_NO_AUTH=true (sin TLS).
 // El correo de destino de soporte puede sobreescribirse con CONTACT_EMAIL.
 
 import nodemailer from 'nodemailer'
 
 export function mailerConfigured(): boolean {
-  return !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
+  const gmail = !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
+  const smtp =
+    !!process.env.SMTP_HOST &&
+    (process.env.SMTP_NO_AUTH === 'true' || !!(process.env.SMTP_USER && process.env.SMTP_PASS) || gmail)
+  return gmail || smtp
+}
+
+/** Dirección visible del remitente (en Brevo debe estar verificada allá) */
+function remitente(): string {
+  return process.env.MAIL_FROM ?? process.env.GMAIL_USER ?? process.env.SMTP_USER ?? ''
 }
 
 function transport() {
-  // Por defecto se usa Gmail. SMTP_HOST permite apuntar a otro servidor sin
-  // tocar código: sirve para probar el envío en local y para cambiar de
-  // proveedor de correo el día que haga falta.
-  const auth = { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
   if (process.env.SMTP_HOST) {
+    const sinAuth = process.env.SMTP_NO_AUTH === 'true'
     return nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT ?? 587),
       secure: process.env.SMTP_SECURE === 'true',
-      ignoreTLS: process.env.SMTP_SECURE !== 'true',
-      auth: process.env.SMTP_NO_AUTH === 'true' ? undefined : auth,
+      // Solo el SMTP falso de QA habla sin cifrar; los reales (Brevo, etc.)
+      // negocian STARTTLS solos en el puerto 587
+      ignoreTLS: sinAuth,
+      auth: sinAuth
+        ? undefined
+        : {
+            user: process.env.SMTP_USER ?? process.env.GMAIL_USER,
+            pass: process.env.SMTP_PASS ?? process.env.GMAIL_APP_PASSWORD,
+          },
     })
   }
-  return nodemailer.createTransport({ service: 'gmail', auth })
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
+  })
 }
 
 export interface ContactMessage {
@@ -43,7 +68,7 @@ export interface ContactMessage {
 /** Enlace de recuperación de contraseña (token de 1 hora) */
 export async function sendPasswordResetEmail(to: string, name: string, link: string): Promise<void> {
   await transport().sendMail({
-    from: `"Ventory" <${process.env.GMAIL_USER}>`,
+    from: `"Ventory" <${remitente()}>`,
     to,
     subject: 'Restablecer tu contraseña de Ventory',
     text:
@@ -57,7 +82,7 @@ export async function sendPasswordResetEmail(to: string, name: string, link: str
 /** Enlace de verificación de correo al crear la cuenta */
 export async function sendVerificationEmail(to: string, name: string, link: string): Promise<void> {
   await transport().sendMail({
-    from: `"Ventory" <${process.env.GMAIL_USER}>`,
+    from: `"Ventory" <${remitente()}>`,
     to,
     subject: 'Confirma tu correo — Ventory',
     text:
@@ -68,9 +93,9 @@ export async function sendVerificationEmail(to: string, name: string, link: stri
 }
 
 export async function sendContactEmail(msg: ContactMessage): Promise<void> {
-  const to = process.env.CONTACT_EMAIL || process.env.GMAIL_USER!
+  const to = process.env.CONTACT_EMAIL || remitente()
   await transport().sendMail({
-    from: `"Ventory · ${msg.businessName}" <${process.env.GMAIL_USER}>`,
+    from: `"Ventory · ${msg.businessName}" <${remitente()}>`,
     to,
     replyTo: `"${msg.fromName}" <${msg.fromEmail}>`,
     subject: `[${msg.type}] ${msg.subject}`,
@@ -217,7 +242,7 @@ export async function sendDailySummaryEmail(to: string, r: ResumenDiario): Promi
   </div>`
 
   await transport().sendMail({
-    from: `"Ventory" <${process.env.GMAIL_USER}>`,
+    from: `"Ventory" <${remitente()}>`,
     to,
     subject: `${r.negocio} · ventas del día: ${pesos(r.ventas.total, m)}`,
     text: textoResumen(r),
