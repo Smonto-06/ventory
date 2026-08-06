@@ -7,7 +7,8 @@
 
 import { useApp } from '../store'
 import { methodLabel, fmtQty } from '../ui'
-import { smartPrint, TicketLine } from '../printer'
+import { TicketLine } from '../printer'
+import BotonImprimir from '../Imprimir'
 
 export default function TicketScreen() {
   const s = useApp()
@@ -160,16 +161,7 @@ export default function TicketScreen() {
         <button onClick={() => s.go('receipt')} className="v-hover-bg" style={{ height: 46, padding: '0 18px', borderRadius: 12, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
           ← Volver
         </button>
-        <button
-          onClick={async () => {
-            const via = await smartPrint(ticketLines())
-            if (via === 'directa') s.toast('Ticket impreso')
-          }}
-          className="v-hover-primary"
-          style={{ height: 46, padding: '0 20px', borderRadius: 12, background: '#6366F1', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 8px 18px -8px #6366F1cc' }}
-        >
-          Imprimir ticket
-        </button>
+        <BotonImprimir lineas={ticketLines} etiqueta="Imprimir ticket" alto={50} flex={1} />
       </div>
     </div>
   )

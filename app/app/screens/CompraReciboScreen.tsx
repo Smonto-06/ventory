@@ -6,7 +6,8 @@
 
 import { useApp } from '../store'
 import { fmtQty } from '../ui'
-import { smartPrint, TicketLine } from '../printer'
+import { TicketLine } from '../printer'
+import BotonImprimir from '../Imprimir'
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: 'Contado (efectivo)',
@@ -128,16 +129,7 @@ export default function CompraReciboScreen() {
       </div>
 
       <div data-no-print="true" style={{ display: 'flex', gap: 10 }}>
-        <button
-          onClick={async () => {
-            const via = await smartPrint(reciboLines())
-            if (via === 'directa') s.toast('Recibo impreso')
-          }}
-          className="v-hover-bg"
-          style={{ height: 46, padding: '0 18px', borderRadius: 12, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
-        >
-          Imprimir recibo
-        </button>
+        <BotonImprimir lineas={reciboLines} etiqueta="Imprimir recibo" alto={46} />
         <button
           onClick={() => s.go('nuevacompra')}
           className="v-hover-bg"

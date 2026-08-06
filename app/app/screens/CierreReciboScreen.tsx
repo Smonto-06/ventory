@@ -7,7 +7,8 @@
 
 import { useApp } from '../store'
 import { methodLabel } from '../ui'
-import { smartPrint, TicketLine } from '../printer'
+import { TicketLine } from '../printer'
+import BotonImprimir from '../Imprimir'
 
 export default function CierreReciboScreen() {
   const s = useApp()
@@ -133,16 +134,7 @@ export default function CierreReciboScreen() {
           </div>
         )}
         <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            onClick={async () => {
-              const via = await smartPrint(reciboLines())
-              if (via === 'directa') s.toast('Recibo impreso')
-            }}
-            className="v-hover-bg"
-            style={{ flex: 1, height: 48, borderRadius: 12, background: 'var(--surface)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer', border: '1.5px solid var(--border)' }}
-          >
-            Imprimir recibo
-          </button>
+          <BotonImprimir lineas={reciboLines} etiqueta="Imprimir informe" alto={48} />
           {c.nextOpening !== null ? (
             <button
               onClick={() => s.go('panel')}

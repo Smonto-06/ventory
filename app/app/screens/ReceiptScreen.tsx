@@ -4,6 +4,7 @@
 
 import { useApp } from '../store'
 import { methodLabel, fmtQty } from '../ui'
+import BotonImprimir from '../Imprimir'
 
 export default function ReceiptScreen() {
   const s = useApp()
@@ -101,9 +102,7 @@ export default function ReceiptScreen() {
           </div>
         )}
         <div data-no-print="true" style={{ display: 'flex', gap: 10 }}>
-          <button onClick={() => window.print()} className="v-hover-bg" style={{ flex: 1, height: 52, borderRadius: 13, background: 'var(--surface)', color: 'var(--text)', fontWeight: 700, fontSize: 15, cursor: 'pointer', border: '1.5px solid var(--border)' }}>
-            Imprimir factura
-          </button>
+          <BotonImprimir etiqueta="Imprimir factura" alto={52} flex={1} />
           <button onClick={() => s.go('ticket')} className="v-hover-bg" style={{ flex: 1, height: 52, borderRadius: 13, background: 'var(--surface)', color: 'var(--text)', fontWeight: 700, fontSize: 15, cursor: 'pointer', border: '1.5px solid var(--border)' }}>
             Ticket 80mm
           </button>

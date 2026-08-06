@@ -153,8 +153,10 @@ const TEMAS: Tema[] = [
         r: (
           <>
             En <b>Ajustes → Impresora de tickets</b> elige <b>Conectar USB</b> o <b>Conectar Bluetooth</b> y
-            selecciona tu impresora (58 o 80 mm). Usa el botón <b>Probar</b> para verificar. Sin impresora
-            conectada, imprimir abre el diálogo normal del navegador.
+            selecciona tu impresora (58 u 80 mm). Usa el botón <b>Probar</b> para verificar. Desde ahí,
+            cada botón de imprimir abre la ventana de Ventory donde eliges: <b>térmica</b> (sale directo,
+            sin diálogos) o <b>impresora del computador</b> (abre la ventana del sistema para elegir entre
+            tus impresoras instaladas). El sistema recuerda tu última elección.
           </>
         ),
       },

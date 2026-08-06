@@ -192,6 +192,15 @@ async function send(data: Uint8Array): Promise<void> {
  * Imprime el ticket en la térmica configurada; si no hay ninguna (o falla),
  * cae al diálogo de impresión del navegador. Devuelve 'directa' | 'dialogo'.
  */
+/**
+ * Imprime SOLO en la térmica configurada; lanza error si no hay o falla.
+ * La ventana de impresión de Ventory decide qué hacer con el error.
+ */
+export async function printThermal(lines: TicketLine[]): Promise<void> {
+  if (!printerPref()) throw new Error('Sin impresora térmica configurada')
+  await send(buildEscpos(lines))
+}
+
 export async function smartPrint(lines: TicketLine[]): Promise<'directa' | 'dialogo'> {
   if (printerPref()) {
     try {
