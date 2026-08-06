@@ -243,7 +243,9 @@ const { check, summary, newBrowser, registerAndLogin, BASE } = require('./qa-lib
     await pageR.waitForTimeout(2500)
     const despuesR = enlacesDe(correoR)
     check('reenvío', 'el reenvío manda un correo nuevo', despuesR.length === antesR.length + 1, `${antesR.length} → ${despuesR.length}`)
-    check('reenvío', 'con un token distinto al original', despuesR[despuesR.length - 1] !== antesR[antesR.length - 1])
+    // el MISMO enlace: si el correo original llega tarde (Gmail demora a
+    // veces), su enlace debe seguir sirviendo aunque se haya reenviado
+    check('reenvío', 'con el mismo enlace (el correo demorado sigue sirviendo)', despuesR[despuesR.length - 1] === antesR[antesR.length - 1])
 
     await fetch(BASE + '/api/auth/verify/resend', {
       method: 'POST',
@@ -260,21 +262,22 @@ const { check, summary, newBrowser, registerAndLogin, BASE } = require('./qa-lib
     })
     check('reenvío', 'un correo ajeno recibe la misma respuesta (no revela cuentas)', ajeno.status === 200)
 
-    await pageR.goto(despuesR[despuesR.length - 1])
+    // se verifica con el enlace del PRIMER correo (el "demorado")
+    await pageR.goto(antesR[antesR.length - 1])
     await pageR.waitForTimeout(3000)
     await pageR.goto(BASE + '/login')
     await pageR.fill('input[type=email]', correoR)
     await pageR.fill('input[placeholder="Contraseña"]', 'ClaveSegura99')
     await pageR.click('button[type=submit]')
     await pageR.waitForURL('**/app', { timeout: 20000 }).catch(() => {})
-    check('reenvío', 'con el enlace reenviado, la cuenta entra', pageR.url().includes('/app'))
+    check('reenvío', 'el enlace del primer correo verifica y la cuenta entra', pageR.url().includes('/app'))
 
-    const viejo = await fetch(BASE + '/api/auth/verify', {
+    const usado = await fetch(BASE + '/api/auth/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: (antesR[antesR.length - 1] ?? 'token=x').split('token=')[1] }),
     })
-    check('reenvío', 'el enlace viejo quedó invalidado', viejo.status === 400)
+    check('reenvío', 'el enlace ya usado no sirve una segunda vez', usado.status === 400)
     await ctxR.close()
   }
 
