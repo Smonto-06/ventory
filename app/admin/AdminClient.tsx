@@ -201,7 +201,7 @@ export default function AdminClient() {
                     </div>
                     {r.pagos.cantidad > 0 && (
                       <div style={{ color: '#0B6E63', fontSize: 12.5, marginTop: 2, fontWeight: 600 }}>
-                        {r.pagos.cantidad} pago{r.pagos.cantidad === 1 ? '' : 's'} Wompi · ${r.pagos.total.toLocaleString('es-CO')} · último {fdate(r.pagos.ultimo?.fecha ?? null)}
+                        {r.pagos.cantidad} pago{r.pagos.cantidad === 1 ? '' : 's'} en línea · ${r.pagos.total.toLocaleString('es-CO')} · último {fdate(r.pagos.ultimo?.fecha ?? null)}
                         {r.pagos.ultimo?.metodo ? ` (${r.pagos.ultimo.metodo})` : ''}
                       </div>
                     )}
