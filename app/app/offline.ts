@@ -1,28 +1,69 @@
 'use client'
 
-// Modo offline — cola de ventas pendientes en IndexedDB.
+// Modo offline — cola de operaciones pendientes en IndexedDB.
 //
-// Si al finalizar una venta no hay conexión, la venta se guarda localmente y
-// se reintenta automáticamente cuando vuelve el internet (o al abrir la app).
-// El inventario y los totales se sincronizan al enviarse.
+// Si al confirmar una venta (de contado o a crédito), una compra o un producto
+// nuevo no hay conexión, la operación se guarda localmente y se reintenta
+// automáticamente cuando vuelve el internet (o al abrir la app). El inventario
+// y los totales se sincronizan al enviarse.
+//
+// La cola se envía en el mismo orden en que se trabajó (FIFO): si se creó un
+// producto sin conexión y luego se vendió, primero llega el producto al
+// servidor y con el id real que devuelve se corrigen las ventas y compras
+// encoladas que lo mencionaban por su id provisional. Esa corrección se
+// escribe en la propia cola, para que sobreviva si la sincronización se corta
+// a la mitad.
 
 const DB_NAME = 'ventory-offline'
-const STORE = 'ventas-pendientes'
+const STORE = 'operaciones-pendientes'
+const LEGACY = 'ventas-pendientes'
 
-export interface PendingSale {
+export type TipoOperacion = 'venta' | 'compra' | 'producto'
+
+export interface PendingOp {
   id?: number
-  payload: unknown
-  total: number
+  tipo: TipoOperacion
+  payload: Record<string, unknown>
+  /** Texto corto para los avisos ("$12.000", "compra a Distribuidora Sur") */
+  resumen: string
+  /** Id provisional del producto creado sin conexión (solo tipo 'producto') */
+  tempId?: string
   createdAt: string
 }
 
+/** Id provisional de un producto creado sin conexión */
+export function nuevoTempId(): string {
+  return `offline-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export const esTempId = (id: string) => id.startsWith('offline-')
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1)
+    const req = indexedDB.open(DB_NAME, 2)
     req.onupgradeneeded = () => {
       const db = req.result
+      const tx = req.transaction!
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true })
+      }
+      // Versión 1 guardaba solo ventas, en su propia bodega: se pasan a la
+      // cola nueva para que ninguna venta encolada se pierda al actualizar.
+      if (db.objectStoreNames.contains(LEGACY)) {
+        const viejas = tx.objectStore(LEGACY)
+        const nuevas = tx.objectStore(STORE)
+        viejas.getAll().onsuccess = (e) => {
+          const rows = (e.target as IDBRequest<Array<{ payload: unknown; total?: number; createdAt?: string }>>).result
+          for (const r of rows) {
+            nuevas.add({
+              tipo: 'venta',
+              payload: r.payload,
+              resumen: typeof r.total === 'number' ? `$${r.total.toLocaleString('es-CO')}` : 'venta',
+              createdAt: r.createdAt ?? new Date().toISOString(),
+            })
+          }
+          viejas.clear()
+        }
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -30,24 +71,24 @@ function openDb(): Promise<IDBDatabase> {
   })
 }
 
-export async function queueSale(payload: unknown, total: number): Promise<void> {
+export async function queueOp(op: Omit<PendingOp, 'id' | 'createdAt'>): Promise<void> {
   const db = await openDb()
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite')
-    tx.objectStore(STORE).add({ payload, total, createdAt: new Date().toISOString() })
+    tx.objectStore(STORE).add({ ...op, createdAt: new Date().toISOString() })
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
   db.close()
 }
 
-export async function pendingSales(): Promise<PendingSale[]> {
+export async function pendingOps(): Promise<PendingOp[]> {
   try {
     const db = await openDb()
-    const rows = await new Promise<PendingSale[]>((resolve, reject) => {
+    const rows = await new Promise<PendingOp[]>((resolve, reject) => {
       const tx = db.transaction(STORE, 'readonly')
       const req = tx.objectStore(STORE).getAll()
-      req.onsuccess = () => resolve(req.result as PendingSale[])
+      req.onsuccess = () => resolve(req.result as PendingOp[])
       req.onerror = () => reject(req.error)
     })
     db.close()
@@ -57,7 +98,7 @@ export async function pendingSales(): Promise<PendingSale[]> {
   }
 }
 
-async function removeSale(id: number): Promise<void> {
+async function removeOp(id: number): Promise<void> {
   const db = await openDb()
   await new Promise<void>((resolve) => {
     const tx = db.transaction(STORE, 'readwrite')
@@ -68,37 +109,92 @@ async function removeSale(id: number): Promise<void> {
   db.close()
 }
 
+/** Reemplaza ids provisionales en items[].productId; null si no había ninguno */
+function remapPayload(
+  payload: Record<string, unknown>,
+  mapa: Record<string, string>,
+): Record<string, unknown> | null {
+  const items = payload.items
+  if (!Array.isArray(items)) return null
+  let cambio = false
+  const nuevos = items.map((it: { productId?: unknown }) => {
+    if (typeof it?.productId === 'string' && mapa[it.productId]) {
+      cambio = true
+      return { ...it, productId: mapa[it.productId] }
+    }
+    return it
+  })
+  return cambio ? { ...payload, items: nuevos } : null
+}
+
+/** Corrige en disco las operaciones encoladas que mencionan el id provisional */
+async function remapEnCola(tempId: string, realId: string): Promise<void> {
+  const db = await openDb()
+  await new Promise<void>((resolve) => {
+    const tx = db.transaction(STORE, 'readwrite')
+    const req = tx.objectStore(STORE).openCursor()
+    req.onsuccess = () => {
+      const cursor = req.result
+      if (!cursor) return
+      const row = cursor.value as PendingOp
+      const corregido = remapPayload(row.payload, { [tempId]: realId })
+      if (corregido) cursor.update({ ...row, payload: corregido })
+      cursor.continue()
+    }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => resolve()
+  })
+  db.close()
+}
+
+const ENDPOINT: Record<TipoOperacion, string> = {
+  venta: '/api/sales',
+  compra: '/api/purchases',
+  producto: '/api/products',
+}
+
 export interface SyncResult {
-  /** Ventas enviadas correctamente */
-  sent: number
-  /** Ventas que el servidor rechazó de forma definitiva (con su motivo) */
-  rejected: Array<{ total: number; reason: string }>
+  /** Operaciones enviadas correctamente, por tipo */
+  sent: Record<TipoOperacion, number>
+  /** Operaciones que el servidor rechazó de forma definitiva (con su motivo) */
+  rejected: Array<{ tipo: TipoOperacion; resumen: string; reason: string }>
+  /** Id provisional → id real de los productos creados sin conexión */
+  remapped: Record<string, string>
 }
 
 /**
- * Envía las ventas pendientes. Una venta que el servidor rechaza por regla de
- * negocio (stock, plan, caja cerrada) se descarta para no bloquear la cola,
- * pero se reporta para avisarle al cajero. Los errores de red se reintentan.
+ * Envía las operaciones pendientes en orden. Una operación que el servidor
+ * rechaza por regla de negocio (stock, plan, caja cerrada) se descarta para
+ * no bloquear la cola, pero se reporta para avisarle al usuario. Los errores
+ * de red y de servidor se reintentan más tarde.
  */
-export async function syncPendingSales(): Promise<SyncResult> {
-  const rows = await pendingSales()
-  const result: SyncResult = { sent: 0, rejected: [] }
+export async function syncPendingOps(): Promise<SyncResult> {
+  const rows = await pendingOps()
+  const result: SyncResult = { sent: { venta: 0, compra: 0, producto: 0 }, rejected: [], remapped: {} }
   for (const row of rows) {
     if (row.id === undefined) continue
+    const payload = remapPayload(row.payload, result.remapped) ?? row.payload
     try {
-      const res = await fetch('/api/sales', {
+      const res = await fetch(ENDPOINT[row.tipo], {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(row.payload),
+        body: JSON.stringify(payload),
       })
       if (res.ok) {
-        await removeSale(row.id)
-        result.sent++
+        if (row.tipo === 'producto' && row.tempId) {
+          const body = (await res.json().catch(() => null)) as { product?: { id?: string } } | null
+          if (body?.product?.id) {
+            result.remapped[row.tempId] = body.product.id
+            await remapEnCola(row.tempId, body.product.id)
+          }
+        }
+        await removeOp(row.id)
+        result.sent[row.tipo]++
       } else if (res.status >= 400 && res.status < 500 && res.status !== 401 && res.status !== 408) {
         // Rechazo definitivo (stock, plan, caja cerrada): se descarta, pero se avisa
         const body = (await res.json().catch(() => null)) as { error?: string } | null
-        result.rejected.push({ total: row.total, reason: body?.error ?? 'Rechazada por el servidor' })
-        await removeSale(row.id)
+        result.rejected.push({ tipo: row.tipo, resumen: row.resumen, reason: body?.error ?? 'Rechazada por el servidor' })
+        await removeOp(row.id)
       } else {
         break // error de servidor: reintentar más tarde
       }

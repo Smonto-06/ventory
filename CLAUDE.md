@@ -74,7 +74,7 @@ cd .next/standalone && DATABASE_URL=... DIRECT_URL=... NEXTAUTH_SECRET=dev-secre
 # puerto ocupado: fuser -k 3100/tcp
 ```
 
-- **QA de sistema**: `qa/` — 318 pruebas end-to-end (ver `qa/README.md`).
+- **QA de sistema**: `qa/` — 342 pruebas end-to-end (ver `qa/README.md`).
   Requieren Playwright: `NODE_PATH=<scratchpad>/node_modules` con
   `npm install playwright` hecho en el scratchpad; Chromium en
   `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` (qa-lib ya lo apunta).
@@ -130,14 +130,16 @@ y proveedores con abonos, caja con cierre diario e informe, reportes con
 utilidad y rangos, clientes, variantes, cotizaciones, importador CSV, exportar
 CSV/backup, código de barras (USB + cámara), impresión térmica con selector
 propio, multi-sucursal, usuarios/roles/PIN, verificación de correo, plan
-comercial + super admin (`/admin`), PWA offline (solo ventas), notificaciones
-automáticas por correo, landing + centro de ayuda + guía de primeros pasos,
-pantalla completa para táctiles, refresco automático multi-dispositivo.
+comercial + super admin (`/admin`), PWA offline ampliada (ventas contado y
+crédito, compras y crear productos sin red — cola única en IndexedDB
+`operaciones-pendientes`, envío FIFO con remapeo de ids provisionales
+`offline-*` de productos creados sin conexión; ver `app/app/offline.ts`),
+notificaciones automáticas por correo, landing + centro de ayuda + guía de
+primeros pasos, pantalla completa para táctiles, refresco automático
+multi-dispositivo.
 
 Pendientes conocidos:
-1. **Nivel 3 restante**: ampliar modo offline a compras, crédito y crear
-   productos (ofrecido, no autorizado aún).
-2. **Nivel 4** (futuro): facturación electrónica DIAN; pasarela de pagos
+1. **Nivel 4** (futuro): facturación electrónica DIAN; pasarela de pagos
    (recomendada Wompi) cuando activar cuentas a mano canse.
-3. Ofrecido sin decidir: devolución sin factura de referencia (nota crédito
+2. Ofrecido sin decidir: devolución sin factura de referencia (nota crédito
    suelta); modelo de caja compartida por sucursal.

@@ -39,7 +39,7 @@ import {
   ShiftStat,
 } from './api'
 import { cartSubtotal, saleTotal, resolvePayment, expectedBalance } from '@/lib/pos'
-import { queueSale, syncPendingSales, pendingSales, registerServiceWorker } from './offline'
+import { queueOp, syncPendingOps, pendingOps, registerServiceWorker, nuevoTempId, type PendingOp } from './offline'
 
 export type Screen =
   | 'panel'
@@ -300,7 +300,7 @@ export interface AppStore extends AppData {
   addReceived: (v: number) => void
   finalizeSale: () => Promise<void>
   finalizeCredito: (customerId: string) => Promise<void>
-  /** Ventas guardadas sin conexión, pendientes de enviarse */
+  /** Operaciones guardadas sin conexión (ventas, compras, productos), pendientes de enviarse */
   pendingCount: number
   lastSale: Sale | null
   setLastSale: (s: Sale) => void
@@ -451,7 +451,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     Array<{ name: string; disponible: number; pedido: number }>
   >([])
   const [rangeReport, setRangeReport] = useState<RangeReport | null>(null)
-  // Ventas guardadas sin conexión, pendientes de enviar
+  // Operaciones guardadas sin conexión, pendientes de enviar
   const [pendingCount, setPendingCount] = useState(0)
   // Sucursal activa de este dispositivo (para abrir caja); se guarda localmente
   const [branchId, setBranchIdState] = useState<string>(() =>
@@ -617,29 +617,81 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [refrescoSilencioso])
 
-  // Modo offline: registra el service worker y envía las ventas encoladas
-  // al cargar y cada vez que vuelve la conexión.
+  // Modo offline: registra el service worker y envía las operaciones
+  // encoladas (ventas, compras y productos) al cargar y al volver la conexión.
+
+  // Un producto creado sin conexión vive en la cola con un id provisional.
+  // Esto lo reconstruye en la lista local para que siga viéndose (y pudiéndose
+  // vender) aunque la app se haya recargado antes de sincronizar.
+  const productoDeCola = useCallback((op: PendingOp): Product => {
+    const p = op.payload
+    return {
+      id: op.tempId!,
+      sku: (p.sku as string | null) ?? null,
+      name: String(p.name ?? 'Producto sin conexión'),
+      barcode: (p.barcode as string | null) ?? null,
+      price: Number(p.price ?? 0),
+      cost: (p.cost as number | null) ?? null,
+      unitOfMeasure: (p.unitOfMeasure as string | null) ?? null,
+      supplier: (p.supplier as string | null) ?? null,
+      imageUrl: (p.imageUrl as string | null) ?? null,
+      status: 'ACTIVE',
+      category: null,
+      stock: Number(p.initialStock ?? 0),
+      minStock: Number(p.minStock ?? 0),
+    }
+  }, [])
+
   useEffect(() => {
     registerServiceWorker()
     let alive = true
     const flush = async () => {
-      const queued = await pendingSales()
+      const queued = await pendingOps()
       if (!alive) return
       setPendingCount(queued.length)
-      if (!queued.length || !navigator.onLine) return
-      const { sent, rejected } = await syncPendingSales()
-      if (!alive || (sent === 0 && rejected.length === 0)) return
-      const left = await pendingSales()
-      setPendingCount(left.length)
-      if (sent > 0) {
-        toast(`${sent} venta${sent === 1 ? '' : 's'} sin conexión sincronizada${sent === 1 ? '' : 's'}`)
+      const productosCola = queued.filter((q) => q.tipo === 'producto' && q.tempId)
+      if (productosCola.length) {
+        setData((prev) => {
+          const faltan = productosCola.filter((q) => !prev.products.some((pr) => pr.id === q.tempId))
+          return faltan.length
+            ? { ...prev, products: [...prev.products, ...faltan.map(productoDeCola)] }
+            : prev
+        })
       }
-      // Una venta encolada que el servidor rechaza no puede desaparecer en
-      // silencio: el cajero tiene que enterarse para rehacerla.
-      if (rejected.length > 0) {
+      if (!queued.length || !navigator.onLine) return
+      const r = await syncPendingOps()
+      const enviadas = r.sent.venta + r.sent.compra + r.sent.producto
+      if (!alive || (enviadas === 0 && r.rejected.length === 0)) return
+      // Un carrito a medio armar puede tener un producto creado sin conexión:
+      // se cambia al id real para que la venta no salga con el provisional.
+      if (Object.keys(r.remapped).length) {
+        setCart((prev) =>
+          prev.map((l) => (r.remapped[l.productId] ? { ...l, productId: r.remapped[l.productId] } : l)),
+        )
+      }
+      const left = await pendingOps()
+      if (!alive) return
+      setPendingCount(left.length)
+      if (enviadas > 0) {
+        const partes = [
+          r.sent.venta ? `${r.sent.venta} venta${r.sent.venta === 1 ? '' : 's'}` : '',
+          r.sent.compra ? `${r.sent.compra} compra${r.sent.compra === 1 ? '' : 's'}` : '',
+          r.sent.producto ? `${r.sent.producto} producto${r.sent.producto === 1 ? '' : 's'}` : '',
+        ].filter(Boolean)
+        toast(`Se sincronizó lo guardado sin conexión: ${partes.join(' · ')}`)
+      }
+      // Una operación encolada que el servidor rechaza no puede desaparecer en
+      // silencio: el usuario tiene que enterarse para rehacerla.
+      if (r.rejected.length > 0) {
+        const nombres = { venta: 'venta', compra: 'compra', producto: 'producto' } as const
+        const x = r.rejected[0]
+        const msg =
+          r.rejected.length === 1
+            ? `Una ${nombres[x.tipo]} guardada sin conexión no se pudo registrar: ${x.reason}`
+            : `${r.rejected.length} operaciones guardadas sin conexión no se pudieron registrar: ${x.reason}`
         setTimeout(() => {
-          if (alive) toast(`${rejected.length} venta sin conexión no se pudo registrar: ${rejected[0].reason}`)
-        }, sent > 0 ? 2800 : 0)
+          if (alive) toast(msg)
+        }, enviadas > 0 ? 2800 : 0)
       }
       await refreshAll()
     }
@@ -904,7 +956,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       // Sin conexión: la venta se guarda y se envía sola al volver el internet
       if (!navigator.onLine || (e instanceof TypeError)) {
-        await queueSale(payload, total)
+        await queueOp({ tipo: 'venta', payload, resumen: fmt(total) })
         setPendingCount((n) => n + 1)
         toast('Sin conexión — venta guardada, se enviará al volver el internet')
         newSale()
@@ -912,7 +964,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       onError(e)
     }
-  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, quoteId, buildSaleItems, matchCustomerId, afterSale, newSale, toast, onError])
+  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, quoteId, buildSaleItems, matchCustomerId, afterSale, newSale, fmt, toast, onError])
 
   const finalizeCredito = useCallback(
     async (customerId: string) => {
@@ -922,23 +974,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setModal('aperturaCaja')
         return
       }
+      const payload = {
+        cashSessionId: data.cash.session.id,
+        items: buildSaleItems(),
+        paymentMethod: 'CREDIT' as const,
+        discount,
+        discountIsPct,
+        customerId,
+        quoteId: quoteId ?? undefined,
+        notes: note || undefined,
+      }
       try {
-        const r = await api.createSale({
-          cashSessionId: data.cash.session.id,
-          items: buildSaleItems(),
-          paymentMethod: 'CREDIT',
-          discount,
-          discountIsPct,
-          customerId,
-          quoteId: quoteId ?? undefined,
-          notes: note || undefined,
-        })
+        const r = await api.createSale(payload)
         await afterSale(r.sale)
       } catch (e) {
+        // Sin conexión: el fiado también se guarda y se envía solo después
+        if (!navigator.onLine || (e instanceof TypeError)) {
+          await queueOp({ tipo: 'venta', payload, resumen: `${fmt(total)} a crédito` })
+          setPendingCount((n) => n + 1)
+          setModal(null)
+          toast('Sin conexión — venta a crédito guardada, se enviará al volver el internet')
+          newSale()
+          return
+        }
         onError(e)
       }
     },
-    [cart, data.cash.session, discount, discountIsPct, note, quoteId, buildSaleItems, afterSale, toast, onError],
+    [cart, data.cash.session, discount, discountIsPct, note, quoteId, total, buildSaleItems, afterSale, newSale, fmt, toast, onError],
   )
 
   // ─── Cotizaciones ─────────────────────────────────────────────────────────
@@ -1200,20 +1262,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const saveProduct = useCallback(
     async (payload: Record<string, unknown>, editId: string | null) => {
+      // el stock inicial entra en la sucursal donde se está trabajando,
+      // no siempre en la primera de la lista
+      const sucursal = data.branches.find((b) => b.id === branchId) ?? data.branches[0]
       try {
         if (editId) {
           await api.updateProduct(editId, payload)
           toast('Cambios guardados')
         } else {
-          // el stock inicial entra en la sucursal donde se está trabajando,
-          // no siempre en la primera de la lista
-          const sucursal = data.branches.find((b) => b.id === branchId) ?? data.branches[0]
           await api.createProduct({ ...payload, branchId: sucursal?.id })
           toast(payload.variantes ? 'Producto con variantes creado' : 'Producto creado')
         }
         await refreshProducts()
         return true
       } catch (e) {
+        if (!navigator.onLine || (e instanceof TypeError)) {
+          // Sin conexión solo se pueden CREAR productos simples: editar o crear
+          // variantes toca registros que ya viven en el servidor.
+          if (editId || payload.variantes) {
+            toast('Sin conexión — para esto necesitas internet. Inténtalo cuando vuelva.')
+            return false
+          }
+          const tempId = nuevoTempId()
+          await queueOp({
+            tipo: 'producto',
+            payload: { ...payload, branchId: sucursal?.id },
+            resumen: String(payload.name ?? ''),
+            tempId,
+          })
+          setPendingCount((n) => n + 1)
+          // El producto aparece de una con su id provisional: se puede vender
+          // ya mismo y la cola corrige el id cuando el servidor lo cree.
+          setData((prev) => ({
+            ...prev,
+            products: [
+              ...prev.products,
+              {
+                id: tempId,
+                sku: (payload.sku as string | null) ?? null,
+                name: String(payload.name ?? ''),
+                barcode: (payload.barcode as string | null) ?? null,
+                price: Number(payload.price ?? 0),
+                cost: (payload.cost as number | null) ?? null,
+                unitOfMeasure: (payload.unitOfMeasure as string | null) ?? null,
+                supplier: (payload.supplier as string | null) ?? null,
+                imageUrl: (payload.imageUrl as string | null) ?? null,
+                status: 'ACTIVE',
+                category: prev.categories.find((c) => c.id === payload.categoryId) ?? null,
+                stock: Number(payload.initialStock ?? 0),
+                minStock: Number(payload.minStock ?? 0),
+              },
+            ],
+          }))
+          toast('Sin conexión — producto guardado, se enviará al volver el internet')
+          return true
+        }
         onError(e)
         return false
       }
@@ -1419,26 +1522,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveNuevaCompra = useCallback(async () => {
     if (!ncProv.trim() || !ncItems.length) return
     const methodMap = { contado: 'CASH', transferencia: 'TRANSFER', credito: 'CREDIT' } as const
+    const valor = ncItems.reduce((a, i) => a + (i.total || i.qty * i.unit), 0)
+    const payload = {
+      supplierName: ncProv.trim(),
+      method: methodMap[ncMethod],
+      initialPayment: ncMethod === 'credito' ? ncAbono : 0,
+      items: ncItems.map((i) => ({
+        productId: i.productId,
+        quantity: i.qty,
+        unitCost: i.unit,
+        totalCost: i.total || i.qty * i.unit,
+        newPrice: i.price || undefined,
+      })),
+    }
     try {
-      const valor = ncItems.reduce((a, i) => a + (i.total || i.qty * i.unit), 0)
-      const r = await api.createPurchase({
-        supplierName: ncProv.trim(),
-        method: methodMap[ncMethod],
-        initialPayment: ncMethod === 'credito' ? ncAbono : 0,
-        items: ncItems.map((i) => ({
-          productId: i.productId,
-          quantity: i.qty,
-          unitCost: i.unit,
-          totalCost: i.total || i.qty * i.unit,
-          newPrice: i.price || undefined,
-        })),
-      })
+      const r = await api.createPurchase(payload)
       clearNc()
       setLastPurchase(r.purchase)
       setScreen('compraRecibo')
       toast(`Compra registrada · ${fmt(valor)}`)
       await Promise.all([refreshPurchases(), refreshProducts(), refreshSuppliers(), refreshCash()])
     } catch (e) {
+      // Sin conexión: la compra se encola y la mercancía entra al sincronizar.
+      // El stock local se sube de una para poder seguir vendiendo lo recibido.
+      if (!navigator.onLine || (e instanceof TypeError)) {
+        await queueOp({ tipo: 'compra', payload, resumen: `${fmt(valor)} a ${ncProv.trim()}` })
+        setPendingCount((n) => n + 1)
+        const entradas = new Map(ncItems.map((i) => [i.productId, i.qty]))
+        setData((prev) => ({
+          ...prev,
+          products: prev.products.map((p) =>
+            entradas.has(p.id) ? { ...p, stock: p.stock + (entradas.get(p.id) ?? 0) } : p,
+          ),
+        }))
+        clearNc()
+        setScreen('compras')
+        toast('Sin conexión — compra guardada, se enviará al volver el internet')
+        return
+      }
       onError(e)
     }
   }, [ncProv, ncItems, ncMethod, ncAbono, clearNc, toast, fmt, refreshPurchases, refreshProducts, refreshSuppliers, refreshCash, onError])
@@ -1613,6 +1734,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (openNext: boolean, nextOpeningAmount?: number) => {
       const session = data.cash.session
       if (!session || !cierrePreview) return
+      // El cierre compara lo contado contra lo que el SERVIDOR tiene registrado;
+      // hacerlo con datos viejos daría un descuadre falso. Por eso exige internet.
+      if (!navigator.onLine) {
+        toast('Para cerrar caja necesitas internet: el cierre se calcula con los datos reales del servidor.')
+        return
+      }
       try {
         const r = await api.closeCashSession(session.id, {
           closingBalance: cierrePreview.contado,
@@ -1645,7 +1772,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         onError(e)
       }
     },
-    [data.cash.session, data.settings, cierrePreview, me.name, patch, refreshCash, refreshSales, onError],
+    [data.cash.session, data.settings, cierrePreview, me.name, patch, refreshCash, refreshSales, toast, onError],
   )
 
   const confirmApertura = useCallback(

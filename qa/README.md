@@ -3,7 +3,7 @@
 Pruebas de extremo a extremo contra un servidor real, complementarias a
 `npm test` (que cubre las reglas de negocio con Jest).
 
-## Qué cubre — 318 pruebas
+## Qué cubre — 342 pruebas
 
 | Archivo | Área | Pruebas |
 |---|---|---|
@@ -18,6 +18,7 @@ Pruebas de extremo a extremo contra un servidor real, complementarias a
 | `qa-9-cotizaciones.js` | Cotizaciones (sin tocar inventario) y devolución parcial por peso | 52 |
 | `qa-10-refresco.js` | Refresco automático entre dispositivos sin dañar el trabajo en curso | 10 |
 | `qa-11-imprimir.js` | Ventana de impresión propia: térmica directa o impresora del computador | 21 |
+| `qa-12-offline-ampliado.js` | Offline ampliado: compras, crédito y crear productos sin red, cola en orden con remapeo de ids | 24 |
 
 ## Cómo ejecutarlas
 
