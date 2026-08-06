@@ -36,8 +36,14 @@ export async function POST(req: Request) {
   const user = await db.user.findUnique({ where: { email } })
   if (!user || user.emailVerified || !mailerConfigured()) return generico
 
-  const verifyToken = randomBytes(32).toString('hex')
-  await db.user.update({ where: { id: user.id }, data: { verifyToken } })
+  // El MISMO enlace del correo original: si el primero llega tarde (Gmail a
+  // veces demora minutos), su enlace sigue sirviendo. Invalidarlo aquí creaba
+  // una trampa: el usuario reenviaba por la demora y el correo que por fin
+  // llegaba traía un enlace ya muerto. Solo se genera token si no hay.
+  const verifyToken = user.verifyToken ?? randomBytes(32).toString('hex')
+  if (!user.verifyToken) {
+    await db.user.update({ where: { id: user.id }, data: { verifyToken } })
+  }
 
   const base = process.env.NEXTAUTH_URL ?? ''
   try {
