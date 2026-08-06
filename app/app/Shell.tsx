@@ -253,7 +253,10 @@ function Sidebar({ narrow }: { narrow: boolean }) {
         style={
           narrow
             ? { display: 'flex', flexDirection: 'row', gap: 4, marginTop: 10, overflowX: 'auto', paddingBottom: 4 }
-            : { display: 'flex', flexDirection: 'column', gap: 3, marginTop: 12, flex: 1 }
+            : // minHeight 0 + overflowY: en pantallas bajitas el menú se desliza
+              // con su propia barra y el pie (usuario, cerrar sesión, panel de
+              // plataforma) queda fijo abajo, siempre visible
+              { display: 'flex', flexDirection: 'column', gap: 3, marginTop: 12, flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: 2 }
         }
       >
         {items
