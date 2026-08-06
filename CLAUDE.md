@@ -74,7 +74,10 @@ cd .next/standalone && DATABASE_URL=... DIRECT_URL=... NEXTAUTH_SECRET=dev-secre
 # puerto ocupado: fuser -k 3100/tcp
 ```
 
-- **QA de sistema**: `qa/` — 342 pruebas end-to-end (ver `qa/README.md`).
+- **QA de sistema**: `qa/` — 373 pruebas end-to-end (ver `qa/README.md`).
+  qa-13 necesita `qa/wompi-falso.js` (puerto 2526) y el servidor con llaves
+  Wompi de prueba (`WOMPI_*` + `WOMPI_API_BASE`/`WOMPI_CHECKOUT_BASE`
+  apuntando al falso).
   Requieren Playwright: `NODE_PATH=<scratchpad>/node_modules` con
   `npm install playwright` hecho en el scratchpad; Chromium en
   `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` (qa-lib ya lo apunta).
@@ -102,9 +105,15 @@ force-with-lease. Mensajes de commit en español, explicando el porqué.
 
 - Plan único **$ 49.900/mes**, prueba gratis 15 días sin tarjeta. Soporte SOLO
   por correo: `ventorypos@gmail.com`.
-- Sin pasarela de pagos por ahora (activación manual vía super admin);
-  sin facturación DIAN todavía; descartados: promociones/combos, reportes por
-  cajero, gastos fuera de caja.
+- **Pasarela Wompi construida y APAGADA por defecto** (`lib/wompi.ts`): sin
+  las 4 variables `WOMPI_*` en Vercel todo sigue con activación manual vía
+  super admin. Cada pago aprobado suma 30 días (`Business.paidUntil`;
+  `paidUntil` null en ACTIVE = activación manual sin vencimiento). Webhook
+  `/api/wompi/eventos` (exento de middleware, protegido por firma); respaldo
+  GET `/api/plan/checkout?ref=`. Samuel eligió Wompi (botón Nequi directo) y
+  está sacando el RUT; Mercado Pago fue considerado y descartado por ahora.
+- Sin facturación DIAN todavía (requiere RUT + habilitación del usuario);
+  descartados: promociones/combos, reportes por cajero, gastos fuera de caja.
 - Cotizaciones sin apartar inventario y sin abonos (versión simple, a
   propósito). Cotizar de más es legítimo (encargos); cobrar exige stock.
 - Cerrar caja exigirá siempre internet (no llevar al modo offline).
@@ -117,7 +126,9 @@ force-with-lease. Mensajes de commit en español, explicando el porqué.
 - NUNCA pedir ni aceptar contraseñas/tokens en el chat. Los secretos van
   directo a Vercel (el usuario los pone). Variables en producción:
   `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`,
-  `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `SUPER_ADMIN_EMAIL`, `CRON_SECRET`.
+  `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `SUPER_ADMIN_EMAIL`, `CRON_SECRET`;
+  opcionales (pasarela): `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY`,
+  `WOMPI_INTEGRITY_SECRET`, `WOMPI_EVENTS_SECRET`.
 - Pendiente confirmar por el usuario: rotación de la contraseña de Neon (se
   expuso una vieja en chat) y que `CRON_SECRET` esté puesto en Vercel (sin él
   no sale el resumen diario).
@@ -139,7 +150,10 @@ primeros pasos, pantalla completa para táctiles, refresco automático
 multi-dispositivo.
 
 Pendientes conocidos:
-1. **Nivel 4** (futuro): facturación electrónica DIAN; pasarela de pagos
-   (recomendada Wompi) cuando activar cuentas a mano canse.
-2. Ofrecido sin decidir: devolución sin factura de referencia (nota crédito
+1. **Activar la pasarela Wompi**: Samuel está sacando el RUT; cuando tenga
+   las llaves las pone en Vercel + URL de eventos en el panel de Wompi, y se
+   prueba el ciclo en sandbox antes de pasar a llaves de producción.
+2. **Nivel 4 restante**: facturación electrónica DIAN (requiere RUT,
+   certificado y habilitación DIAN del usuario — no es solo código).
+3. Ofrecido sin decidir: devolución sin factura de referencia (nota crédito
    suelta); modelo de caja compartida por sucursal.

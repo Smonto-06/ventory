@@ -278,6 +278,8 @@ export interface AppUser {
 export interface PlanInfo {
   status: 'TRIAL' | 'ACTIVE' | 'SUSPENDED'
   trialEndsAt: string | null
+  /** Vigencia pagada por Wompi; null en ACTIVE = activación manual sin vencer */
+  paidUntil: string | null
   daysLeft: number | null
   blocked: boolean
 }
@@ -306,6 +308,8 @@ export interface Settings {
   notifyLowStock?: boolean
   notifyEmail?: string | null
   plan?: PlanInfo
+  /** true si las llaves de Wompi están configuradas (aparece el botón de pago) */
+  pagoEnLinea?: boolean
   isSuperAdmin?: boolean
 }
 
@@ -506,6 +510,13 @@ export const api = {
   updateUser: (id: string, data: unknown) => put<{ user: AppUser }>(`/api/users/${id}`, data),
 
   settings: () => get<{ settings: Settings }>('/api/settings'),
+  // Pago del plan por Wompi
+  crearPagoPlan: () =>
+    post<{ url: string; reference: string; amount: number; sandbox: boolean }>('/api/plan/checkout'),
+  estadoPagoPlan: (ref: string) =>
+    get<{ status: string; paidAt: string | null; amount: number; plan: PlanInfo }>(
+      `/api/plan/checkout?ref=${encodeURIComponent(ref)}`,
+    ),
   updateSettings: (data: unknown) => put<{ settings: Settings }>('/api/settings', data),
   testNotification: () => post<{ enviado: boolean; destino: string }>('/api/notifications/test', {}),
 

@@ -53,6 +53,16 @@ enum BusinessStatus {
   SUSPENDED // suspendido — solo lectura hasta reactivar
 }
 
+enum PlanPaymentStatus {
+  PENDING // checkout creado, esperando el resultado de Wompi
+  APPROVED // pago aprobado — extendió la vigencia del plan
+  DECLINED // rechazado por el banco o cancelado por el usuario
+  VOIDED // anulado en Wompi
+  ERROR // falló en la pasarela
+
+  @@map("plan_payment_status")
+}
+
 enum MovementType {
   SALE // decremented by a sale
   RETURN // incremented by a return/refund
@@ -119,6 +129,10 @@ model Business {
   trialEndsAt DateTime?
   activatedAt DateTime?
   adminNotes  String?
+  /// Vigencia pagada por Wompi. null en ACTIVE = activación manual sin
+  /// vencimiento (comportamiento anterior); con fecha, el plan bloquea al
+  /// vencerse y cada pago aprobado suma 30 días sobre lo que quede.
+  paidUntil   DateTime?
 
   branches      Branch[]
   users         User[]
@@ -130,11 +144,37 @@ model Business {
   purchases     Purchase[]
   heldSales     HeldSale[]
   heldPurchases HeldPurchase[]
+  planPayments  PlanPayment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("businesses")
+}
+
+/// Pago de la mensualidad vía Wompi. La referencia es única: el webhook y la
+/// consulta de respaldo pueden llegar por el mismo pago sin duplicar los 30
+/// días (la extensión solo se aplica al pasar de PENDING a APPROVED).
+model PlanPayment {
+  id            String            @id @default(cuid())
+  businessId    String
+  business      Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// Referencia enviada a Wompi (VEN-…), con la que vuelve el evento
+  reference     String            @unique
+  /// Monto en centavos como lo exige Wompi ($49.900 → 4990000)
+  amountInCents Int
+  currency      String            @default("COP")
+  status        PlanPaymentStatus @default(PENDING)
+  /// Id de la transacción en Wompi (para rastrear en su panel)
+  wompiId       String?
+  /// Método reportado por Wompi: CARD, NEQUI, PSE, BANCOLOMBIA_TRANSFER…
+  paymentMethod String?
+  paidAt        DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([businessId, createdAt])
+  @@map("plan_payments")
 }
 
 model Branch {

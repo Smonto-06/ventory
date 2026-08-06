@@ -224,6 +224,8 @@ export interface AppStore extends AppData {
   me: { name: string; email: string; role: string }
   isAdmin: boolean
   logout: () => void
+  /** Manda al dueño al checkout de Wompi a pagar la mensualidad */
+  pagarPlan: () => Promise<void>
 
   // navegación / UI
   screen: Screen
@@ -1895,12 +1897,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => signOut({ callbackUrl: '/login' }), [])
 
+  // ─── Pago del plan (Wompi) ────────────────────────────────────────────────
+  // El checkout es una página de Wompi: la tarjeta nunca pasa por Ventory.
+  const pagarPlan = useCallback(async () => {
+    try {
+      const r = await api.crearPagoPlan()
+      window.location.href = r.url
+    } catch (e) {
+      onError(e)
+    }
+  }, [onError])
+
+  // Al volver del checkout (/app?pago=REF) se confirma el resultado. El
+  // webhook puede tardar unos segundos, así que se consulta con reintentos;
+  // la consulta de respaldo del servidor le pregunta a Wompi directamente.
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('pago')
+    if (!ref) return
+    window.history.replaceState(null, '', '/app')
+    let vivo = true
+    ;(async () => {
+      for (let intento = 0; intento < 5 && vivo; intento++) {
+        try {
+          const r = await api.estadoPagoPlan(ref)
+          if (!vivo) return
+          if (r.status === 'APPROVED') {
+            toast('Pago recibido — tu plan quedó activo. ¡Gracias!')
+            const s2 = await api.settings()
+            if (vivo) patch({ settings: s2.settings })
+            return
+          }
+          if (r.status !== 'PENDING') {
+            toast('El pago no se completó. Puedes intentarlo de nuevo cuando quieras.')
+            return
+          }
+        } catch {
+          // sin conexión o error pasajero: se reintenta
+        }
+        await new Promise((res) => setTimeout(res, 2500))
+      }
+      if (vivo) toast('Tu pago está en proceso; el plan se activará solo en unos minutos.')
+    })()
+    return () => {
+      vivo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const store: AppStore = useMemo(
     () => ({
       ...data,
       me,
       isAdmin,
       logout,
+      pagarPlan,
       screen,
       go,
       modal,
