@@ -137,7 +137,10 @@ force-with-lease. Mensajes de commit en español, explicando el porqué.
   `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `SUPER_ADMIN_EMAIL`, `CRON_SECRET`;
   opcionales (pasarela): `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY`,
   `WOMPI_INTEGRITY_SECRET`, `WOMPI_EVENTS_SECRET`; o bien `MP_ACCESS_TOKEN`
-  (Mercado Pago, la interina).
+  (Mercado Pago, la interina); opcionales (correo por SMTP en vez de Gmail,
+  recomendado Brevo por entregabilidad): `SMTP_HOST`, `SMTP_PORT`,
+  `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` (remitente visible, verificado en
+  Brevo). Gmail personal demora y manda a spam los envíos a terceros.
 - Pendiente confirmar por el usuario: rotación de la contraseña de Neon (se
   expuso una vieja en chat) y que `CRON_SECRET` esté puesto en Vercel (sin él
   no sale el resumen diario).
