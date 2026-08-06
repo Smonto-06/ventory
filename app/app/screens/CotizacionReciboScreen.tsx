@@ -8,7 +8,8 @@
 
 import { useApp } from '../store'
 import { fmtQty } from '../ui'
-import { smartPrint, TicketLine } from '../printer'
+import { TicketLine } from '../printer'
+import BotonImprimir from '../Imprimir'
 
 export default function CotizacionReciboScreen() {
   const s = useApp()
@@ -152,16 +153,7 @@ export default function CotizacionReciboScreen() {
       )}
 
       <div data-no-print="true" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <button
-          onClick={async () => {
-            const via = await smartPrint(lineas())
-            if (via === 'directa') s.toast('Cotización impresa')
-          }}
-          className="v-hover-bg"
-          style={{ height: 46, padding: '0 18px', borderRadius: 12, background: 'var(--surface)', border: '1.5px solid var(--border)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
-        >
-          Imprimir
-        </button>
+        <BotonImprimir lineas={lineas} etiqueta="Imprimir" alto={46} />
         {(c.status === 'OPEN' || c.status === 'EXPIRED') && (
           <button
             onClick={() => s.convertirCotizacion(c.id)}
