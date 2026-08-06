@@ -315,32 +315,55 @@ function Sidebar({ narrow }: { narrow: boolean }) {
   )
 }
 
-// Bloqueo suave: prueba vencida o plan suspendido — se puede ver el aviso,
-// contactar y cerrar sesión; las operaciones quedan deshabilitadas.
+// Bloqueo suave: prueba o mensualidad vencida, o plan suspendido — se puede
+// ver el aviso, pagar/contactar y cerrar sesión; las operaciones quedan
+// deshabilitadas.
 function PlanBlockedOverlay() {
   const s = useApp()
-  const suspended = s.settings?.plan?.status === 'SUSPENDED'
+  const [pagando, setPagando] = useState(false)
+  const plan = s.settings?.plan
+  const suspended = plan?.status === 'SUSPENDED'
+  const mensualidadVencida = plan?.status === 'ACTIVE'
+  // El pago en línea aparece solo con las llaves de Wompi configuradas y para
+  // el administrador (la cuenta suspendida se reactiva con soporte, no pagando)
+  const puedePagar = !!s.settings?.pagoEnLinea && s.isAdmin && !suspended
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 440, background: 'var(--surface)', borderRadius: 18, padding: 28, boxShadow: '0 30px 60px -30px rgba(15,25,23,.5)', animation: 'vpop .25s ease', textAlign: 'center' }}>
-        <div style={{ width: 56, height: 56, borderRadius: 16, background: '#FDF4E5', color: '#B4740A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 26 }}>
-          {suspended ? '⏸' : '⏰'}
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: '#FDF4E5', color: '#B4740A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+          <Icono n={suspended ? 'candado' : 'reloj'} tam={26} />
         </div>
         <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 800, letterSpacing: '-.3px' }}>
-          {suspended ? 'Tu plan está suspendido' : 'Tu prueba gratis terminó'}
+          {suspended ? 'Tu plan está suspendido' : mensualidadVencida ? 'Tu mensualidad venció' : 'Tu prueba gratis terminó'}
         </h2>
         <div style={{ fontSize: 14.5, color: 'var(--muted)', lineHeight: 1.55 }}>
-          Tus datos están guardados y seguros. Para {suspended ? 'reactivar tu plan' : 'seguir vendiendo con Ventory'},
-          escríbenos y activamos tu cuenta el mismo día:
+          {puedePagar
+            ? 'Tus datos están guardados y seguros. Paga tu mensualidad y sigues vendiendo de inmediato:'
+            : `Tus datos están guardados y seguros. Para ${suspended ? 'reactivar tu plan' : 'seguir vendiendo con Ventory'}, escríbenos y activamos tu cuenta el mismo día:`}
         </div>
+        {puedePagar && (
+          <button
+            onClick={() => {
+              setPagando(true)
+              s.pagarPlan().finally(() => setPagando(false))
+            }}
+            disabled={pagando}
+            className="v-hover-primary"
+            style={{ display: 'block', width: '100%', marginTop: 16, padding: '14px 16px', borderRadius: 12, background: pagando ? '#C7CDEC' : '#6366F1', color: '#fff', fontWeight: 800, fontSize: 15.5, cursor: pagando ? 'wait' : 'pointer', boxShadow: pagando ? 'none' : '0 8px 18px -8px #6366F1cc' }}
+          >
+            {pagando ? 'Abriendo el pago seguro…' : 'Pagar mi plan · $ 49.900'}
+          </button>
+        )}
         <a
           href="mailto:ventorypos@gmail.com?subject=Activar%20mi%20plan%20de%20Ventory"
-          style={{ display: 'block', marginTop: 16, padding: '13px 16px', borderRadius: 12, background: '#EEF0FE', color: '#4338CA', fontWeight: 800, fontSize: 15, textDecoration: 'none' }}
+          style={{ display: 'block', marginTop: puedePagar ? 10 : 16, padding: '13px 16px', borderRadius: 12, background: 'var(--bg)', color: '#4338CA', fontWeight: 800, fontSize: puedePagar ? 13.5 : 15, textDecoration: 'none' }}
         >
-          ventorypos@gmail.com
+          {puedePagar ? '¿Prefieres otro medio? ventorypos@gmail.com' : 'ventorypos@gmail.com'}
         </a>
         <div style={{ marginTop: 16, fontSize: 12.5, color: 'var(--muted)' }}>
-          ¿Ya nos escribiste? Apenas activemos tu plan, recarga esta página.
+          {puedePagar
+            ? 'El pago es procesado por Wompi (Bancolombia): Nequi, PSE o tarjeta.'
+            : '¿Ya nos escribiste? Apenas activemos tu plan, recarga esta página.'}
         </div>
         <button
           onClick={s.logout}
@@ -350,6 +373,42 @@ function PlanBlockedOverlay() {
           Cerrar sesión
         </button>
       </div>
+    </div>
+  )
+}
+
+// Aviso del plan: días de prueba restantes o mensualidad por vencer. Con las
+// llaves de Wompi configuradas el aviso trae el botón de pago; sin ellas,
+// invita a escribir al soporte (activación manual, como siempre).
+function PlanBanner() {
+  const s = useApp()
+  const plan = s.settings?.plan
+  if (!plan || plan.blocked) return null
+  const esTrial = plan.status === 'TRIAL'
+  const porVencer = plan.status === 'ACTIVE' && !!plan.paidUntil && (plan.daysLeft ?? 99) <= 5
+  if (!esTrial && !porVencer) return null
+  const dias = plan.daysLeft ?? 0
+  const texto = esTrial
+    ? `Prueba gratis: ${dias === 1 ? 'queda 1 día' : `quedan ${dias} días`}`
+    : `Tu mensualidad ${dias === 0 ? 'vence hoy' : dias === 1 ? 'vence mañana' : `vence en ${dias} días`}`
+  const puedePagar = !!s.settings?.pagoEnLinea && s.isAdmin
+  return (
+    <div
+      data-no-print="true"
+      style={{ background: '#FDF4E5', borderBottom: '1px solid #F3DCB0', color: '#8A6B2E', fontWeight: 700, fontSize: 13, padding: '7px 16px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}
+    >
+      <span>
+        {texto}
+        {!puedePagar && ' · Para activar tu plan escríbenos a ventorypos@gmail.com'}
+      </span>
+      {puedePagar && (
+        <button
+          onClick={s.pagarPlan}
+          style={{ height: 30, padding: '0 13px', borderRadius: 9, background: '#6366F1', color: '#fff', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 6px 14px -6px #6366F1cc' }}
+        >
+          Pagar mi plan · $ 49.900
+        </button>
+      )}
     </div>
   )
 }
@@ -459,12 +518,7 @@ export default function Shell() {
           <Sidebar narrow={narrow} />
           <div style={{ flex: 1, minWidth: 'min(100%,320px)', display: 'flex', flexDirection: 'column' }}>
             <OfflineBanner />
-            {s.settings?.plan?.status === 'TRIAL' && !s.settings.plan.blocked && (
-              <div data-no-print="true" style={{ background: '#FDF4E5', borderBottom: '1px solid #F3DCB0', color: '#8A6B2E', fontWeight: 700, fontSize: 13, padding: '9px 16px', textAlign: 'center' }}>
-                Prueba gratis: {s.settings.plan.daysLeft === 1 ? 'queda 1 día' : `quedan ${s.settings.plan.daysLeft} días`} · Para activar tu
-                plan escríbenos con el botón Contáctanos
-              </div>
-            )}
+            <PlanBanner />
             {screens[s.screen]}
           </div>
         </div>

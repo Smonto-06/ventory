@@ -36,6 +36,9 @@ export default withAuth(
           // CRON_SECRET. Sin esta excepción el middleware lo redirigiría al
           // login y el resumen diario nunca se enviaría.
           pathname.startsWith('/api/cron') ||
+          // El webhook de Wompi también llega sin sesión: se protege solo
+          // con la firma del evento (secreto de eventos)
+          pathname.startsWith('/api/wompi') ||
           pathname === '/'
         ) {
           return true

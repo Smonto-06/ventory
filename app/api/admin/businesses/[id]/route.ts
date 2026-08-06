@@ -37,9 +37,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (notes !== undefined) data.adminNotes = notes
 
     if (action === 'activate') {
+      // Activación manual: sin vencimiento (paidUntil solo lo pone Wompi)
       data.status = 'ACTIVE'
       data.activatedAt = new Date()
       data.trialEndsAt = null
+      data.paidUntil = null
     } else if (action === 'suspend') {
       data.status = 'SUSPENDED'
     } else {
@@ -116,6 +118,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
         // Hijos primero, en orden de dependencias (las FK no tienen cascade)
         await tx.auditLog.deleteMany({ where: { userId: { in: userIds } } })
         await tx.inventoryMovement.deleteMany({ where: { inventory: { branch: { businessId } } } })
+        await tx.quoteItem.deleteMany({ where: { quote: { businessId } } })
+        await tx.quote.deleteMany({ where: { businessId } })
         await tx.saleReturnItem.deleteMany({ where: { return: { sale: { branch: { businessId } } } } })
         await tx.saleReturn.deleteMany({ where: { sale: { branch: { businessId } } } })
         await tx.salePayment.deleteMany({ where: { sale: { branch: { businessId } } } })

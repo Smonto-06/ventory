@@ -3,7 +3,7 @@
 Pruebas de extremo a extremo contra un servidor real, complementarias a
 `npm test` (que cubre las reglas de negocio con Jest).
 
-## Qué cubre — 342 pruebas
+## Qué cubre — 373 pruebas
 
 | Archivo | Área | Pruebas |
 |---|---|---|
@@ -19,6 +19,7 @@ Pruebas de extremo a extremo contra un servidor real, complementarias a
 | `qa-10-refresco.js` | Refresco automático entre dispositivos sin dañar el trabajo en curso | 10 |
 | `qa-11-imprimir.js` | Ventana de impresión propia: térmica directa o impresora del computador | 21 |
 | `qa-12-offline-ampliado.js` | Offline ampliado: compras, crédito y crear productos sin red, cola en orden con remapeo de ids | 24 |
+| `qa-13-pagos.js` | Pasarela Wompi: checkout firmado, webhook con firma, activación automática sin duplicar, respaldo sin webhook | 31 |
 
 ## Cómo ejecutarlas
 
@@ -44,6 +45,16 @@ la aplicación apuntando a él y se le indica dónde está el buzón:
       node qa/qa-8-notificaciones.js
 
 Sin esas variables la prueba corre igual, omitiendo la parte del envío.
+
+La prueba 13 necesita el Wompi de mentira y el servidor con las llaves de
+prueba de la pasarela:
+
+    node qa/wompi-falso.js &
+    WOMPI_PUBLIC_KEY=pub_test_qa WOMPI_PRIVATE_KEY=prv_test_qa \
+      WOMPI_INTEGRITY_SECRET=integridad-qa WOMPI_EVENTS_SECRET=eventos-qa \
+      WOMPI_API_BASE=http://127.0.0.1:2526 \
+      WOMPI_CHECKOUT_BASE=http://127.0.0.1:2526/p/ node server.js
+    node qa/qa-13-pagos.js
 
 Cada archivo imprime ✓/✗ por prueba y termina con código distinto de cero
 si algo falla, de modo que sirve en integración continua.

@@ -10,8 +10,16 @@ import Link from 'next/link'
 interface PlanInfo {
   status: 'TRIAL' | 'ACTIVE' | 'SUSPENDED'
   trialEndsAt: string | null
+  /** Vigencia pagada por Wompi; null en ACTIVE = activación manual sin vencer */
+  paidUntil: string | null
   daysLeft: number | null
   blocked: boolean
+}
+
+interface PagosInfo {
+  cantidad: number
+  total: number
+  ultimo: { fecha: string | null; metodo: string | null; valor: number } | null
 }
 
 interface BizRow {
@@ -21,6 +29,7 @@ interface BizRow {
   activatedAt: string | null
   adminNotes: string | null
   plan: PlanInfo
+  pagos: PagosInfo
   owner: { name: string | null; email: string } | null
   userCount: number
   productCount: number
@@ -41,7 +50,11 @@ const chip = (bg: string, fg: string): React.CSSProperties => ({
 })
 
 function planChip(plan: PlanInfo) {
-  if (plan.status === 'ACTIVE') return <span style={chip('#D1FAE5', '#0B6E63')}>Activo</span>
+  if (plan.status === 'ACTIVE') {
+    if (!plan.paidUntil) return <span style={chip('#D1FAE5', '#0B6E63')}>Activo</span>
+    if (plan.blocked) return <span style={chip('#FDECEC', '#C9433B')}>Mensualidad vencida</span>
+    return <span style={chip('#D1FAE5', '#0B6E63')}>Pagado · {plan.daysLeft} {plan.daysLeft === 1 ? 'día' : 'días'}</span>
+  }
   if (plan.status === 'SUSPENDED') return <span style={chip('#FDECEC', '#C9433B')}>Suspendido</span>
   if (plan.blocked) return <span style={chip('#FDECEC', '#C9433B')}>Prueba vencida</span>
   return <span style={chip('#FDF4E5', '#B4740A')}>Prueba · {plan.daysLeft} {plan.daysLeft === 1 ? 'día' : 'días'}</span>
@@ -186,13 +199,19 @@ export default function AdminClient() {
                     <div style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.owner ? `${r.owner.name ?? ''} · ${r.owner.email}` : 'Sin dueño'} · {r.userCount} usuario{r.userCount === 1 ? '' : 's'} · {r.productCount} prods
                     </div>
+                    {r.pagos.cantidad > 0 && (
+                      <div style={{ color: '#0B6E63', fontSize: 12.5, marginTop: 2, fontWeight: 600 }}>
+                        {r.pagos.cantidad} pago{r.pagos.cantidad === 1 ? '' : 's'} Wompi · ${r.pagos.total.toLocaleString('es-CO')} · último {fdate(r.pagos.ultimo?.fecha ?? null)}
+                        {r.pagos.ultimo?.metodo ? ` (${r.pagos.ultimo.metodo})` : ''}
+                      </div>
+                    )}
                   </div>
                   <div style={{ padding: '13px 10px' }}>{planChip(r.plan)}</div>
                   <div style={{ padding: '13px 10px', fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{fdate(r.createdAt)}</div>
                   <div style={{ padding: '13px 10px', fontSize: 13.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{r.salesCount}</div>
                   <div style={{ padding: '13px 10px', fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{fdate(r.lastSaleAt)}</div>
                   <div style={{ padding: '13px 10px', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                    {r.plan.status !== 'ACTIVE' && (
+                    {(r.plan.status !== 'ACTIVE' || r.plan.blocked) && (
                       <button disabled={busy === r.id} onClick={() => act(r.id, 'activate')} style={btn('#6366F1', '#fff')} className="v-hover-primary">
                         Activar plan
                       </button>

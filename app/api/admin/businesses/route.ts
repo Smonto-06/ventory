@@ -22,6 +22,12 @@ export async function GET(req: NextRequest) {
           _count: { select: { sales: true } },
         },
       },
+      // Pagos aprobados por Wompi (los más recientes primero)
+      planPayments: {
+        where: { status: 'APPROVED' },
+        orderBy: { paidAt: 'desc' },
+        select: { amountInCents: true, paidAt: true, paymentMethod: true },
+      },
     },
     orderBy: { createdAt: 'desc' },
   })
@@ -49,6 +55,17 @@ export async function GET(req: NextRequest) {
       activatedAt: b.activatedAt,
       adminNotes: b.adminNotes,
       plan: planInfo(b),
+      pagos: {
+        cantidad: b.planPayments.length,
+        total: Math.round(b.planPayments.reduce((sum, p) => sum + p.amountInCents, 0) / 100),
+        ultimo: b.planPayments[0]
+          ? {
+              fecha: b.planPayments[0].paidAt,
+              metodo: b.planPayments[0].paymentMethod,
+              valor: Math.round(b.planPayments[0].amountInCents / 100),
+            }
+          : null,
+      },
       owner: b.users.find((u) => u.role === 'ADMIN') ?? b.users[0] ?? null,
       userCount: b.users.length,
       productCount: b._count.products,
