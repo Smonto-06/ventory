@@ -91,11 +91,11 @@ const { check, summary, newBrowser, registerAndLogin, BASE } = require('./qa-lib
 
   const pendientes = await mp.evaluate(async () => {
     return new Promise((resolve) => {
-      const req = indexedDB.open('ventory-offline', 1)
+      const req = indexedDB.open('ventory-offline')
       req.onsuccess = () => {
         const db = req.result
-        const tx = db.transaction('ventas-pendientes', 'readonly')
-        const all = tx.objectStore('ventas-pendientes').getAll()
+        const tx = db.transaction('operaciones-pendientes', 'readonly')
+        const all = tx.objectStore('operaciones-pendientes').getAll()
         all.onsuccess = () => resolve(all.result.length)
         all.onerror = () => resolve(-1)
       }
@@ -115,11 +115,11 @@ const { check, summary, newBrowser, registerAndLogin, BASE } = require('./qa-lib
 
   const pendientesDespues = await mp.evaluate(async () => {
     return new Promise((resolve) => {
-      const req = indexedDB.open('ventory-offline', 1)
+      const req = indexedDB.open('ventory-offline')
       req.onsuccess = () => {
         const db = req.result
-        const tx = db.transaction('ventas-pendientes', 'readonly')
-        const all = tx.objectStore('ventas-pendientes').getAll()
+        const tx = db.transaction('operaciones-pendientes', 'readonly')
+        const all = tx.objectStore('operaciones-pendientes').getAll()
         all.onsuccess = () => resolve(all.result.length)
         all.onerror = () => resolve(-1)
       }

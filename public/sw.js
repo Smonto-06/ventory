@@ -5,8 +5,9 @@
 //    plano, para que la app cargue aunque no haya internet.
 //  · API: siempre red (los datos deben ser frescos). Las respuestas GET de
 //    catálogo se guardan como respaldo para poder consultar productos offline.
-//  · POST de ventas: si falla por falta de red, el cliente las encola en
-//    IndexedDB y las reintenta al volver la conexión (ver offline.ts).
+//  · POST de ventas, compras y productos nuevos: si falla por falta de red,
+//    el cliente los encola en IndexedDB y los reintenta al volver la
+//    conexión (ver offline.ts).
 
 const CACHE = 'ventory-v1'
 const SHELL = ['/app', '/login', '/manifest.json', '/brand/ventory-icon.png', '/brand/ventory-logo.png']

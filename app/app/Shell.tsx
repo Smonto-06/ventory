@@ -354,7 +354,7 @@ function PlanBlockedOverlay() {
   )
 }
 
-// Aviso de conexión: sin internet o con ventas pendientes de sincronizar
+// Aviso de conexión: sin internet o con operaciones pendientes de sincronizar
 function OfflineBanner() {
   const s = useApp()
   const [online, setOnline] = useState(true)
@@ -385,8 +385,8 @@ function OfflineBanner() {
       }}
     >
       {online
-        ? `${s.pendingCount} venta${s.pendingCount === 1 ? '' : 's'} sin conexión pendiente${s.pendingCount === 1 ? '' : 's'} de sincronizar…`
-        : `Sin conexión — puedes seguir vendiendo${s.pendingCount ? ` (${s.pendingCount} pendiente${s.pendingCount === 1 ? '' : 's'})` : ''}, se enviará al volver el internet`}
+        ? `${s.pendingCount} operaci${s.pendingCount === 1 ? 'ón' : 'ones'} sin conexión pendiente${s.pendingCount === 1 ? '' : 's'} de sincronizar…`
+        : `Sin conexión — puedes seguir vendiendo, comprando y creando productos${s.pendingCount ? ` (${s.pendingCount} pendiente${s.pendingCount === 1 ? '' : 's'})` : ''}, se enviará al volver el internet`}
     </div>
   )
 }
