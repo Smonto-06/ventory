@@ -362,7 +362,9 @@ function PlanBlockedOverlay() {
         </a>
         <div style={{ marginTop: 16, fontSize: 12.5, color: 'var(--muted)' }}>
           {puedePagar
-            ? 'El pago es procesado por Wompi (Bancolombia): Nequi, PSE o tarjeta.'
+            ? s.settings?.pasarela === 'mercadopago'
+              ? 'El pago es procesado por Mercado Pago: PSE, tarjeta o efectivo.'
+              : 'El pago es procesado por Wompi (Bancolombia): Nequi, PSE o tarjeta.'
             : '¿Ya nos escribiste? Apenas activemos tu plan, recarga esta página.'}
         </div>
         <button

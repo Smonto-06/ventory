@@ -36,9 +36,11 @@ export default withAuth(
           // CRON_SECRET. Sin esta excepción el middleware lo redirigiría al
           // login y el resumen diario nunca se enviaría.
           pathname.startsWith('/api/cron') ||
-          // El webhook de Wompi también llega sin sesión: se protege solo
-          // con la firma del evento (secreto de eventos)
+          // Los webhooks de las pasarelas también llegan sin sesión: Wompi se
+          // protege con la firma del evento; Mercado Pago, verificando el pago
+          // contra su API antes de creer nada
           pathname.startsWith('/api/wompi') ||
+          pathname.startsWith('/api/mercadopago') ||
           pathname === '/'
         ) {
           return true
