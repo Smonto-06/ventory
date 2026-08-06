@@ -243,6 +243,19 @@ const TEMAS: Tema[] = [
         ),
       },
       {
+        p: 'Somos varios trabajando a la vez, ¿el inventario no se enreda?',
+        r: (
+          <>
+            No. Pueden estar el cajero vendiendo y otra persona ingresando compras al mismo tiempo,
+            cada uno desde su dispositivo: el stock lo mueve el servidor operación por operación, así
+            que nunca se pierde ni se duplica una unidad. Además, la pantalla de cada uno{' '}
+            <b>se actualiza sola cada 30 segundos</b> (y al volver a la pestaña), de modo que si en la
+            bodega ingresan mercancía, en la caja se ve sin recargar. Cada persona debe tener{' '}
+            <b>su propio usuario</b>, para que quede registrado quién hizo qué.
+          </>
+        ),
+      },
+      {
         p: '¿Cómo manejo varias sucursales o bodegas?',
         r: (
           <>

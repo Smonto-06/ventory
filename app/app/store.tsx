@@ -578,6 +578,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ─── Refresco automático ──────────────────────────────────────────────────
+  // Varias personas trabajan a la vez sobre el mismo negocio (una vendiendo,
+  // otra ingresando compras). El servidor siempre tiene la verdad —el stock se
+  // descuenta allá, atómico—, pero la pantalla de cada uno se quedaba con los
+  // datos del momento en que entró. Esto la mantiene al día:
+  //
+  //  - cada 30 segundos, si la pestaña está visible y hay internet, se
+  //    recargan productos (stock), caja y clientes en segundo plano;
+  //  - al volver a la pestaña o recuperar la conexión, se refresca de una.
+  //
+  // Solo lectura de datos: NUNCA toca el carrito, lo digitado en un modal ni
+  // la pantalla en la que está el usuario. Si una pasada falla (se cayó la
+  // red a mitad), se ignora y se reintenta en la siguiente.
+  const refrescoSilencioso = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    await Promise.all([
+      refreshProducts().catch(() => {}),
+      refreshCash().catch(() => {}),
+      refreshCustomers().catch(() => {}),
+    ])
+  }, [refreshProducts, refreshCash, refreshCustomers])
+
+  useEffect(() => {
+    const cada30s = window.setInterval(refrescoSilencioso, 30_000)
+    const alVolver = () => {
+      if (document.visibilityState === 'visible') refrescoSilencioso()
+    }
+    document.addEventListener('visibilitychange', alVolver)
+    window.addEventListener('online', refrescoSilencioso)
+    window.addEventListener('focus', alVolver)
+    return () => {
+      window.clearInterval(cada30s)
+      document.removeEventListener('visibilitychange', alVolver)
+      window.removeEventListener('online', refrescoSilencioso)
+      window.removeEventListener('focus', alVolver)
+    }
+  }, [refrescoSilencioso])
+
   // Modo offline: registra el service worker y envía las ventas encoladas
   // al cargar y cada vez que vuelve la conexión.
   useEffect(() => {
