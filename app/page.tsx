@@ -14,6 +14,26 @@ export const metadata = {
   title: 'Ventory — Punto de venta e inventario para tu negocio',
   description:
     'Vende, controla tu inventario y cuadra la caja desde cualquier dispositivo. Funciona sin internet. Prueba gratis 15 días.',
+  alternates: { canonical: '/' },
+}
+
+// Datos estructurados para los buscadores: le dicen a Google qué es Ventory
+// (un software de punto de venta), cuánto vale y que hay prueba gratis.
+const DATOS_ESTRUCTURADOS = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Ventory',
+  description:
+    'Sistema de punto de venta e inventario para negocios colombianos: ventas, caja, fiados, compras y reportes desde cualquier dispositivo, incluso sin internet.',
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Web',
+  inLanguage: 'es-CO',
+  offers: {
+    '@type': 'Offer',
+    price: '49900',
+    priceCurrency: 'COP',
+    description: 'Plan mensual. Prueba gratis de 15 días sin tarjeta.',
+  },
 }
 
 // Precio mostrado en la página. Para cambiarlo, edita solo esta línea.
@@ -269,6 +289,10 @@ export default async function LandingPage() {
 
   return (
     <div className="vapp v-pub" data-theme="light">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(DATOS_ESTRUCTURADOS) }}
+      />
       <div style={{ background: 'var(--bg)', color: 'var(--text)', overflowX: 'hidden' }}>
         <Encabezado />
 
