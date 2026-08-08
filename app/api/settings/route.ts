@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
-import { unauthorized, forbidden, badRequest, serverError, isAdmin } from '@/lib/api-helpers'
+import { unauthorized, forbidden, badRequest, serverError, isFullAdmin } from '@/lib/api-helpers'
 import { planInfo, isSuperAdmin } from '@/lib/plan'
 import { pasarelaActiva } from '@/lib/pasarela'
 
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const user = await getCurrentUser(req)
   if (!user) return unauthorized()
-  if (!isAdmin(user)) return forbidden('Solo el administrador modifica los ajustes')
+  if (!isFullAdmin(user)) return forbidden('Solo el administrador modifica los ajustes del negocio')
 
   let body: unknown
   try {

@@ -98,6 +98,37 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly } = require('./q
     await C.ctx.close()
   }
 
+  // ── ROL ENCARGADO (SUPERVISOR) ──
+  // Opera el negocio sin el dueño presente: compras e inventario SÍ;
+  // usuarios, ajustes del negocio, plan y respaldos NO.
+  const enc = await A.post('/api/users', {
+    name: 'Encargada Rosa', email: `enc-${t}@test.com`, password: 'ClaveEncargada99', role: 'SUPERVISOR',
+  })
+  check('roles', 'admin puede crear un encargado', enc.status === 201 || enc.status === 200, `status ${enc.status}`)
+  if (enc.status === 201 || enc.status === 200) {
+    const E = await loginOnly(browser, `enc-${t}@test.com`, 'ClaveEncargada99')
+    const provE = await E.post('/api/suppliers', { name: `Proveedor Enc ${t}` })
+    check('roles', 'encargado SÍ puede crear proveedores', provE.status === 201, `status ${provE.status}`)
+    const compE = await E.post('/api/purchases', {
+      supplierId: provE.data?.supplier?.id, branchId: brA, method: 'TRANSFER',
+      items: [{ productId: idProdA, quantity: 5, unitCost: 1000 }],
+    })
+    check('roles', 'encargado SÍ puede ingresar compras', compE.status === 201, `status ${compE.status}`)
+    const ajE = await E.post('/api/inventory/adjust', { adjustments: [{ productId: idProdA, quantity: 30 }] })
+    check('roles', 'encargado SÍ puede ajustar inventario', ajE.status === 200 || ajE.status === 201, `status ${ajE.status}`)
+    const repE = await E.get(`/api/reports/daily?date=${new Date().toISOString().slice(0, 10)}`)
+    check('roles', 'encargado SÍ puede ver reportes', repE.status === 200, `status ${repE.status}`)
+    const usrE = await E.post('/api/users', { name: 'X', email: `xe-${t}@t.com`, password: 'Clave12345', role: 'ADMIN' })
+    check('roles', 'encargado NO puede crear usuarios', usrE.status === 403, `status ${usrE.status}`)
+    const cfgE = await E.put('/api/settings', { name: 'Cambiado por encargado' })
+    check('roles', 'encargado NO puede cambiar los ajustes del negocio', cfgE.status === 403, `status ${cfgE.status}`)
+    const expE = await E.get('/api/export?type=backup')
+    check('roles', 'encargado NO puede exportar respaldos', expE.status === 403, `status ${expE.status}`)
+    const planE = await E.post('/api/plan/checkout')
+    check('roles', 'encargado NO puede pagar el plan', planE.status === 403, `status ${planE.status}`)
+    await E.ctx.close()
+  }
+
   // ── SIN SESIÓN ──
   const anon = await browser.newContext()
   const anonPage = await anon.newPage()

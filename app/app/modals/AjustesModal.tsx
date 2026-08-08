@@ -83,6 +83,10 @@ function themeBtnStyle(active: boolean): CSSProperties {
 
 export default function AjustesModal() {
   const s = useApp()
+  // El encargado (SUPERVISOR) abre Ajustes para lo operativo (tema, impresora,
+  // sucursales); lo del dueño —negocio, facturación, notificaciones, plan,
+  // usuarios y respaldos— solo lo ve y toca el ADMIN pleno.
+  const esDueno = s.me.role === 'ADMIN'
   const [name, setName] = useState(s.settings?.name ?? '')
   const [currency, setCurrency] = useState(s.settings?.currency ?? '$')
   const [ivaPct, setIvaPct] = useState(s.settings?.ivaPct ?? 0)
@@ -135,7 +139,7 @@ export default function AjustesModal() {
       {/* El plan siempre a la vista: sin esto, el botón de pago solo salía en
           el aviso (prueba o por vencer) y quien quería pagar antes no tenía
           dónde. La pantalla de bloqueo y el aviso siguen existiendo. */}
-      {s.isAdmin && s.settings?.plan && (
+      {esDueno && s.settings?.plan && (
         <>
           <div style={sectionStyle}>Mi plan</div>
           <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '13px 15px', fontSize: 13.5, lineHeight: 1.6, color: 'var(--text)' }}>
@@ -175,6 +179,8 @@ export default function AjustesModal() {
         </>
       )}
 
+      {esDueno && (
+        <>
       <div style={sectionStyle}>Negocio</div>
       <label style={fieldLabelStyle}>Nombre del negocio</label>
       <input
@@ -360,6 +366,8 @@ export default function AjustesModal() {
       <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8', lineHeight: 1.55 }}>
         El resumen se envía cada noche después del cierre. Guarda los ajustes antes de probar.
       </div>
+        </>
+      )}
 
       <div style={sectionStyle}>Impresora de tickets</div>
       {printerState ? (
@@ -431,18 +439,22 @@ export default function AjustesModal() {
         imprimir usa el diálogo del navegador.
       </div>
 
-      <div style={sectionStyle}>Caja</div>
-      <label style={fieldLabelStyle}>Base de caja por defecto</label>
-      <input
-        value={apertura ? String(apertura) : ''}
-        onChange={(e) => setApertura(parseInt(String(e.target.value).replace(/\D/g, '')) || 0)}
-        inputMode="numeric"
-        placeholder="0"
-        style={numInputStyle}
-      />
-      <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8' }}>
-        Monto de apertura sugerido al abrir un nuevo turno.
-      </div>
+      {esDueno && (
+        <>
+          <div style={sectionStyle}>Caja</div>
+          <label style={fieldLabelStyle}>Base de caja por defecto</label>
+          <input
+            value={apertura ? String(apertura) : ''}
+            onChange={(e) => setApertura(parseInt(String(e.target.value).replace(/\D/g, '')) || 0)}
+            inputMode="numeric"
+            placeholder="0"
+            style={numInputStyle}
+          />
+          <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8' }}>
+            Monto de apertura sugerido al abrir un nuevo turno.
+          </div>
+        </>
+      )}
 
       {s.isAdmin && (
         <>
@@ -520,13 +532,19 @@ export default function AjustesModal() {
           </div>
 
           <div style={sectionStyle}>Cuenta</div>
-          <button onClick={() => s.openModal('usuarios')} className="v-hover-bg" style={rowBtnStyle}>
-            Gestión de usuarios <span style={{ color: '#6366F1' }}>→</span>
-          </button>
+          {esDueno && (
+            <button onClick={() => s.openModal('usuarios')} className="v-hover-bg" style={rowBtnStyle}>
+              Gestión de usuarios <span style={{ color: '#6366F1' }}>→</span>
+            </button>
+          )}
           <button onClick={() => s.openModal('auditoria')} className="v-hover-bg" style={{ ...rowBtnStyle, marginTop: 8 }}>
             Registro de actividad <span style={{ color: '#6366F1' }}>→</span>
           </button>
+        </>
+      )}
 
+      {esDueno && (
+        <>
           <div style={sectionStyle}>Exportar datos</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {(
@@ -608,38 +626,42 @@ export default function AjustesModal() {
         Ver novedades <span style={{ color: '#6366F1' }}>→</span>
       </button>
 
-      <button
-        onClick={() =>
-          s.saveSettings({
-            name: name.trim(),
-            currency,
-            ivaPct,
-            defaultOpeningAmount: apertura,
-            taxId: taxId.trim(),
-            phone: phone.trim(),
-            address: address.trim(),
-            receiptFooter: receiptFooter.trim(),
-            notifyDailySummary: resumenDiario,
-            notifyLowStock: avisoStock,
-            notifyEmail: correoAviso.trim(),
-          })
-        }
-        className="v-hover-primary"
-        style={{
-          width: '100%',
-          height: 48,
-          marginTop: 22,
-          borderRadius: 12,
-          background: '#6366F1',
-          color: '#fff',
-          fontWeight: 800,
-          fontSize: 14.5,
-          cursor: 'pointer',
-          boxShadow: '0 8px 18px -8px #6366F1cc',
-        }}
-      >
-        Guardar ajustes
-      </button>
+      {/* Los campos que guarda este botón son del dueño; el encargado no los
+          ve (tema e impresora se aplican al instante, sin guardar) */}
+      {esDueno && (
+        <button
+          onClick={() =>
+            s.saveSettings({
+              name: name.trim(),
+              currency,
+              ivaPct,
+              defaultOpeningAmount: apertura,
+              taxId: taxId.trim(),
+              phone: phone.trim(),
+              address: address.trim(),
+              receiptFooter: receiptFooter.trim(),
+              notifyDailySummary: resumenDiario,
+              notifyLowStock: avisoStock,
+              notifyEmail: correoAviso.trim(),
+            })
+          }
+          className="v-hover-primary"
+          style={{
+            width: '100%',
+            height: 48,
+            marginTop: 22,
+            borderRadius: 12,
+            background: '#6366F1',
+            color: '#fff',
+            fontWeight: 800,
+            fontSize: 14.5,
+            cursor: 'pointer',
+            boxShadow: '0 8px 18px -8px #6366F1cc',
+          }}
+        >
+          Guardar ajustes
+        </button>
+      )}
     </Modal>
   )
 }
