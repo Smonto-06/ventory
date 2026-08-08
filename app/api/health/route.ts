@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db as prisma } from '@/lib/db'
+import { pasarelaActiva } from '@/lib/pasarela'
+import { mailerConfigured } from '@/lib/mailer'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +21,10 @@ export async function GET() {
     return NextResponse.json({
       status: 'ok',
       migraciones,
+      // Qué ve el despliegue de sus variables (no los valores, solo si están):
+      // con esto se confirma en segundos si una variable llegó a producción.
+      pasarela: pasarelaActiva() ?? 'ninguna — sin llaves de pago configuradas',
+      correo: mailerConfigured() ? 'configurado' : 'sin configurar',
       timestamp: new Date().toISOString(),
     })
   } catch {
