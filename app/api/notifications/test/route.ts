@@ -45,7 +45,25 @@ export async function POST(req: NextRequest) {
     const resumen = await construirResumen(user.businessId, new Date())
     if (!resumen) return NextResponse.json({ error: 'Negocio no encontrado' }, { status: 404 })
 
-    await sendDailySummaryEmail(destino, resumen)
+    try {
+      await sendDailySummaryEmail(destino, resumen)
+    } catch (e) {
+      // Este botón es EL diagnóstico del correo: si el proveedor rechaza el
+      // envío, el administrador necesita saber por qué, no un error genérico.
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('Prueba de correo falló:', e)
+      let pista = 'Revisa las variables de correo en Vercel y redespliega.'
+      if (/535|auth|credentials/i.test(msg)) {
+        pista =
+          'El servidor rechazó el usuario o la clave. Revisa SMTP_USER (el login SMTP, tipo 8abc123@smtp-brevo.com) y SMTP_PASS (la CLAVE SMTP de Brevo, empieza por xsmtpsib- — no la llave de API xkeysib-).'
+      } else if (/sender|from address|not.*(allowed|valid|verified)/i.test(msg)) {
+        pista =
+          'El remitente no está autorizado. MAIL_FROM debe ser un remitente verificado en tu proveedor (Brevo → Remitentes).'
+      } else if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EHOSTUNREACH|greeting|connect/i.test(msg)) {
+        pista = 'No hubo conexión con el servidor de correo. Revisa SMTP_HOST y SMTP_PORT (Brevo: smtp-relay.brevo.com, 587).'
+      }
+      return NextResponse.json({ error: `No se pudo enviar. ${pista}`, detalle: msg }, { status: 502 })
+    }
     return NextResponse.json({ enviado: true, destino })
   } catch (error) {
     return serverError('POST /api/notifications/test', error)
