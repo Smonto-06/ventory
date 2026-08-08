@@ -72,6 +72,16 @@ const txDe = (reference, status, extra = {}) => ({
   check('pagos', 'el banner de prueba gratis está visible', cuerpo.includes('Prueba gratis'))
   const btnPagar = page.locator('button:has-text("Pagar mi plan")').first()
   check('pagos', 'con el botón "Pagar mi plan · $ 49.900"', (await btnPagar.count()) > 0)
+
+  // Ajustes → "Mi plan": el estado del plan y el botón de pago siempre a mano
+  await page.locator('nav button', { hasText: 'Ajustes' }).first().click()
+  await page.waitForTimeout(1000)
+  const cuerpoAjustes = await page.textContent('body')
+  check('pagos', 'Ajustes tiene la sección "Mi plan" con el estado', cuerpoAjustes.includes('Mi plan') && /quedan \d+ días/.test(cuerpoAjustes))
+  check('pagos', 'y el botón de pago disponible en todo momento', cuerpoAjustes.includes('suma 30 días'))
+  await page.locator('button:has-text("✕")').first().click()
+  await page.waitForTimeout(600)
+
   await btnPagar.click()
   await page.waitForURL('**/p/**', { timeout: 15000 }).catch(() => {})
   const enCheckout = page.url().includes('/p/')
