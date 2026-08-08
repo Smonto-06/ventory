@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
-import { unauthorized, forbidden, badRequest, serverError, isAdmin } from '@/lib/api-helpers'
+import { unauthorized, forbidden, badRequest, serverError, isFullAdmin } from '@/lib/api-helpers'
 import { planInfo, aplicarPagoAprobado } from '@/lib/plan'
 import { wompiEnPruebas, urlCheckout, consultarTransaccion, PLAN_CENTAVOS, PLAN_PRECIO_COP } from '@/lib/wompi'
 import { mpEnPruebas, crearPreferencia, consultarPagoPorReferencia, estadoDesdeMp } from '@/lib/mercadopago'
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser(req)
   if (!user) return unauthorized()
-  if (!isAdmin(user)) return forbidden('Solo el administrador paga el plan')
+  if (!isFullAdmin(user)) return forbidden('Solo el administrador paga el plan')
   const pasarela = pasarelaActiva()
   if (!pasarela) {
     return NextResponse.json(

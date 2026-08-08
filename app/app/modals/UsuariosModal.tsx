@@ -91,7 +91,7 @@ export default function UsuariosModal() {
                 </div>
               </div>
               <span style={isAdminRole ? chipStyle('#EEF0FE', '#4338CA') : chipStyle('#D1FAE5', '#0B6E63')}>
-                {isAdminRole ? 'Administrador' : 'Cajero'}
+                {u.role === 'ADMIN' ? 'Administrador' : u.role === 'SUPERVISOR' ? 'Encargado' : 'Cajero'}
               </span>
               <span style={u.isActive ? chipStyle('#D1FAE5', '#0B6E63') : chipStyle('#FDECEC', '#C9433B')}>
                 {u.isActive ? 'Activo' : 'Inactivo'}

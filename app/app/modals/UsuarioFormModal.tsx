@@ -44,8 +44,10 @@ export default function UsuarioFormModal() {
 
   const [name, setName] = useState(editing?.name ?? '')
   const [email, setEmail] = useState(editing?.email ?? '')
-  const [role, setRole] = useState<'ADMIN' | 'CASHIER'>(
-    editing && (editing.role === 'ADMIN' || editing.role === 'SUPERVISOR') ? 'ADMIN' : 'CASHIER',
+  const [role, setRole] = useState<'ADMIN' | 'SUPERVISOR' | 'CASHIER'>(
+    editing && (editing.role === 'ADMIN' || editing.role === 'SUPERVISOR')
+      ? (editing.role as 'ADMIN' | 'SUPERVISOR')
+      : 'CASHIER',
   )
   const [branchId, setBranchId] = useState(editing?.branchId ?? '')
   const [password, setPassword] = useState('')
@@ -133,8 +135,13 @@ export default function UsuarioFormModal() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
           <label style={fieldLabelStyle}>Rol</label>
-          <select value={role} onChange={(e) => setRole(e.target.value as 'ADMIN' | 'CASHIER')} style={selectStyle}>
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value as 'ADMIN' | 'SUPERVISOR' | 'CASHIER')}
+            style={selectStyle}
+          >
             <option value="CASHIER">Cajero</option>
+            <option value="SUPERVISOR">Encargado</option>
             <option value="ADMIN">Administrador</option>
           </select>
         </div>
@@ -149,6 +156,25 @@ export default function UsuarioFormModal() {
             ))}
           </select>
         </div>
+      </div>
+      <div style={{ marginTop: 8, background: 'var(--bg)', borderRadius: 10, padding: '10px 13px', fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.55 }}>
+        {role === 'CASHIER' ? (
+          <>
+            <b style={{ color: 'var(--text)' }}>Cajero:</b> vende, cobra, maneja su caja, clientes y
+            cotizaciones. No ve compras, inventario ni reportes.
+          </>
+        ) : role === 'SUPERVISOR' ? (
+          <>
+            <b style={{ color: 'var(--text)' }}>Encargado:</b> todo lo operativo — además de vender,
+            ingresa compras, ajusta inventario y ve reportes. No maneja usuarios, ajustes del
+            negocio, el plan ni los respaldos.
+          </>
+        ) : (
+          <>
+            <b style={{ color: 'var(--text)' }}>Administrador:</b> control total, incluyendo
+            usuarios, ajustes del negocio, el plan y los respaldos.
+          </>
+        )}
       </div>
       <label style={fieldLabelStyle}>Contraseña</label>
       <input

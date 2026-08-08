@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
-import { unauthorized, forbidden, badRequest, isAdmin } from '@/lib/api-helpers'
+import { unauthorized, forbidden, badRequest, isFullAdmin } from '@/lib/api-helpers'
 
 const METHOD_ES: Record<string, string> = {
   CASH: 'Efectivo',
@@ -56,7 +56,7 @@ const fdate = (d: Date) =>
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser(req)
   if (!user) return unauthorized()
-  if (!isAdmin(user)) return forbidden('Solo el administrador exporta datos')
+  if (!isFullAdmin(user)) return forbidden('Solo el administrador exporta datos')
   const businessId = user.businessId
 
   const type = req.nextUrl.searchParams.get('type') ?? ''

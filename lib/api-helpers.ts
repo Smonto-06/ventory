@@ -25,6 +25,15 @@ export function isAdmin(user: SessionUser): boolean {
   return user.role === UserRole.ADMIN || user.role === UserRole.SUPERVISOR
 }
 
+/**
+ * Solo el ADMIN pleno (el dueño). El encargado (SUPERVISOR) opera el negocio
+ * —compras, inventario, reportes— pero no toca usuarios, ajustes del
+ * negocio, el plan ni los respaldos.
+ */
+export function isFullAdmin(user: SessionUser): boolean {
+  return user.role === UserRole.ADMIN
+}
+
 type Tx = Prisma.TransactionClient
 
 /** Sesión de caja abierta de una sucursal (para movimientos de caja generados por otras operaciones) */

@@ -74,7 +74,7 @@ cd .next/standalone && DATABASE_URL=... DIRECT_URL=... NEXTAUTH_SECRET=dev-secre
 # puerto ocupado: fuser -k 3100/tcp
 ```
 
-- **QA de sistema**: `qa/` — 414 pruebas end-to-end (ver `qa/README.md`).
+- **QA de sistema**: `qa/` — 423 pruebas end-to-end (ver `qa/README.md`).
   qa-13 necesita `qa/wompi-falso.js` (puerto 2526) y el servidor con llaves
   Wompi de prueba (`WOMPI_*` + `WOMPI_API_BASE`/`WOMPI_CHECKOUT_BASE`
   apuntando al falso). qa-14 necesita `qa/mercadopago-falso.js` (2527) y el
@@ -134,6 +134,12 @@ force-with-lease. Mensajes de commit en español, explicando el porqué.
 - Emojis prohibidos en la UI; usar `components/Icono.tsx`.
 - El modelo de caja actual (por usuario) le sirve al dueño; solo cambiarlo si
   pide cobrar entre varios sobre el mismo cajón.
+- **Tres roles de empleado** (cada uno con su cuenta propia; Ajustes →
+  Usuarios; hay ingreso rápido por PIN en `/pin-login`): Cajero (vende, caja,
+  clientes, cotizaciones), Encargado/SUPERVISOR (además compras, proveedores,
+  inventario, movimientos y reportes) y Administrador (todo). `isFullAdmin`
+  (solo ADMIN) protege usuarios, ajustes del negocio, plan/pagos y
+  exportaciones; `isAdmin` (ADMIN+SUPERVISOR) protege lo operativo.
 
 ## Seguridad / secretos
 
