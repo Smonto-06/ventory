@@ -47,6 +47,13 @@ export async function GET(req: NextRequest) {
     if (!prev || row._max.createdAt > prev) lastSaleByBusiness.set(bizId, row._max.createdAt)
   }
 
+  // Negocios registrados desde la misma conexión: posible prueba repetida.
+  // Se cuenta por IP de registro; el super admin decide qué hacer.
+  const porIp = new Map<string, number>()
+  for (const b of businesses) {
+    if (b.signupIp) porIp.set(b.signupIp, (porIp.get(b.signupIp) ?? 0) + 1)
+  }
+
   return NextResponse.json({
     businesses: businesses.map((b) => ({
       id: b.id,
@@ -55,6 +62,11 @@ export async function GET(req: NextRequest) {
       activatedAt: b.activatedAt,
       adminNotes: b.adminNotes,
       plan: planInfo(b),
+      registro: {
+        ip: b.signupIp,
+        /** Cuántos OTROS negocios se registraron desde la misma IP */
+        repetidos: b.signupIp ? (porIp.get(b.signupIp) ?? 1) - 1 : 0,
+      },
       pagos: {
         cantidad: b.planPayments.length,
         total: Math.round(b.planPayments.reduce((sum, p) => sum + p.amountInCents, 0) / 100),

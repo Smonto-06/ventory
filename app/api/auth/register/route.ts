@@ -69,6 +69,14 @@ export async function POST(request: Request) {
     const needsVerify = mailerConfigured()
     const verifyToken = needsVerify ? randomBytes(32).toString('hex') : null
 
+    // IP de registro (en Vercel llega en x-forwarded-for): el super admin ve
+    // cuando varios negocios nacen de la misma conexión — posible prueba
+    // gratis repetida. Solo visibilidad, nunca bloqueo automático.
+    const signupIp =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      null
+
     // Los negocios nuevos entran en prueba gratis; el super-admin los activa tras el pago.
     // La sucursal por defecto es indispensable: sin ella no se puede abrir caja ni vender.
     const business = await db.business.create({
@@ -77,6 +85,7 @@ export async function POST(request: Request) {
         slug,
         status: 'TRIAL',
         trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86400000),
+        signupIp,
         branches: {
           create: { name: 'Principal' },
         },

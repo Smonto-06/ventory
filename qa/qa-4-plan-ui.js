@@ -41,6 +41,14 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE } = requir
   check('ajustes', 'IVA incluido se calcula bien (11.900 al 19% → 1.900)', Number(ivaCalc) === 1900, `iva ${ivaCalc}`)
 
   // ── PLAN COMERCIAL: negocio suspendido no puede vender ──
+  // Un segundo negocio desde la misma conexión, para probar la detección de
+  // prueba gratis repetida (basta el registro; no hace falta verificarlo)
+  await fetch(BASE + '/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Gemelo', email: `gemelo-${t}@test.com`, password: 'ClaveSegura99', businessName: `QA Gemelo ${t}` }),
+  })
+
   const admin = await loginOnly(browser, 'mar_u_79@hotmail.com', 'VentoryBB2026')
   const negocios = await admin.get('/api/admin/businesses')
   const esSuper = negocios.status === 200
@@ -49,6 +57,18 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE } = requir
   if (esSuper) {
     const mio = negocios.data.businesses.find(b => b.name === `QA Plan ${t}`)
     check('super admin', 've el negocio recién creado en la lista', !!mio, 'no aparece')
+
+    // Detección de prueba repetida: el registro guarda la IP y la lista marca
+    // los negocios nacidos de la misma conexión (en QA todos comparten IP)
+    if (mio) {
+      check('super admin', 'el registro guarda desde dónde se creó el negocio', !!mio.registro?.ip, JSON.stringify(mio.registro))
+      check(
+        'super admin',
+        'y detecta otros negocios de la misma conexión (posible prueba repetida)',
+        mio.registro?.repetidos >= 1,
+        `repetidos: ${mio.registro?.repetidos}`,
+      )
+    }
 
     if (mio) {
       // suspender

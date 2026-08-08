@@ -133,6 +133,11 @@ model Business {
   /// vencimiento (comportamiento anterior); con fecha, el plan bloquea al
   /// vencerse y cada pago aprobado suma 30 días sobre lo que quede.
   paidUntil   DateTime?
+  /// IP desde donde se registró el negocio: el super admin ve cuando varios
+  /// negocios nacen de la misma conexión (posible prueba gratis repetida).
+  /// Solo visibilidad — nunca bloqueo automático: en Colombia barrios enteros
+  /// comparten IP y castigaría clientes legítimos.
+  signupIp    String?
 
   branches      Branch[]
   users         User[]
