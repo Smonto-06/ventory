@@ -22,6 +22,11 @@ interface PagosInfo {
   ultimo: { fecha: string | null; metodo: string | null; valor: number } | null
 }
 
+interface RegistroInfo {
+  ip: string | null
+  repetidos: number
+}
+
 interface BizRow {
   id: string
   name: string
@@ -30,6 +35,7 @@ interface BizRow {
   adminNotes: string | null
   plan: PlanInfo
   pagos: PagosInfo
+  registro: RegistroInfo
   owner: { name: string | null; email: string } | null
   userCount: number
   productCount: number
@@ -205,6 +211,11 @@ export default function AdminClient() {
                         {r.pagos.ultimo?.metodo ? ` (${r.pagos.ultimo.metodo})` : ''}
                       </div>
                     )}
+                    {r.registro?.repetidos > 0 && r.plan.status === 'TRIAL' && (
+                      <div style={{ color: '#C9433B', fontSize: 12.5, marginTop: 2, fontWeight: 700 }}>
+                        Misma conexión que {r.registro.repetidos === 1 ? 'otro negocio' : `otros ${r.registro.repetidos} negocios`} — ¿prueba gratis repetida?
+                      </div>
+                    )}
                   </div>
                   <div style={{ padding: '13px 10px' }}>{planChip(r.plan)}</div>
                   <div style={{ padding: '13px 10px', fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{fdate(r.createdAt)}</div>
@@ -249,7 +260,9 @@ export default function AdminClient() {
           <b style={{ color: 'var(--text)' }}>Cómo funciona:</b> los negocios nuevos entran con 15 días de prueba. Cuando un
           cliente te pague, pulsa <b>Activar plan</b>. <b>+15 días</b> extiende la prueba (útil para negociar).{' '}
           <b>Suspender</b> bloquea las ventas de un negocio que dejó de pagar (sus datos se conservan y puedes reactivarlo).{' '}
-          <b>Eliminar</b> borra la cuenta y todos sus datos de forma definitiva — úsalo solo cuando estés seguro.
+          <b>Eliminar</b> borra la cuenta y todos sus datos de forma definitiva — úsalo solo cuando estés seguro.{' '}
+          El aviso rojo <b>&quot;misma conexión&quot;</b> marca negocios en prueba registrados desde la misma IP que otros:
+          posible prueba gratis repetida — revísalo y decide (varios negocios legítimos pueden compartir internet).
         </div>
       </div>
 
