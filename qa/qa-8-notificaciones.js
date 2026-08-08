@@ -279,6 +279,55 @@ const { check, summary, newBrowser, registerAndLogin, BASE } = require('./qa-lib
     })
     check('reenvío', 'el enlace ya usado no sirve una segunda vez', usado.status === 400)
     await ctxR.close()
+
+    // ── LA PANTALLA "REVISA TU CORREO" NO ES UN CALLEJÓN SIN SALIDA ──
+    // Debe ofrecer ir al login, y darse cuenta sola cuando el usuario
+    // confirma desde otra pestaña (o el celular) para llevarlo al login.
+    const correoP = `pantalla_${t}@test.com`
+    const estadoDe = async (email) => {
+      const r = await fetch(BASE + '/api/auth/verify/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      return r.status === 200 ? (await r.json()).verified : null
+    }
+    const ctxP = await browser.newContext()
+    const pageP = await ctxP.newPage()
+    await pageP.goto(BASE + '/register')
+    const inputsP = pageP.locator('input')
+    await inputsP.nth(0).fill(`Pantalla ${t}`)
+    await inputsP.nth(1).fill('Pantalla')
+    await inputsP.nth(2).fill(correoP)
+    await inputsP.nth(3).fill('ClaveSegura99')
+    await inputsP.nth(4).fill('ClaveSegura99')
+    await pageP.locator('input[type=checkbox]').check()
+    await pageP.locator('button[type=submit]').click()
+    await pageP.waitForTimeout(2500)
+    check(
+      'reenvío',
+      'la pantalla "Revisa tu correo" ofrece ir a iniciar sesión',
+      (await pageP.textContent('body')).includes('Ya confirmé mi correo'),
+    )
+    check('reenvío', 'el estado del correo dice "sin verificar" antes del enlace', (await estadoDe(correoP)) === false)
+
+    // confirmar desde "otra pestaña", como quien lo hace desde el celular
+    const enlaceP = enlacesDe(correoP).pop()
+    const otraP = await ctxP.newPage()
+    await otraP.goto(enlaceP)
+    await otraP.waitForTimeout(1500)
+    await otraP.close()
+    check('reenvío', 'y "verificado" después del enlace', (await estadoDe(correoP)) === true)
+
+    // la pantalla del computador se entera sola (consulta cada 4 s) y avanza
+    await pageP.waitForURL('**/login**', { timeout: 15000 }).catch(() => {})
+    check('reenvío', 'la pantalla del registro se da cuenta sola y va al login', pageP.url().includes('/login'))
+    check(
+      'reenvío',
+      'avisando que el correo quedó confirmado',
+      (await pageP.textContent('body')).includes('Tu correo quedó confirmado'),
+    )
+    await ctxP.close()
   }
 
   await S.ctx.close()

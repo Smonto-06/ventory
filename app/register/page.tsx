@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -19,6 +19,30 @@ export default function RegisterPage() {
   const [verifySent, setVerifySent] = useState(false)
   // Reenvío del correo de verificación: '' | 'enviando' | 'enviado'
   const [resend, setResend] = useState<'' | 'enviando' | 'enviado'>('')
+  // La pantalla "Revisa tu correo" se da cuenta sola cuando el usuario
+  // confirma (desde el celular u otra pestaña) y lo lleva al login
+  const [confirmado, setConfirmado] = useState(false)
+
+  useEffect(() => {
+    if (!verifySent || confirmado) return
+    const timer = setInterval(async () => {
+      try {
+        const r = await fetch('/api/auth/verify/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: form.email }),
+        })
+        const d = await r.json()
+        if (d.verified) {
+          setConfirmado(true)
+          setTimeout(() => router.push('/login?verificado=1'), 1600)
+        }
+      } catch {
+        // sin conexión: se reintenta en el siguiente ciclo
+      }
+    }, 4000)
+    return () => clearInterval(timer)
+  }, [verifySent, confirmado, form.email, router])
 
   async function reenviarCorreo() {
     setResend('enviando')
@@ -87,6 +111,29 @@ export default function RegisterPage() {
   }
 
   if (verifySent) {
+    // Ya confirmó (desde el celular u otra pestaña): avisar y llevar al login
+    if (confirmado) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
+          <div className="max-w-md w-full text-center bg-white rounded-2xl shadow-sm p-10">
+            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" className="mx-auto text-emerald-500">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+              <path d="M8 12.3l2.6 2.6L16 9.6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <h1 className="text-2xl font-bold text-gray-900 mt-4">¡Correo confirmado!</h1>
+            <p className="text-gray-600 mt-3 leading-relaxed">
+              Tu cuenta quedó lista. Llevándote a iniciar sesión…
+            </p>
+            <Link
+              href="/login?verificado=1"
+              className="mt-6 block w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white"
+            >
+              Iniciar sesión
+            </Link>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
         <div className="max-w-md w-full text-center bg-white rounded-2xl shadow-sm p-10">
@@ -99,7 +146,10 @@ export default function RegisterPage() {
             Te enviamos un enlace de confirmación a <b>{form.email}</b>. Ábrelo para activar tu
             cuenta y empezar tu prueba gratis de 15 días.
           </p>
-          <p className="text-gray-400 text-sm mt-4">Si no lo ves, revisa la carpeta de spam.</p>
+          <p className="text-gray-400 text-sm mt-4">
+            Si no lo ves, revisa la carpeta de spam. Apenas confirmes, esta pantalla te llevará a
+            iniciar sesión.
+          </p>
           <button
             onClick={reenviarCorreo}
             disabled={resend === 'enviando' || resend === 'enviado'}
@@ -116,6 +166,9 @@ export default function RegisterPage() {
               ¿Aún nada? Vuelve a intentarlo en un minuto
             </button>
           )}
+          <Link href="/login" className="mt-4 block text-sm font-semibold text-gray-500">
+            Ya confirmé mi correo — Iniciar sesión →
+          </Link>
         </div>
       </div>
     )
