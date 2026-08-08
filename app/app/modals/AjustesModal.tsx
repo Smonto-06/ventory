@@ -132,6 +132,49 @@ export default function AjustesModal() {
         ))}
       </div>
 
+      {/* El plan siempre a la vista: sin esto, el botón de pago solo salía en
+          el aviso (prueba o por vencer) y quien quería pagar antes no tenía
+          dónde. La pantalla de bloqueo y el aviso siguen existiendo. */}
+      {s.isAdmin && s.settings?.plan && (
+        <>
+          <div style={sectionStyle}>Mi plan</div>
+          <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '13px 15px', fontSize: 13.5, lineHeight: 1.6, color: 'var(--text)' }}>
+            {s.settings.plan.status === 'TRIAL' ? (
+              <>
+                Prueba gratis: {s.settings.plan.daysLeft === 1 ? 'queda 1 día' : `quedan ${s.settings.plan.daysLeft} días`}.
+                Después, $ 49.900 al mes.
+              </>
+            ) : s.settings.plan.status === 'ACTIVE' && s.settings.plan.paidUntil ? (
+              <>
+                Plan pagado, vigente hasta el{' '}
+                <b>
+                  {new Date(s.settings.plan.paidUntil).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </b>{' '}
+                ({s.settings.plan.daysLeft === 1 ? '1 día' : `${s.settings.plan.daysLeft} días`}). Cada pago suma 30 días.
+              </>
+            ) : s.settings.plan.status === 'ACTIVE' ? (
+              <>Plan activo.</>
+            ) : (
+              <>Plan suspendido. Escríbenos a ventorypos@gmail.com para reactivarlo.</>
+            )}
+          </div>
+          {s.settings.plan.status !== 'SUSPENDED' &&
+            (s.settings.pagoEnLinea ? (
+              <button
+                onClick={s.pagarPlan}
+                className="v-hover-primary"
+                style={{ width: '100%', height: 44, marginTop: 10, borderRadius: 11, background: '#6366F1', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 8px 18px -8px #6366F1cc' }}
+              >
+                Pagar mi plan · $ 49.900 (suma 30 días)
+              </button>
+            ) : (
+              <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--muted)' }}>
+                Para activar o renovar tu plan escríbenos a ventorypos@gmail.com.
+              </div>
+            ))}
+        </>
+      )}
+
       <div style={sectionStyle}>Negocio</div>
       <label style={fieldLabelStyle}>Nombre del negocio</label>
       <input
