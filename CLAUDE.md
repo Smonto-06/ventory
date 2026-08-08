@@ -174,12 +174,16 @@ primeros pasos, pantalla completa para táctiles, refresco automático
 multi-dispositivo.
 
 Pendientes conocidos:
-1. **Activar Mercado Pago (interina)**: Samuel se registra en Mercado Pago
-   con su cédula, saca el token de prueba (TEST-…) y lo pone en Vercel como
-   `MP_ACCESS_TOKEN`; se prueba el ciclo y luego cambia al token APP_USR-….
-   En el panel de MP conviene registrar la URL de notificaciones:
-   `https://ventory-ten.vercel.app/api/mercadopago/eventos` (igual el
-   respaldo por referencia funciona sin webhook).
+1. **Pasar Mercado Pago a producción**: el ciclo completo ya quedó PROBADO
+   en producción con credenciales de prueba (8/ago/2026: pago simulado con
+   cuenta compradora de prueba → activación automática). Nota: en el esquema
+   nuevo de MP las credenciales de prueba también empiezan por APP_USR- (no
+   TEST-), y el pago de prueba exige comprador de prueba logueado (las
+   opciones "sin cuenta" dan "una de las partes es de prueba"). Falta solo:
+   reemplazar el valor de `MP_ACCESS_TOKEN` en Vercel por el token de
+   Credenciales de PRODUCCIÓN + Redeploy, cuando Samuel decida cobrar.
+   El webhook quedó registrado en MP (evento "Pagos legacy") hacia
+   `https://ventory-ten.vercel.app/api/mercadopago/eventos`.
 2. **Migrar a Wompi cuando recupere el RUT** (ya existe en la DIAN, le falta
    recuperar el acceso en muisca.dian.gov.co): pone las 4 llaves `WOMPI_*` y
    Wompi toma prioridad automáticamente, sin tocar código.
