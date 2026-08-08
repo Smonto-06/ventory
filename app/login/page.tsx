@@ -15,6 +15,8 @@ function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/app'
+  // Llega en el regreso desde la confirmación de correo (registro)
+  const recienVerificado = searchParams.get('verificado') === '1'
 
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
@@ -92,6 +94,11 @@ function LoginContent() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: 30, boxShadow: '0 1px 2px rgba(16,20,30,.04),0 22px 44px -28px rgba(16,20,30,.22)' }}>
             <h1 style={{ margin: '0 0 22px', fontSize: 21, fontWeight: 700, letterSpacing: '-.3px' }}>Iniciar sesión</h1>
 
+            {recienVerificado && !error && (
+              <div style={{ marginBottom: 16, padding: '10px 14px', background: '#D1FAE5', border: '1px solid #A7E3C9', color: '#0B6E63', borderRadius: 11, fontSize: 13.5, fontWeight: 600 }}>
+                Tu correo quedó confirmado. Inicia sesión para empezar.
+              </div>
+            )}
             {error && (
               <div style={{ marginBottom: 16, padding: '10px 14px', background: '#FDECEC', border: '1px solid #F5C6C2', color: '#C9433B', borderRadius: 11, fontSize: 13.5, fontWeight: 600 }}>
                 {error}

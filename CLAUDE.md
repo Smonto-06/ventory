@@ -74,7 +74,7 @@ cd .next/standalone && DATABASE_URL=... DIRECT_URL=... NEXTAUTH_SECRET=dev-secre
 # puerto ocupado: fuser -k 3100/tcp
 ```
 
-- **QA de sistema**: `qa/` — 407 pruebas end-to-end (ver `qa/README.md`).
+- **QA de sistema**: `qa/` — 412 pruebas end-to-end (ver `qa/README.md`).
   qa-13 necesita `qa/wompi-falso.js` (puerto 2526) y el servidor con llaves
   Wompi de prueba (`WOMPI_*` + `WOMPI_API_BASE`/`WOMPI_CHECKOUT_BASE`
   apuntando al falso). qa-14 necesita `qa/mercadopago-falso.js` (2527) y el
@@ -88,6 +88,12 @@ cd .next/standalone && DATABASE_URL=... DIRECT_URL=... NEXTAUTH_SECRET=dev-secre
   correo y qa-lib saca el enlace del buzón solo.
 - Cuenta semilla local: `mar_u_79@hotmail.com` / `VentoryBB2026` (negocio
   "Bora y Bora"). Toda batería QA nueva sigue el patrón de `qa/qa-lib.js`.
+- **El contenedor a veces borra node_modules y el cluster de Postgres**. Si
+  `psql` falla con "password authentication failed": recrear rol/BDs
+  (`CREATE ROLE ventory LOGIN PASSWORD 'ventory_dev' CREATEDB;` + BDs
+  `ventory_dev` y `ventory_shadow` como postgres), `migrate deploy`, y la
+  cuenta semilla vía POST /api/auth/register + enlace del buzón falso.
+  `npm ci` en el repo y `npm install playwright` en el scratchpad.
 - **Migraciones**: `prisma migrate dev` no funciona (no interactivo). Usar:
   `npx prisma migrate diff --from-migrations prisma/migrations
   --to-schema-datamodel prisma/schema.prisma --shadow-database-url
