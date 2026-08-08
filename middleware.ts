@@ -55,7 +55,8 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    // robots.txt y sitemap.xml son para los buscadores: sin sesión, siempre
-    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|robots.txt|sitemap.xml|.*\\.(?:png|webp|jpg|jpeg|svg|gif|ico)$).*)',
+    // robots.txt, sitemap.xml y la verificación de Google Search Console son
+    // para los buscadores: sin sesión, siempre
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|robots.txt|sitemap.xml|googlee1125cde254b678f.html|.*\\.(?:png|webp|jpg|jpeg|svg|gif|ico)$).*)',
   ],
 }
