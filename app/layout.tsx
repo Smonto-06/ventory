@@ -29,10 +29,21 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXTAUTH_URL?.replace(/\/$/, "") || "https://ventory-ten.vercel.app"),
   title: "Ventory — Sistema POS",
   description: "Punto de venta para pequeñas y medianas empresas",
   manifest: "/manifest.json",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Ventory" },
+  // Cómo se ve el enlace al compartirlo (WhatsApp, redes) y en buscadores
+  openGraph: {
+    type: "website",
+    siteName: "Ventory",
+    title: "Ventory — Punto de venta e inventario para tu negocio",
+    description:
+      "Vende, controla tu inventario y cuadra la caja desde cualquier dispositivo. Funciona sin internet. Prueba gratis 15 días.",
+    locale: "es_CO",
+    images: [{ url: "/brand/ventory-logo.png", width: 1155, height: 294, alt: "Ventory" }],
+  },
 };
 
 export const viewport: Viewport = {
