@@ -387,6 +387,8 @@ export interface AppStore extends AppData {
   // usuarios / ajustes
   saveUser: (data: Record<string, unknown>, editId: string | null) => Promise<boolean>
   toggleUser: (u: AppUser) => Promise<void>
+  /** Borra un empleado sin historial; con historial el servidor pide desactivarlo */
+  deleteUser: (u: AppUser) => Promise<void>
   editUserId: string | null
   setEditUserId: (id: string | null) => void
   saveSettings: (data: Record<string, unknown>) => Promise<void>
@@ -1838,6 +1840,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [refreshUsers, onError],
   )
 
+  // Eliminar de verdad solo funciona para empleados SIN historial (creados
+  // por error); el servidor responde 409 con la explicación si ya operaron.
+  const deleteUser = useCallback(
+    async (u: AppUser) => {
+      try {
+        await api.deleteUser(u.id)
+        toast(`${u.name ?? u.email} eliminado`)
+        await refreshUsers()
+      } catch (e) {
+        onError(e)
+      }
+    },
+    [refreshUsers, toast, onError],
+  )
+
   const saveSettings = useCallback(
     async (payload: Record<string, unknown>) => {
       try {
@@ -2078,6 +2095,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCompraDetId,
       saveUser,
       toggleUser,
+      deleteUser,
       editUserId,
       setEditUserId,
       saveSettings,

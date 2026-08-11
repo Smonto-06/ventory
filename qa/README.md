@@ -3,11 +3,11 @@
 Pruebas de extremo a extremo contra un servidor real, complementarias a
 `npm test` (que cubre las reglas de negocio con Jest).
 
-## Qué cubre — 426 pruebas
+## Qué cubre — 432 pruebas
 
 | Archivo | Área | Pruebas |
 |---|---|---|
-| `qa-1-seguridad.js` | Aislamiento entre negocios, permisos por rol (cajero, encargado, admin), acceso sin sesión | 31 |
+| `qa-1-seguridad.js` | Aislamiento entre negocios, permisos por rol (cajero, encargado, admin), eliminar empleados, acceso sin sesión | 37 |
 | `qa-2-operacion.js` | Ventas (todos los métodos y bordes), caja, devoluciones, anulaciones, compras, crédito, cierre | 37 |
 | `qa-3-datos.js` | Productos, importación CSV, inventario, esperas, reportes, exportaciones, autenticación | 33 |
 | `qa-4-plan-ui.js` | Catálogos, ajustes, IVA, plan comercial, super admin, prueba repetida por IP, recorrido de la interfaz | 36 |

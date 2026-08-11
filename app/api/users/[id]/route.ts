@@ -86,3 +86,90 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     return serverError('PUT /api/users/[id]', error)
   }
 }
+
+// Eliminar un empleado. Solo se borra de verdad quien NO tiene historial
+// (creado por error, nunca operó): si ya tiene ventas, turnos de caja u otra
+// actividad, su nombre vive en facturas y cierres — borrarlo dañaría el
+// historial del negocio, así que se responde 409 invitando a desactivarlo.
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const user = await getCurrentUser(req)
+  if (!user) return unauthorized()
+  if (user.role !== UserRole.ADMIN) return forbidden('Solo el administrador gestiona usuarios')
+  if (params.id === user.id) return badRequest('No puedes eliminar tu propia cuenta.')
+
+  try {
+    const objetivo = await db.user.findFirst({
+      where: { id: params.id, businessId: user.businessId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        _count: {
+          select: {
+            sales: true,
+            voidedSales: true,
+            quotes: true,
+            cashSessions: true,
+            cashSessionsClosed: true,
+            cashMovements: true,
+            inventoryMovements: true,
+            purchases: true,
+            purchasePayments: true,
+            customerPayments: true,
+            saleReturns: true,
+            heldSales: true,
+            heldPurchases: true,
+          },
+        },
+      },
+    })
+    if (!objetivo) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
+
+    const c = objetivo._count
+    const actividad =
+      c.sales + c.voidedSales + c.quotes + c.cashSessions + c.cashSessionsClosed +
+      c.cashMovements + c.inventoryMovements + c.purchases + c.purchasePayments +
+      c.customerPayments + c.saleReturns + c.heldSales + c.heldPurchases
+
+    if (actividad > 0) {
+      const partes = [
+        c.sales ? `${c.sales} venta${c.sales === 1 ? '' : 's'}` : '',
+        c.cashSessions ? `${c.cashSessions} turno${c.cashSessions === 1 ? '' : 's'} de caja` : '',
+        c.purchases ? `${c.purchases} compra${c.purchases === 1 ? '' : 's'}` : '',
+      ].filter(Boolean)
+      return NextResponse.json(
+        {
+          error:
+            `${objetivo.name ?? 'Este usuario'} ya tiene historial` +
+            (partes.length ? ` (${partes.join(', ')})` : '') +
+            ' y su nombre vive en facturas y cierres. Desactívalo en su lugar: no podrá entrar, pero el historial queda intacto.',
+        },
+        { status: 409 },
+      )
+    }
+
+    await db.$transaction(async (tx) => {
+      // Sus registros de sesión/auditoría propios no son historial del negocio
+      await tx.auditLog.deleteMany({ where: { userId: objetivo.id } })
+      await tx.session.deleteMany({ where: { userId: objetivo.id } })
+      await tx.account.deleteMany({ where: { userId: objetivo.id } })
+      await tx.user.delete({ where: { id: objetivo.id } })
+    })
+
+    db.auditLog
+      .create({
+        data: {
+          action: 'DELETE',
+          entity: 'User',
+          entityId: objetivo.id,
+          payload: { email: objetivo.email, name: objetivo.name },
+          userId: user.id,
+        },
+      })
+      .catch(() => {})
+
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    return serverError('DELETE /api/users/[id]', error)
+  }
+}
