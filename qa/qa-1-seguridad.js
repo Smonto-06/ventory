@@ -127,6 +127,33 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly } = require('./q
     const planE = await E.post('/api/plan/checkout')
     check('roles', 'encargado NO puede pagar el plan', planE.status === 403, `status ${planE.status}`)
     await E.ctx.close()
+
+    // ── ELIMINAR EMPLEADOS ──
+    // Sin historial se borra de verdad; con historial (el encargado ya
+    // compró) se protege el historial y se pide desactivar; nadie se borra
+    // a sí mismo.
+    const borrable = await A.post('/api/users', {
+      name: 'Creado Por Error', email: `error-${t}@test.com`, password: 'ClaveSegura99', role: 'CASHIER',
+    })
+    const usuariosA = (await A.get('/api/users')).data.users
+    const idBorrable = borrable.data?.user?.id ?? usuariosA.find((u) => u.email === `error-${t}@test.com`)?.id
+    const delOk = await A.del(`/api/users/${idBorrable}`)
+    check('roles', 'un empleado SIN historial se elimina de verdad', delOk.status === 200, `status ${delOk.status}`)
+    const yaNoEsta = !(await A.get('/api/users')).data.users.some((u) => u.id === idBorrable)
+    check('roles', 'y desaparece de la lista', yaNoEsta)
+
+    const idEnc = usuariosA.find((u) => u.email === `enc-${t}@test.com`)?.id
+    const delConHistorial = await A.del(`/api/users/${idEnc}`)
+    check('roles', 'un empleado CON historial no se elimina (409, pide desactivar)', delConHistorial.status === 409, `status ${delConHistorial.status}`)
+    check('roles', 'con la explicación del historial', /historial/.test(delConHistorial.data?.error ?? ''), delConHistorial.data?.error)
+
+    const idPropio = usuariosA.find((u) => u.email === `a-${t}@test.com`)?.id
+    const delPropio = await A.del(`/api/users/${idPropio}`)
+    check('roles', 'el admin no puede eliminarse a sí mismo', delPropio.status === 400, `status ${delPropio.status}`)
+
+    // otro negocio no puede borrar usuarios ajenos
+    const delCruzado = await B.del(`/api/users/${idEnc}`)
+    check('aislamiento', 'B NO puede eliminar un usuario de A', delCruzado.status === 404 || delCruzado.status === 403, `status ${delCruzado.status}`)
   }
 
   // ── SIN SESIÓN ──

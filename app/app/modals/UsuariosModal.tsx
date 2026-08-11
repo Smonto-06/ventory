@@ -115,6 +115,23 @@ export default function UsuariosModal() {
                   {u.isActive ? 'Desactivar' : 'Activar'}
                 </button>
               )}
+              {!isMe && (
+                <button
+                  onClick={() =>
+                    s.askConfirm({
+                      title: `¿Eliminar a ${u.name ?? u.email}?`,
+                      label:
+                        'Solo se elimina un empleado sin historial. Si ya vendió o abrió caja, el sistema pedirá desactivarlo en su lugar.',
+                      btnLabel: 'Eliminar',
+                      onConfirm: () => s.deleteUser(u),
+                    })
+                  }
+                  className="v-hover-danger"
+                  style={{ fontSize: 13, color: '#C9433B', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Eliminar
+                </button>
+              )}
             </div>
           )
         })}

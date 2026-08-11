@@ -510,6 +510,7 @@ export const api = {
   users: () => get<{ users: AppUser[] }>('/api/users'),
   createUser: (data: unknown) => post<{ user: AppUser }>('/api/users', data),
   updateUser: (id: string, data: unknown) => put<{ user: AppUser }>(`/api/users/${id}`, data),
+  deleteUser: (id: string) => del<{ deleted: boolean }>(`/api/users/${id}`),
 
   settings: () => get<{ settings: Settings }>('/api/settings'),
   // Pago del plan por Wompi
