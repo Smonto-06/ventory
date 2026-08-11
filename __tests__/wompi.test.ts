@@ -41,33 +41,33 @@ describe('configuración', () => {
     expect(wompi().wompiApiBase()).toBe('https://production.wompi.co/v1')
   })
 
-  it('el precio del plan es $49.900 → 4.990.000 centavos', () => {
-    expect(wompi().PLAN_PRECIO_COP).toBe(49900)
-    expect(wompi().PLAN_CENTAVOS).toBe(4990000)
+  it('el precio del plan es $59.900 → 5.990.000 centavos', () => {
+    expect(wompi().PLAN_PRECIO_COP).toBe(59900)
+    expect(wompi().PLAN_CENTAVOS).toBe(5990000)
   })
 })
 
 describe('firma de integridad del checkout', () => {
   it('es sha256(referencia + monto + moneda + secreto)', () => {
-    const esperada = sha256(`VEN-XYZ-14990000COP${ENV.WOMPI_INTEGRITY_SECRET}`)
-    expect(wompi().firmaIntegridad('VEN-XYZ-1', 4990000)).toBe(esperada)
+    const esperada = sha256(`VEN-XYZ-15990000COP${ENV.WOMPI_INTEGRITY_SECRET}`)
+    expect(wompi().firmaIntegridad('VEN-XYZ-1', 5990000)).toBe(esperada)
   })
 
   it('la URL del checkout lleva llave pública, monto, referencia y firma', () => {
     const url = new URL(
-      wompi().urlCheckout({ reference: 'VEN-ABC-9', amountInCents: 4990000, redirectUrl: 'https://ventory-ten.vercel.app/app?pago=VEN-ABC-9' }),
+      wompi().urlCheckout({ reference: 'VEN-ABC-9', amountInCents: 5990000, redirectUrl: 'https://ventory-ten.vercel.app/app?pago=VEN-ABC-9' }),
     )
     expect(url.origin + url.pathname).toBe('https://checkout.wompi.co/p/')
     expect(url.searchParams.get('public-key')).toBe(ENV.WOMPI_PUBLIC_KEY)
-    expect(url.searchParams.get('amount-in-cents')).toBe('4990000')
+    expect(url.searchParams.get('amount-in-cents')).toBe('5990000')
     expect(url.searchParams.get('currency')).toBe('COP')
     expect(url.searchParams.get('reference')).toBe('VEN-ABC-9')
-    expect(url.searchParams.get('signature:integrity')).toBe(wompi().firmaIntegridad('VEN-ABC-9', 4990000))
+    expect(url.searchParams.get('signature:integrity')).toBe(wompi().firmaIntegridad('VEN-ABC-9', 5990000))
     expect(url.searchParams.get('redirect-url')).toContain('/app?pago=')
   })
 
   it('cambiar el monto cambia la firma (no se puede pagar menos)', () => {
-    expect(wompi().firmaIntegridad('VEN-1', 4990000)).not.toBe(wompi().firmaIntegridad('VEN-1', 100))
+    expect(wompi().firmaIntegridad('VEN-1', 5990000)).not.toBe(wompi().firmaIntegridad('VEN-1', 100))
   })
 })
 
@@ -79,7 +79,7 @@ describe('verificación de eventos (webhook)', () => {
         id: 'txn-123',
         status: 'APPROVED',
         reference: 'VEN-ABC-9',
-        amount_in_cents: 4990000,
+        amount_in_cents: 5990000,
         currency: 'COP',
         ...propiedades,
       },

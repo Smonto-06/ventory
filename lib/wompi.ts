@@ -19,8 +19,8 @@
 
 import { createHash } from 'crypto'
 
-/** Plan único: $49.900 COP al mes. Wompi trabaja en centavos. */
-export const PLAN_PRECIO_COP = 49_900
+/** Plan único: $59.900 COP al mes. Wompi trabaja en centavos. */
+export const PLAN_PRECIO_COP = 59_900
 export const PLAN_CENTAVOS = PLAN_PRECIO_COP * 100
 export const PLAN_DIAS = 30
 

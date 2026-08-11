@@ -354,7 +354,7 @@ function PlanBlockedOverlay() {
             className="v-hover-primary"
             style={{ display: 'block', width: '100%', marginTop: 16, padding: '14px 16px', borderRadius: 12, background: pagando ? '#C7CDEC' : '#6366F1', color: '#fff', fontWeight: 800, fontSize: 15.5, cursor: pagando ? 'wait' : 'pointer', boxShadow: pagando ? 'none' : '0 8px 18px -8px #6366F1cc' }}
           >
-            {pagando ? 'Abriendo el pago seguro…' : 'Pagar mi plan · $ 49.900'}
+            {pagando ? 'Abriendo el pago seguro…' : 'Pagar mi plan · $ 59.900'}
           </button>
         )}
         <a
@@ -411,7 +411,7 @@ function PlanBanner() {
           onClick={s.pagarPlan}
           style={{ height: 30, padding: '0 13px', borderRadius: 9, background: '#6366F1', color: '#fff', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 6px 14px -6px #6366F1cc' }}
         >
-          Pagar mi plan · $ 49.900
+          Pagar mi plan · $ 59.900
         </button>
       )}
     </div>

@@ -1,6 +1,6 @@
 // PRUEBA 14: pasarela Mercado Pago (la interina, mientras llega Wompi)
 //
-// Mismo contrato que Wompi: el dueño paga $49.900 y la cuenta se activa sola
+// Mismo contrato que Wompi: el dueño paga $59.900 y la cuenta se activa sola
 // 30 días, sin duplicar jamás. La seguridad aquí es distinta: el webhook NO
 // confía en su cuerpo — consulta el pago a la API de Mercado Pago con nuestro
 // token y solo aprueba si allá figura aprobado con la referencia y el monto
@@ -26,7 +26,7 @@ const pagoMp = (id, reference, status, extra = {}) => ({
   id,
   status,
   external_reference: reference,
-  transaction_amount: 49900,
+  transaction_amount: 59900,
   currency_id: 'COP',
   payment_method_id: 'pse',
   date_approved: status === 'approved' ? new Date().toISOString() : null,
@@ -69,7 +69,7 @@ const pagoMp = (id, reference, status, extra = {}) => ({
   check('mpago', 'el botón lleva al checkout de Mercado Pago', enCheckout, page.url())
   if (enCheckout) {
     check('mpago', 'el checkout recibe la referencia VEN-…', /^VEN-/.test((await page.textContent('#referencia')).trim()))
-    check('mpago', 'y el monto de $49.900 (en pesos, no centavos)', (await page.textContent('#monto')).trim() === '49900')
+    check('mpago', 'y el monto de $59.900 (en pesos, no centavos)', (await page.textContent('#monto')).trim() === '59900')
   }
   await page.goto(BASE + '/app')
   await page.waitForTimeout(2000)

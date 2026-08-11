@@ -1,6 +1,6 @@
 // PRUEBA 13: pasarela de pagos Wompi (mensualidad del plan)
 //
-// El dueño paga los $49.900 en el checkout de Wompi y la cuenta se activa
+// El dueño paga los $59.900 en el checkout de Wompi y la cuenta se activa
 // sola: el webhook firmado extiende la vigencia 30 días (o la consulta de
 // respaldo, si el webhook se demora). Sin firma válida no entra nada, un
 // mismo pago jamás suma dos veces, y un pago rechazado no activa nada.
@@ -33,7 +33,7 @@ const txDe = (reference, status, extra = {}) => ({
   id: `txn-${reference}`,
   status,
   reference,
-  amount_in_cents: 4990000,
+  amount_in_cents: 5990000,
   currency: 'COP',
   payment_method_type: 'NEQUI',
   finalized_at: new Date().toISOString(),
@@ -71,7 +71,7 @@ const txDe = (reference, status, extra = {}) => ({
   const cuerpo = await page.textContent('body')
   check('pagos', 'el banner de prueba gratis está visible', cuerpo.includes('Prueba gratis'))
   const btnPagar = page.locator('button:has-text("Pagar mi plan")').first()
-  check('pagos', 'con el botón "Pagar mi plan · $ 49.900"', (await btnPagar.count()) > 0)
+  check('pagos', 'con el botón "Pagar mi plan · $ 59.900"', (await btnPagar.count()) > 0)
 
   // Ajustes → "Mi plan": el estado del plan y el botón de pago siempre a mano
   await page.locator('nav button', { hasText: 'Ajustes' }).first().click()
@@ -89,7 +89,7 @@ const txDe = (reference, status, extra = {}) => ({
   if (enCheckout) {
     const refMostrada = (await page.textContent('#referencia')).trim()
     check('pagos', 'el checkout recibe una referencia VEN-…', /^VEN-/.test(refMostrada), refMostrada)
-    check('pagos', 'y el monto de $49.900 (4.990.000 centavos)', (await page.textContent('#monto')).trim() === '4990000')
+    check('pagos', 'y el monto de $59.900 (5.990.000 centavos)', (await page.textContent('#monto')).trim() === '5990000')
   }
   // volver a la app para que los helpers de API sigan funcionando
   await page.goto(BASE + '/app')
@@ -100,11 +100,11 @@ const txDe = (reference, status, extra = {}) => ({
   check('pagos', 'el checkout se crea (201)', co.status === 201, `status ${co.status}`)
   const url = new URL(co.data.url)
   const ref1 = co.data.reference
-  check('pagos', 'cobra exactamente $49.900', url.searchParams.get('amount-in-cents') === '4990000' && co.data.amount === 49900)
+  check('pagos', 'cobra exactamente $59.900', url.searchParams.get('amount-in-cents') === '5990000' && co.data.amount === 59900)
   check(
     'pagos',
     'la firma de integridad es la correcta (no se puede alterar el monto)',
-    url.searchParams.get('signature:integrity') === sha256(`${ref1}4990000COP${INTEGRIDAD}`),
+    url.searchParams.get('signature:integrity') === sha256(`${ref1}5990000COP${INTEGRIDAD}`),
   )
   check('pagos', 'avisa que está en modo pruebas (sandbox)', co.data.sandbox === true)
 
@@ -184,7 +184,7 @@ const txDe = (reference, status, extra = {}) => ({
   const fila = lista.status === 200 ? lista.data.businesses.find((b) => b.name === `QA Pagos ${t}`) : null
   check('pagos', 'el super admin ve el negocio con sus pagos', !!fila, `status ${lista.status}`)
   if (fila) {
-    check('pagos', 'cuenta 3 pagos aprobados por $149.700', fila.pagos.cantidad === 3 && fila.pagos.total === 149700, JSON.stringify(fila.pagos))
+    check('pagos', 'cuenta 3 pagos aprobados por $179.700', fila.pagos.cantidad === 3 && fila.pagos.total === 179700, JSON.stringify(fila.pagos))
     check('pagos', 'el plan del negocio figura pagado y vigente', fila.plan.status === 'ACTIVE' && !!fila.plan.paidUntil && !fila.plan.blocked)
   }
   await admin.ctx.close()

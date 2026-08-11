@@ -146,7 +146,7 @@ export default function AjustesModal() {
             {s.settings.plan.status === 'TRIAL' ? (
               <>
                 Prueba gratis: {s.settings.plan.daysLeft === 1 ? 'queda 1 día' : `quedan ${s.settings.plan.daysLeft} días`}.
-                Después, $ 49.900 al mes.
+                Después, $ 59.900 al mes.
               </>
             ) : s.settings.plan.status === 'ACTIVE' && s.settings.plan.paidUntil ? (
               <>
@@ -169,7 +169,7 @@ export default function AjustesModal() {
                 className="v-hover-primary"
                 style={{ width: '100%', height: 44, marginTop: 10, borderRadius: 11, background: '#6366F1', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 8px 18px -8px #6366F1cc' }}
               >
-                Pagar mi plan · $ 49.900 (suma 30 días)
+                Pagar mi plan · $ 59.900 (suma 30 días)
               </button>
             ) : (
               <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--muted)' }}>

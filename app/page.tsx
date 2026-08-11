@@ -30,14 +30,14 @@ const DATOS_ESTRUCTURADOS = {
   inLanguage: 'es-CO',
   offers: {
     '@type': 'Offer',
-    price: '49900',
+    price: '59900',
     priceCurrency: 'COP',
     description: 'Plan mensual. Prueba gratis de 15 días sin tarjeta.',
   },
 }
 
 // Precio mostrado en la página. Para cambiarlo, edita solo esta línea.
-const PRECIO_MENSUAL = '$ 49.900'
+const PRECIO_MENSUAL = '$ 59.900'
 const CORREO = 'ventorypos@gmail.com'
 
 const FUNCIONES: Array<{ titulo: string; texto: string; icono: NombreIcono }> = [
