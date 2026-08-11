@@ -110,7 +110,7 @@ force-with-lease. Mensajes de commit en español, explicando el porqué.
 
 ## Decisiones de producto ya tomadas (no re-preguntar)
 
-- Plan único **$ 49.900/mes**, prueba gratis 15 días sin tarjeta. Soporte SOLO
+- Plan único **$ 59.900/mes**, prueba gratis 15 días sin tarjeta. Soporte SOLO
   por correo: `ventorypos@gmail.com`.
 - **Pasarela Wompi construida y APAGADA por defecto** (`lib/wompi.ts`): sin
   las 4 variables `WOMPI_*` en Vercel todo sigue con activación manual vía

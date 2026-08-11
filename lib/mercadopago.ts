@@ -80,7 +80,7 @@ export async function crearPreferencia(opts: {
         items: [
           {
             title: 'Ventory POS — mensualidad',
-            description: 'Plan mensual de Ventory ($49.900, IVA incluido)',
+            description: 'Plan mensual de Ventory ($59.900, IVA incluido)',
             quantity: 1,
             unit_price: PLAN_PRECIO_COP,
             currency_id: 'COP',
