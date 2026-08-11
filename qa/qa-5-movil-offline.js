@@ -29,6 +29,11 @@ const { check, summary, newBrowser, registerAndLogin, BASE } = require('./qa-lib
   const scrollH = await mp.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 2)
   check('móvil', 'el panel no tiene scroll horizontal', !scrollH, 'la página se desborda a lo ancho')
 
+  // En celular el menú es horizontal y no existe el pie del escritorio: el
+  // cerrar sesión debe estar al final del menú (deslizando)
+  const salirMovil = await mp.locator('aside button:has-text("Cerrar sesión")').count()
+  check('móvil', 'el menú del celular tiene "Cerrar sesión"', salirMovil > 0, 'no aparece en el menú')
+
   await mp.locator('button:has-text("Punto de Venta")').first().click()
   await mp.waitForTimeout(1200)
   const scrollPos = await mp.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 2)
