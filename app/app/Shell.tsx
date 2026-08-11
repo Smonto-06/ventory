@@ -145,6 +145,20 @@ function NavIcon({ id }: { id: string }) {
       return <Icono n="expandir" tam={17} />
     case 'contraer':
       return <Icono n="contraer" tam={17} />
+    case 'plataforma':
+      return (
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
+          <rect x="2.5" y="2.5" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M2.5 6h11M6 6v7.5" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
+      )
+    case 'salir':
+      return (
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
+          <path d="M6.5 2.5H4a1.5 1.5 0 0 0-1.5 1.5v8A1.5 1.5 0 0 0 4 13.5h2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M10 5l3 3-3 3M13 8H6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
     case 'ayuda':
       return (
         <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
@@ -204,6 +218,16 @@ function Sidebar({ narrow }: { narrow: boolean }) {
       label: pantalla.activa ? 'Salir de pantalla' : 'Pantalla completa',
       onClick: pantalla.alternar,
     })
+  }
+
+  // En celular la barra es una fila horizontal SIN el pie del escritorio:
+  // el panel de plataforma y el cerrar sesión entran al final del menú para
+  // que también existan en el teléfono.
+  if (narrow) {
+    if (s.settings?.isSuperAdmin) {
+      items.push({ id: 'plataforma', label: 'Panel de plataforma', onClick: () => window.location.assign('/admin') })
+    }
+    items.push({ id: 'salir', label: 'Cerrar sesión', onClick: s.logout })
   }
 
   const isActive = (item: (typeof items)[number]) => {
