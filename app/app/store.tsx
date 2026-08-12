@@ -582,6 +582,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // La sesión de NextAuth tarda un round-trip en resolver el rol: en el
+  // primer render siempre se ve como CASHIER (isAdmin false), así que la
+  // carga inicial de arriba puede alcanzar a pedir los datos de admin
+  // (usuarios, proveedores, compras, movimientos) antes de saber que sí lo
+  // es. En cuanto isAdmin pasa de false a true, se piden de nuevo.
+  const eraAdmin = useRef(isAdmin)
+  useEffect(() => {
+    if (isAdmin && !eraAdmin.current) refreshAdmin()
+    eraAdmin.current = isAdmin
+  }, [isAdmin, refreshAdmin])
+
   // ─── Refresco automático ──────────────────────────────────────────────────
   // Varias personas trabajan a la vez sobre el mismo negocio (una vendiendo,
   // otra ingresando compras). El servidor siempre tiene la verdad —el stock se
@@ -1846,6 +1857,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (u: AppUser) => {
       try {
         await api.deleteUser(u.id)
+        setModal(null)
         toast(`${u.name ?? u.email} eliminado`)
         await refreshUsers()
       } catch (e) {
