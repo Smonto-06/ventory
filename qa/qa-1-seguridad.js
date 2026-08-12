@@ -156,6 +156,44 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly } = require('./q
     check('aislamiento', 'B NO puede eliminar un usuario de A', delCruzado.status === 404 || delCruzado.status === 403, `status ${delCruzado.status}`)
   }
 
+  // ── SESIÓN ACTIVA NO DEBE BLOQUEAR /register ──
+  // una sesión vieja en el navegador no debe forzar "cerrar sesión" para
+  // registrar un negocio nuevo
+  await A.page.goto('http://localhost:3100/register')
+  await A.page.waitForTimeout(700)
+  const formularioRegistro = await A.page.locator('text=Crear cuenta').count()
+  check('interfaz', 'con sesión activa, /register muestra el formulario (no manda directo al sistema)', formularioRegistro > 0, `terminó en ${A.page.url()}`)
+
+  // ── ELIMINAR EMPLEADO DESDE LA INTERFAZ: el aviso debe cerrarse solo ──
+  const borrableUi = await A.post('/api/users', {
+    name: 'Borrable UI', email: `ui-${t}@test.com`, password: 'ClaveSegura99', role: 'CASHIER',
+  })
+  // creado por API: hace falta recargar para que la lista de la interfaz lo vea
+  await A.page.goto('http://localhost:3100/app')
+  await A.page.waitForTimeout(1500)
+  if (await A.page.locator('text=Omitir por ahora').count()) {
+    await A.page.locator('text=Omitir por ahora').first().click()
+    await A.page.waitForTimeout(500)
+  }
+  if (borrableUi.status < 300) {
+    const inicio = await A.page.locator('button:has-text("Inicio")').count()
+    if (inicio) { await A.page.locator('button:has-text("Inicio")').first().click(); await A.page.waitForTimeout(600) }
+    await A.page.locator('nav button', { hasText: 'Ajustes' }).first().click({ timeout: 8000 })
+    await A.page.waitForTimeout(700)
+    await A.page.locator('button:has-text("Gestión de usuarios")').first().click({ timeout: 8000 })
+    await A.page.waitForTimeout(700)
+    await A.page
+      .locator('div', { hasText: `ui-${t}@test.com` })
+      .locator('button', { hasText: 'Eliminar' })
+      .first()
+      .click({ timeout: 8000 })
+    await A.page.waitForTimeout(500)
+    await A.page.locator('button:has-text("Eliminar")').first().click({ timeout: 8000 })
+    await A.page.waitForTimeout(900)
+    const avisoSigue = await A.page.locator('text=Esta acción no se puede deshacer').count()
+    check('interfaz', 'al confirmar eliminar un empleado, el aviso se cierra solo', avisoSigue === 0, 'el aviso de confirmación sigue visible')
+  }
+
   // ── SIN SESIÓN ──
   const anon = await browser.newContext()
   const anonPage = await anon.newPage()

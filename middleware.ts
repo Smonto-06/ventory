@@ -6,8 +6,11 @@ export default withAuth(
     const token = req.nextauth.token
     const pathname = req.nextUrl.pathname
 
-    // Redirect authenticated users away from auth pages
-    if (token && (pathname.startsWith('/login') || pathname.startsWith('/register') || pathname.startsWith('/pin-login'))) {
+    // Redirect authenticated users away from las pantallas de inicio de
+    // sesión — pero NO de /register: una sesión vieja en el navegador no
+    // debe impedir crear un negocio nuevo (antes mandaba directo al sistema
+    // y tocaba cerrar sesión primero).
+    if (token && (pathname.startsWith('/login') || pathname.startsWith('/pin-login'))) {
       return NextResponse.redirect(new URL('/app', req.url))
     }
 
