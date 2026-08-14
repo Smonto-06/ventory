@@ -88,7 +88,23 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE } = requir
       // eliminar con confirmación equivocada
       const borrarMal = await admin.del(`/api/admin/businesses/${mio.id}`, { confirm: 'nombre equivocado' })
       check('super admin', 'no elimina un negocio si el nombre no coincide', borrarMal.status === 400, `status ${borrarMal.status}`)
+
+      // notas privadas: se pueden guardar sin tocar el estado del plan
+      const notaGuardada = await admin.post(`/api/admin/businesses/${mio.id}`, { notes: 'Nota de prueba QA' })
+      check('super admin', 'guarda una nota sin cambiar el plan', notaGuardada.status === 200, `status ${notaGuardada.status}`)
+      const trasNota = (await admin.get('/api/admin/businesses')).data.businesses.find(b => b.id === mio.id)
+      check('super admin', 'la nota queda guardada y el plan sigue activo', trasNota?.adminNotes === 'Nota de prueba QA' && trasNota?.plan.status === 'ACTIVE', JSON.stringify(trasNota?.adminNotes))
+
+      // registro de actividad: las acciones de plataforma quedan con rastro
+      const actividad = await admin.get('/api/admin/activity')
+      check('super admin', 'el registro de actividad responde', actividad.status === 200, `status ${actividad.status}`)
+      const huboNota = (actividad.data.entries ?? []).some(e => e.action === 'PLATFORM_NOTES' && e.businessId === mio.id)
+      check('super admin', 'la nota queda registrada en la actividad reciente', huboNota, JSON.stringify(actividad.data.entries?.[0]))
     }
+
+    // solo el super admin puede ver el registro de actividad
+    const actividadCajero = await S.get('/api/admin/activity')
+    check('super admin', 'un negocio normal NO puede ver la actividad de plataforma', actividadCajero.status === 403, `status ${actividadCajero.status}`)
 
     // el super admin no puede eliminar su propio negocio
     const propio = negocios.data.businesses.find(b => b.owner?.email === 'mar_u_79@hotmail.com')

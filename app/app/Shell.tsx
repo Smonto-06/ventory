@@ -296,6 +296,29 @@ function Sidebar({ narrow }: { narrow: boolean }) {
             </button>
           ))}
       </nav>
+      {!narrow && s.settings?.isSuperAdmin && (
+        <a
+          href="/admin"
+          className="v-hover-primary"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 11,
+            margin: '4px 0 0',
+            padding: '11px 14px',
+            borderRadius: 10,
+            background: '#EEF0FE',
+            color: '#4338CA',
+            fontWeight: 700,
+            fontSize: 14,
+            textDecoration: 'none',
+            flex: 'none',
+          }}
+        >
+          <NavIcon id="plataforma" />
+          Panel de plataforma
+        </a>
+      )}
       {!narrow && (
         <div style={{ borderTop: '1px solid var(--side-border)', padding: '14px 12px 6px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -321,14 +344,6 @@ function Sidebar({ narrow }: { narrow: boolean }) {
               <div style={{ fontSize: 12, color: '#94A3B8' }}>{s.isAdmin ? 'Administrador' : 'Cajero'}</div>
             </div>
           </div>
-          {s.settings?.isSuperAdmin && (
-            <a
-              href="/admin"
-              style={{ display: 'block', marginTop: 12, fontSize: 13.5, color: '#94A3B8', fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}
-            >
-              Panel de plataforma →
-            </a>
-          )}
           <button
             onClick={s.logout}
             className="v-hover-logout"
