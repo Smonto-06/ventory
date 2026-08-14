@@ -141,6 +141,70 @@ force-with-lease. Mensajes de commit en español, explicando el porqué.
   (solo ADMIN) protege usuarios, ajustes del negocio, plan/pagos y
   exportaciones; `isAdmin` (ADMIN+SUPERVISOR) protege lo operativo.
 
+## Migrar catálogo desde otro sistema (TryStore .db → CSV)
+
+Samuel a veces trae su catálogo de negocios anteriores que usaban **TryStore**
+(otro POS), que deja descargar un `.db` (SQLite) desde la cuenta del propio
+usuario. Ese archivo pesa demasiado para subirlo al chat (~80MB): el proceso
+se hace con **DB Browser for SQLite** (gratis) en su PC, guiándolo paso a
+paso por captura de pantalla.
+
+**Importante**: ese `.db` trae mezclados los productos de **todos los
+negocios de TryStore**, no solo el suyo (confirmado: 71 `idPartner`
+distintos en una exportación). Su negocio se identifica por `idPartner` en
+`InvProducts` — para encontrarlo, buscar un producto que el dueño reconozca
+con certeza:
+`SELECT Id, idPartner, pName FROM InvProducts WHERE pName LIKE '%algo%';`
+Filtrar **siempre** por ese `idPartner`: los datos de los demás negocios no
+son suyos para tocar ni pasarme.
+
+Esquema relevante de TryStore (nombres de columna a veces duplican el
+concepto: hay un `Id` autoincremental de la fila Y una columna separada tipo
+`catId`/`gumId`/`pId` que es la que de verdad se usa para relacionar tablas
+— los `JOIN` van por esa segunda, no por `Id`):
+- `InvProducts`: catálogo. `pName`, `pSuggestedUnitPriceWithIVA` (precio con
+  IVA — Ventory también maneja IVA incluido), `pUnitCost` (costo), `catId` →
+  `InvCategory.catId`, `umId` → `InvGroupsUnitsMeasures.gumId`, `pCode`
+  (sku), `barCode`, `stockMin`, `idPartner`. El stock **no** está aquí
+  (`pStock` suele salir en 0).
+- Stock real: `InvWareHouseProducts.stock`, relacionado por `pId` (no por
+  `Id`) — sumar por si hay varias bodegas (`whId`/`InvWareHouses`).
+- `InvCategory.catName` (unir por `catId`).
+- `InvGroupsUnitsMeasures` (unir por `gumId`) — Ventory solo distingue `kg`
+  (por peso) de `und` (todo lo demás).
+- No hay proveedor por producto en `InvProducts`; se deja la columna vacía
+  (es opcional en la plantilla).
+
+Consulta que arma el CSV completo (ajustar el `idPartner` del negocio):
+```sql
+SELECT
+  p.pName AS nombre,
+  CAST(ROUND(p.pSuggestedUnitPriceWithIVA) AS INTEGER) AS precio,
+  CAST(ROUND(p.pUnitCost) AS INTEGER) AS costo,
+  COALESCE(c.catName, '') AS categoria,
+  COALESCE(p.pCode, '') AS sku,
+  COALESCE(p.barCode, '') AS codigo_barras,
+  COALESCE(wh.total_stock, 0) AS stock,
+  p.stockMin AS stock_minimo,
+  CASE WHEN u.gumMinBaseAcronym LIKE '%KG%' OR u.gumName LIKE '%KILO%' THEN 'kg' ELSE 'und' END AS unidad,
+  '' AS proveedor
+FROM InvProducts p
+LEFT JOIN InvCategory c ON c.catId = p.catId
+LEFT JOIN InvGroupsUnitsMeasures u ON u.gumId = p.umId
+LEFT JOIN (
+  SELECT pId, SUM(stock) AS total_stock
+  FROM InvWareHouseProducts
+  GROUP BY pId
+) wh ON wh.pId = p.pId
+WHERE p.idPartner = <ID_DEL_NEGOCIO>;
+```
+Correr en la pestaña "Execute SQL", revisar la vista previa (categoria/
+unidad no todo vacío, precio/costo con pinta razonable, stock no todo en 0),
+exportar con clic derecho sobre la grilla de resultados → "Exportar como
+CSV". El importador de Ventory (`app/api/products/import/route.ts`) acepta
+**máximo 1000 filas por importación** — si el negocio tiene más productos,
+partir el CSV en bloques.
+
 ## Seguridad / secretos
 
 - NUNCA pedir ni aceptar contraseñas/tokens en el chat. Los secretos van
