@@ -98,6 +98,29 @@ const { check, summary, newBrowser, registerAndLogin, BASE } = require('./qa-lib
   const rangoEnorme = await S.get(`/api/reports/range?from=2000-01-01&to=${hoy}`)
   check('reportes', 'rechaza rango mayor a un año', rangoEnorme.status === 400, `status ${rangoEnorme.status}`)
 
+  // ── ELIMINAR PRODUCTOS ──
+  // Sin historial se borra de verdad; con historial (pid ya se vendió y se
+  // movió arriba) se protege y se pide archivar en su lugar.
+  const borrable = await S.post('/api/products', { name: `Borrable ${t}`, price: 2000, branchId, initialStock: 3 })
+  const delOk = await S.del(`/api/products/${borrable.data.product.id}?eliminar=1`)
+  check('productos', 'un producto SIN historial se elimina de verdad', delOk.status === 200, `status ${delOk.status}`)
+  const yaNoEsta = await S.get(`/api/products/${borrable.data.product.id}`)
+  check('productos', 'y desaparece del catálogo', yaNoEsta.status === 404, `status ${yaNoEsta.status}`)
+
+  const delConHistorial = await S.del(`/api/products/${pid}?eliminar=1`)
+  check('productos', 'un producto CON historial no se elimina (409, pide archivar)', delConHistorial.status === 409, `status ${delConHistorial.status}`)
+  check('productos', 'con la explicación del historial', /historial/.test(delConHistorial.data?.error ?? ''), delConHistorial.data?.error)
+  const sigueActivo = await S.get(`/api/products/${pid}`)
+  check('productos', 'y sigue existiendo (no se tocó)', sigueActivo.status === 200 && sigueActivo.data.product?.status === 'ACTIVE', `status ${sigueActivo.status}`)
+
+  // sin el parámetro ?eliminar=1, DELETE sigue archivando como siempre
+  const archivable = await S.post('/api/products', { name: `Archivable ${t}`, price: 2000, branchId })
+  const archivado = await S.del(`/api/products/${archivable.data.product.id}`)
+  check('productos', 'DELETE sin ?eliminar=1 sigue archivando (compatibilidad)', archivado.status === 200, `status ${archivado.status}`)
+  const archivadoLeido = await S.get(`/api/products/${archivable.data.product.id}`)
+  check('productos', 'el producto archivado no aparece en la lista activa', !(await S.get('/api/products')).data.products.some(p => p.id === archivable.data.product.id), 'sigue en la lista')
+  check('productos', 'pero se puede consultar directo (no se borró)', archivadoLeido.status === 200 && archivadoLeido.data.product?.status === 'ARCHIVED', `status ${archivadoLeido.status}`)
+
   // ── EXPORTACIONES ──
   const tipos = ['sales', 'products', 'customers', 'purchases']
   let exportOk = true, detalle = []

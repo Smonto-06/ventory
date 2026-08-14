@@ -36,6 +36,9 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly } = require('./q
   const borrarProdA = await B.del(`/api/products/${idProdA}`)
   check('aislamiento', 'B NO puede archivar un producto de A', borrarProdA.status === 404 || borrarProdA.status === 403, `status ${borrarProdA.status}`)
 
+  const eliminarProdA = await B.del(`/api/products/${idProdA}?eliminar=1`)
+  check('aislamiento', 'B NO puede eliminar de verdad un producto de A', eliminarProdA.status === 404 || eliminarProdA.status === 403, `status ${eliminarProdA.status}`)
+
   const clientesB = await B.get('/api/customers')
   const veClienteDeA = (clientesB.data.customers ?? []).some(c => c.id === idCliA)
   check('aislamiento', 'B NO ve los clientes de A', !veClienteDeA, veClienteDeA ? 'FUGA DE DATOS' : '')

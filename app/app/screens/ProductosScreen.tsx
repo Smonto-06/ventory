@@ -356,6 +356,21 @@ export default function ProductosScreen() {
                   >
                     Archivar
                   </button>
+                  <button
+                    className="v-hover-danger"
+                    onClick={() =>
+                      s.askConfirm({
+                        title: `¿Eliminar "${p.name}"?`,
+                        label:
+                          'Solo se elimina un producto sin historial. Si ya se vendió, compró o cotizó alguna vez, el sistema pedirá archivarlo en su lugar.',
+                        btnLabel: 'Eliminar',
+                        onConfirm: () => s.deleteProduct(p.id),
+                      })
+                    }
+                    style={{ color: '#C9433B', fontWeight: 600, fontSize: 13.5, cursor: 'pointer' }}
+                  >
+                    Eliminar
+                  </button>
                 </div>
               </div>
 
