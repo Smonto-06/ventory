@@ -338,6 +338,7 @@ export interface AppStore extends AppData {
   saveProduct: (data: Record<string, unknown>, editId: string | null) => Promise<boolean>
   addVariants: (productId: string, data: Record<string, unknown>) => Promise<boolean>
   archiveProduct: (id: string) => Promise<void>
+  deleteProduct: (id: string) => Promise<void>
   addCategory: (name: string) => Promise<void>
   deleteCategory: (id: string) => Promise<void>
   applyAjuste: (q: Record<string, number>) => Promise<void>
@@ -1374,6 +1375,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [toast, refreshProducts, onError],
   )
 
+  // Eliminar de verdad solo funciona para productos SIN historial (nunca
+  // vendidos, comprados, cotizados ni movidos); el servidor responde 409
+  // con la explicación si ya tienen actividad.
+  const deleteProduct = useCallback(
+    async (id: string) => {
+      try {
+        await api.deleteProduct(id)
+        setModal(null)
+        toast('Producto eliminado')
+        await refreshProducts()
+      } catch (e) {
+        onError(e)
+      }
+    },
+    [toast, refreshProducts, onError],
+  )
+
   const addCategory = useCallback(
     async (name: string) => {
       try {
@@ -2071,6 +2089,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveProduct,
       addVariants,
       archiveProduct,
+      deleteProduct,
       addCategory,
       deleteCategory,
       applyAjuste,

@@ -169,7 +169,7 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: Params) {
+export async function DELETE(request: Request, { params }: Params) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
@@ -177,7 +177,7 @@ export async function DELETE(_request: Request, { params }: Params) {
     }
 
     if (session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Solo administradores pueden archivar productos' }, { status: 403 })
+      return NextResponse.json({ error: 'Solo administradores pueden archivar o eliminar productos' }, { status: 403 })
     }
 
     const existing = await db.product.findFirst({
@@ -187,20 +187,68 @@ export async function DELETE(_request: Request, { params }: Params) {
       return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
     }
 
-    // Se archiva en vez de borrar, para no romper el histórico de ventas.
-    // Si es un producto con variantes, se archivan también sus variantes.
-    await db.product.update({
-      where: { id: params.id },
-      data: { status: 'ARCHIVED' },
-    })
-    if (existing.hasVariants) {
-      await db.product.updateMany({
-        where: { parentId: params.id, businessId: session.user.businessId },
+    const eliminarDeVerdad = new URL(request.url).searchParams.get('eliminar') === '1'
+
+    if (!eliminarDeVerdad) {
+      // Se archiva en vez de borrar, para no romper el histórico de ventas.
+      // Si es un producto con variantes, se archivan también sus variantes.
+      await db.product.update({
+        where: { id: params.id },
         data: { status: 'ARCHIVED' },
       })
+      if (existing.hasVariants) {
+        await db.product.updateMany({
+          where: { parentId: params.id, businessId: session.user.businessId },
+          data: { status: 'ARCHIVED' },
+        })
+      }
+
+      return NextResponse.json({ message: 'Producto archivado exitosamente' })
     }
 
-    return NextResponse.json({ message: 'Producto archivado exitosamente' })
+    // Eliminación de verdad: solo si el producto (y sus variantes, si es un
+    // agrupador) nunca se ha vendido, comprado, cotizado ni movido. Si ya
+    // tiene historial, se protege y se pide archivar en su lugar.
+    const variantIds = existing.hasVariants
+      ? (await db.product.findMany({ where: { parentId: params.id, businessId: session.user.businessId }, select: { id: true } })).map((v) => v.id)
+      : []
+    const ids = [params.id, ...variantIds]
+
+    const [ventas, compras, cotizaciones, movimientos] = await Promise.all([
+      db.saleItem.count({ where: { productId: { in: ids } } }),
+      db.purchaseItem.count({ where: { productId: { in: ids } } }),
+      db.quoteItem.count({ where: { productId: { in: ids } } }),
+      db.inventoryMovement.count({ where: { inventory: { productId: { in: ids } } } }),
+    ])
+    const actividad = ventas + compras + cotizaciones + movimientos
+
+    if (actividad > 0) {
+      return NextResponse.json(
+        {
+          error: `"${existing.name}" ya tiene historial (${ventas} venta${ventas === 1 ? '' : 's'}, ${compras} compra${compras === 1 ? '' : 's'}, ${movimientos} movimiento${movimientos === 1 ? '' : 's'}) y su nombre vive en facturas y reportes. Archívalo en su lugar.`,
+        },
+        { status: 409 },
+      )
+    }
+
+    await db.$transaction([
+      db.inventory.deleteMany({ where: { productId: { in: ids } } }),
+      db.product.deleteMany({ where: { id: { in: ids } } }),
+    ])
+
+    db.auditLog
+      .create({
+        data: {
+          action: 'PRODUCT_DELETE',
+          entity: 'Product',
+          entityId: params.id,
+          payload: { name: existing.name },
+          userId: session.user.id,
+        },
+      })
+      .catch(() => {})
+
+    return NextResponse.json({ deleted: true })
   } catch (error) {
     console.error('DELETE /api/products/[id] error:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })

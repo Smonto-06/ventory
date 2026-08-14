@@ -408,6 +408,7 @@ export const api = {
   addVariants: (id: string, data: unknown) =>
     post<{ creadas: number; convertido: boolean }>(`/api/products/${id}/variants`, data),
   archiveProduct: (id: string) => del<{ ok: boolean }>(`/api/products/${id}`),
+  deleteProduct: (id: string) => del<{ deleted: boolean }>(`/api/products/${id}?eliminar=1`),
 
   categories: () => get<{ categories: Category[] }>('/api/categories'),
   createCategory: (name: string) => post<{ category: Category }>('/api/categories', { name }),
