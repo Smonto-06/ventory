@@ -140,6 +140,36 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE } = requir
     }
   }
 
+  // ── "VER TODOS" DEL STOCK BAJO LLEVA A PRODUCTOS YA FILTRADO ──
+  const volverPos = await page.locator('button:has-text("Inicio")').count()
+  if (volverPos) { await page.locator('button:has-text("Inicio")').first().click(); await page.waitForTimeout(700) }
+  await S.post('/api/products', { name: `QA Bajo ${t}`, price: 1000, branchId, initialStock: 0 })
+  await page.goto(BASE + '/app')
+  await page.waitForTimeout(2200)
+  try {
+    await page
+      .locator('div')
+      .filter({ hasText: 'Stock bajo' })
+      .filter({ has: page.locator('button:has-text("Ver todos")') })
+      .last()
+      .locator('button:has-text("Ver todos")')
+      .click({ timeout: 8000 })
+    await page.waitForTimeout(900)
+    const textoFiltrado = await page.locator('body').innerText()
+    check(
+      'interfaz',
+      '"Ver todos" del stock bajo lleva a Productos ya filtrado',
+      textoFiltrado.includes(`QA Bajo ${t}`) && textoFiltrado.includes('Solo stock bajo'),
+      'no filtró',
+    )
+    // quitar el filtro deja ver los demás productos otra vez
+    await page.locator('button:has-text("Solo stock bajo")').first().click()
+    await page.waitForTimeout(500)
+    check('interfaz', 'quitar el filtro vuelve a mostrar todos los productos', (await page.locator('body').innerText()).includes(`ProdIva ${t}`), 'no aparece')
+  } catch (e) {
+    check('interfaz', '"Ver todos" del stock bajo lleva a Productos ya filtrado', false, e.message.slice(0, 60))
+  }
+
   // modales principales
   const volver = await page.locator('button:has-text("Inicio")').count()
   if (volver) { await page.locator('button:has-text("Inicio")').first().click(); await page.waitForTimeout(800) }
