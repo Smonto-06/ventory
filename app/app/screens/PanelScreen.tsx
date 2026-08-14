@@ -475,6 +475,35 @@ export default function PanelScreen() {
             )
           })}
         </div>
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Stock bajo</div>
+            <button onClick={() => s.go('productos')} className="v-hover-underline" style={{ fontSize: 13, color: '#6366F1', fontWeight: 700, cursor: 'pointer' }}>
+              Ver todos
+            </button>
+          </div>
+          {lowStock.length ? (
+            lowStock.slice(0, 6).map((p) => {
+              const t = tileFor({ id: p.id, name: p.name, imageUrl: p.imageUrl })
+              return (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: '1px solid #EEF2F7' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, flex: 'none', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, color: t.tileFg, ...t.tileStyle }}>
+                    {t.tileText}
+                  </div>
+                  <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13.5, color: p.stock <= 0 ? '#C9433B' : '#B4740A' }}>
+                    {p.stock <= 0 ? 'Agotado' : `${p.stock}${p.unitOfMeasure === 'kg' ? ' kg' : ''}`}
+                  </span>
+                </div>
+              )
+            })
+          ) : (
+            <div style={{ padding: '18px 0', color: 'var(--muted)', fontSize: 14 }}>Todo tu inventario está en buen nivel.</div>
+          )}
+          {lowStock.length > 6 && (
+            <div style={{ padding: '8px 0 0', textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>y {lowStock.length - 6} más</div>
+          )}
+        </div>
       </div>
 
       <div style={{ background: '#0F172A', borderRadius: 18, padding: '22px 26px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap', position: 'relative', overflow: 'hidden' }}>
