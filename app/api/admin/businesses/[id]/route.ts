@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic'
 
 const ActionSchema = z.object({
   // activate: plan activo · suspend: bloquear · extend: +N días de prueba
-  action: z.enum(['activate', 'suspend', 'extend']),
+  // ausente = solo se está guardando la nota, sin tocar el plan
+  action: z.enum(['activate', 'suspend', 'extend']).optional(),
   days: z.number().int().min(1).max(365).default(TRIAL_DAYS),
   notes: z.string().max(500).optional(),
 })
@@ -28,11 +29,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const parsed = ActionSchema.safeParse(body)
   if (!parsed.success) return badRequest(parsed.error.issues[0].message)
 
+  const { action, days, notes } = parsed.data
+  if (!action && notes === undefined) return badRequest('Nada que guardar')
+
   try {
     const business = await db.business.findUnique({ where: { id: params.id } })
     if (!business) return NextResponse.json({ error: 'Negocio no encontrado' }, { status: 404 })
 
-    const { action, days, notes } = parsed.data
     const data: Record<string, unknown> = {}
     if (notes !== undefined) data.adminNotes = notes
 
@@ -44,8 +47,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       data.paidUntil = null
     } else if (action === 'suspend') {
       data.status = 'SUSPENDED'
-    } else {
-      // extend: reanuda/alarga la prueba desde hoy o desde el vencimiento futuro
+    } else if (action === 'extend') {
+      // reanuda/alarga la prueba desde hoy o desde el vencimiento futuro
       const base =
         business.trialEndsAt && business.trialEndsAt > new Date()
           ? business.trialEndsAt.getTime()
@@ -59,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     db.auditLog
       .create({
         data: {
-          action: `PLAN_${action.toUpperCase()}`,
+          action: action ? `PLAN_${action.toUpperCase()}` : 'PLATFORM_NOTES',
           entity: 'Business',
           entityId: params.id,
           payload: { days: action === 'extend' ? days : undefined, notes: notes ?? null },
