@@ -345,6 +345,10 @@ export interface AppStore extends AppData {
   editProdId: string | null
   setEditProdId: (id: string | null) => void
   refreshProducts: () => Promise<void>
+  // Filtro con el que abrir la pantalla de Productos (ej. "solo stock bajo"
+  // desde el Panel Principal); la pantalla lo consume y lo limpia al montar.
+  productosFiltroInicial: 'stockBajo' | null
+  setProductosFiltroInicial: (f: 'stockBajo' | null) => void
 
   // clientes
   saveCliente: (data: Record<string, unknown>, editId: string | null) => Promise<boolean>
@@ -464,6 +468,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [saleDetId, setSaleDetId] = useState<string | null>(null)
   const [editProdId, setEditProdId] = useState<string | null>(null)
+  const [productosFiltroInicial, setProductosFiltroInicial] = useState<'stockBajo' | null>(null)
   const [editClientId, setEditClientId] = useState<string | null>(null)
   const [editProvId, setEditProvId] = useState<string | null>(null)
   const [editUserId, setEditUserId] = useState<string | null>(null)
@@ -2073,6 +2078,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editProdId,
       setEditProdId,
       refreshProducts,
+      productosFiltroInicial,
+      setProductosFiltroInicial,
       saveCliente,
       deleteCliente,
       payClient,
@@ -2123,7 +2130,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
       turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre, branchId,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
-      pay, amounts, received, lastSale, lastPurchase, pesoProduct, varianteProduct, quoteId, quoteDet, quoteFaltantes, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, editClientId,
+      pay, amounts, received, lastSale, lastPurchase, pesoProduct, varianteProduct, quoteId, quoteDet, quoteFaltantes, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, productosFiltroInicial, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,
       ncProv, ncItems, ncMethod, ncAbono, fmt,
     ],

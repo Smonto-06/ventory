@@ -298,7 +298,10 @@ export default function PanelScreen() {
     <div style={{ padding: 'clamp(16px,3vw,30px)', display: 'flex', flexDirection: 'column', gap: 18, animation: 'vfade .3s ease' }}>
       {lowStock.length > 0 && (
         <button
-          onClick={() => s.go('productos')}
+          onClick={() => {
+            s.setProductosFiltroInicial('stockBajo')
+            s.go('productos')
+          }}
           style={{ display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', background: '#FDF4E5', border: '1.5px solid #F3DCB0', borderRadius: 14, padding: '12px 18px', cursor: 'pointer' }}
         >
           <span style={{ color: '#B4740A', display: 'flex' }}>
@@ -478,7 +481,14 @@ export default function PanelScreen() {
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>Stock bajo</div>
-            <button onClick={() => s.go('productos')} className="v-hover-underline" style={{ fontSize: 13, color: '#6366F1', fontWeight: 700, cursor: 'pointer' }}>
+            <button
+              onClick={() => {
+                s.setProductosFiltroInicial('stockBajo')
+                s.go('productos')
+              }}
+              className="v-hover-underline"
+              style={{ fontSize: 13, color: '#6366F1', fontWeight: 700, cursor: 'pointer' }}
+            >
               Ver todos
             </button>
           </div>

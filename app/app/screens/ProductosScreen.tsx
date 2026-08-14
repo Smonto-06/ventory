@@ -2,7 +2,7 @@
 
 // Pantalla de Productos — réplica 1:1 del prototipo (sección sProductos).
 
-import { CSSProperties, useState } from 'react'
+import { CSSProperties, useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { catChipStyle, tileFor, fmtQty } from '../ui'
 import { Icono } from '@/components/Icono'
@@ -53,6 +53,13 @@ export default function ProductosScreen() {
   const s = useApp()
   const [query, setQuery] = useState('')
   const [catId, setCatId] = useState('')
+  // "Ver todos" desde el Panel Principal llega con este filtro ya activado;
+  // se consume una sola vez y se limpia del store para no quedar pegado.
+  const [soloStockBajo, setSoloStockBajo] = useState(() => s.productosFiltroInicial === 'stockBajo')
+  useEffect(() => {
+    if (s.productosFiltroInicial) s.setProductosFiltroInicial(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set())
 
@@ -73,24 +80,7 @@ export default function ProductosScreen() {
     variantesPorPadre.set(p.parentId, lista)
   }
 
-  const rows = s.products
-    .filter((p) => !p.parentId)
-    .filter((p) => {
-      if (coincide(p)) return true
-      // buscar también dentro de las variantes: "RH005" debe encontrar su grupo
-      return (variantesPorPadre.get(p.id) ?? []).some(coincide)
-    })
-    .filter((p) => !catId || p.category?.id === catId)
-
-  const alternar = (id: string) =>
-    setAbiertos((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-
-  // Un producto agrupador no tiene stock ni precio propios: se muestran los de
+  // Un producto agrupador no tiene stock ni precio propios: se miran los de
   // sus variantes (suma del stock, rango de precios).
   const resumen = (p: (typeof s.products)[number]) => {
     const vs = variantesPorPadre.get(p.id) ?? []
@@ -106,6 +96,31 @@ export default function ProductosScreen() {
       agotadas: vs.filter((v) => v.stock <= 0).length,
     }
   }
+
+  const bajoStock = (p: (typeof s.products)[number]) => {
+    const g = resumen(p)
+    const stock = g ? g.stock : p.stock
+    const minStock = g ? g.minStock : p.minStock
+    return p.status === 'ACTIVE' && (stock <= 0 || (minStock > 0 && stock <= minStock))
+  }
+
+  const rows = s.products
+    .filter((p) => !p.parentId)
+    .filter((p) => {
+      if (coincide(p)) return true
+      // buscar también dentro de las variantes: "RH005" debe encontrar su grupo
+      return (variantesPorPadre.get(p.id) ?? []).some(coincide)
+    })
+    .filter((p) => !catId || p.category?.id === catId)
+    .filter((p) => !soloStockBajo || bajoStock(p))
+
+  const alternar = (id: string) =>
+    setAbiertos((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   return (
     <div style={{ padding: 'clamp(16px,3vw,28px)', display: 'flex', flexDirection: 'column', gap: 16, animation: 'vfade .3s ease' }}>
@@ -196,6 +211,23 @@ export default function ProductosScreen() {
             </option>
           ))}
         </select>
+        <button
+          onClick={() => setSoloStockBajo((v) => !v)}
+          style={{
+            height: 38,
+            padding: '0 14px',
+            borderRadius: 12,
+            border: soloStockBajo ? '1.5px solid transparent' : '1.5px solid var(--border)',
+            background: soloStockBajo ? '#FDECEC' : 'var(--surface)',
+            color: soloStockBajo ? '#C9433B' : 'var(--text)',
+            fontSize: 14.5,
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {soloStockBajo ? '✕ Solo stock bajo' : 'Solo stock bajo'}
+        </button>
       </div>
 
       <div

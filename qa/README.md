@@ -3,14 +3,14 @@
 Pruebas de extremo a extremo contra un servidor real, complementarias a
 `npm test` (que cubre las reglas de negocio con Jest).
 
-## Qué cubre — 439 pruebas
+## Qué cubre — 441 pruebas
 
 | Archivo | Área | Pruebas |
 |---|---|---|
 | `qa-1-seguridad.js` | Aislamiento entre negocios, permisos por rol (cajero, encargado, admin), eliminar empleados (API y desde la interfaz), sesión activa no bloquea /register, acceso sin sesión | 39 |
 | `qa-2-operacion.js` | Ventas (todos los métodos y bordes), caja, devoluciones, anulaciones, compras, crédito, cierre | 37 |
 | `qa-3-datos.js` | Productos, importación CSV, inventario, esperas, reportes, exportaciones, autenticación | 33 |
-| `qa-4-plan-ui.js` | Catálogos, ajustes, IVA, plan comercial, super admin (notas privadas, registro de actividad), prueba repetida por IP, recorrido de la interfaz | 41 |
+| `qa-4-plan-ui.js` | Catálogos, ajustes, IVA, plan comercial, super admin (notas privadas, registro de actividad), prueba repetida por IP, filtro de stock bajo desde el Panel, recorrido de la interfaz | 43 |
 | `qa-5-movil-offline.js` | Uso en celular y ciclo offline completo (vender sin red → sincronizar) | 13 |
 | `qa-6-landing-ayuda-guia.js` | Página comercial, centro de ayuda y guía de primeros pasos | 33 |
 | `qa-7-variantes.js` | Variantes de producto: creación, venta, stock por variante, conversión y archivado | 34 |
