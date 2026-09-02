@@ -25,7 +25,17 @@ function CartItems() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.25 }}>{it.name}</div>
-              <div style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 2 }}>{s.fmt(it.price)} c/u</div>
+              <button
+                onClick={() => {
+                  s.setDscId(it.productId)
+                  s.openModal('itemPrecio')
+                }}
+                title="Cambiar el precio de este artículo"
+                className="v-hover-underline"
+                style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 2, cursor: 'pointer', padding: 0, background: 'none' }}
+              >
+                {s.fmt(it.price)} c/u
+              </button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 'none' }}>
               <button onClick={() => s.changeQty(it.productId, -1)} style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--bg)', color: 'var(--text)', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

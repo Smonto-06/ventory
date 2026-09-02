@@ -170,6 +170,25 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE } = requir
     check('interfaz', '"Ver todos" del stock bajo lleva a Productos ya filtrado', false, e.message.slice(0, 60))
   }
 
+  // ── EDITAR EL PRECIO DE UN ARTÍCULO DESDE EL CARRITO ──
+  const prodPrecio = (await S.post('/api/products', { name: `QA Precio ${t}`, price: 4000, branchId, initialStock: 10 })).data.product
+  await page.locator('nav button', { hasText: 'Punto de Venta' }).first().click()
+  await page.waitForTimeout(900)
+  await page.locator('main button', { hasText: `QA Precio ${t}` }).first().click()
+  await page.waitForTimeout(700)
+  try {
+    await page.locator('button', { hasText: '4.000 c/u' }).click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    const modal = page.locator('div', { hasText: 'Precio del artículo' }).last()
+    await modal.locator('input').fill('4700')
+    await modal.locator('button:has-text("Aplicar")').click()
+    await page.waitForTimeout(700)
+    const conNuevoPrecio = await page.locator('body').innerText()
+    check('interfaz', 'editar el precio de un artículo actualiza el total a cobrar', conNuevoPrecio.includes('4.700'), 'no se ve el nuevo precio')
+  } catch (e) {
+    check('interfaz', 'editar el precio de un artículo actualiza el total a cobrar', false, e.message.slice(0, 60))
+  }
+
   // modales principales
   const volver = await page.locator('button:has-text("Inicio")').count()
   if (volver) { await page.locator('button:has-text("Inicio")').first().click(); await page.waitForTimeout(800) }
