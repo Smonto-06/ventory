@@ -122,6 +122,10 @@ model Business {
   notifyLowStock     Boolean @default(true)
   /// Destino del resumen; si está vacío se usa el correo del dueño
   notifyEmail        String?
+  /// Última vez que salió el correo de resumen diario — evita reenviarlo dos
+  /// veces el mismo día si Vercel reintenta la invocación del cron (el cron
+  /// no tiene ninguna otra forma de saber si ya corrió hoy).
+  lastDailySummaryAt DateTime?
 
   // Plan comercial: los negocios nuevos entran en prueba (el registro lo fija);
   // los existentes quedan ACTIVE por el default
@@ -226,9 +230,12 @@ model User {
   // Recuperación de contraseña (token de un solo uso, con vencimiento)
   resetToken        String?   @unique
   resetTokenExpires DateTime?
-  // Verificación de correo al registrarse (null = pendiente de verificar)
-  emailVerified     DateTime?
-  verifyToken       String?   @unique
+  // Verificación de correo al registrarse (null = pendiente de verificar).
+  // A diferencia de resetToken, antes no vencía nunca: un enlace de
+  // verificación sin usar quedaba vigente indefinidamente.
+  emailVerified      DateTime?
+  verifyToken        String?   @unique
+  verifyTokenExpires DateTime?
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])

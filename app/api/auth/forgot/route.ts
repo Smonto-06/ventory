@@ -8,12 +8,7 @@ import { hashToken } from '@/lib/tokens'
 export const dynamic = 'force-dynamic'
 
 const ForgotSchema = z.object({ email: z.string().email() })
-
-// Último envío por correo (memoria del proceso: mismo freno que
-// verify/resend) — sin esto, cualquiera podía inundar la bandeja de un
-// tercero con correos de "Restablecer tu contraseña" pidiendo el mismo
-// correo una y otra vez.
-const ultimoEnvio = new Map<string, number>()
+const RESET_TTL_MS = 60 * 60 * 1000
 
 // Solicitud de recuperación de contraseña: genera un token de un solo uso (1 hora)
 // y envía el enlace por correo. Siempre responde ok para no revelar qué correos existen.
@@ -38,22 +33,26 @@ export async function POST(request: Request) {
 
   const email = parsed.data.email.toLowerCase()
 
-  // Máximo un envío por minuto por correo — sin esto, cualquiera podía
-  // pedir esto en bucle con el correo de un tercero y llenarle la bandeja.
-  if (Date.now() - (ultimoEnvio.get(email) ?? 0) < 60_000) {
-    return NextResponse.json({ ok: true })
-  }
-  ultimoEnvio.set(email, Date.now())
-
   try {
     const user = await db.user.findUnique({ where: { email } })
     if (user && user.isActive) {
+      // Máximo un envío por minuto por correo — sin esto, cualquiera podía
+      // pedir esto en bucle con el correo de un tercero y llenarle la
+      // bandeja. Se deriva del propio resetTokenExpires (persistido en BD,
+      // no en memoria del proceso): un Map en memoria no sirve de freno real
+      // en Vercel, donde cada instancia serverless tiene la suya — dos
+      // peticiones atendidas por instancias distintas no se verían la una a
+      // la otra.
+      const ultimoEnvio = user.resetTokenExpires ? user.resetTokenExpires.getTime() - RESET_TTL_MS : 0
+      if (Date.now() - ultimoEnvio < 60_000) {
+        return NextResponse.json({ ok: true })
+      }
       const token = crypto.randomBytes(32).toString('hex')
       await db.user.update({
         where: { id: user.id },
         data: {
           resetToken: hashToken(token),
-          resetTokenExpires: new Date(Date.now() + 60 * 60 * 1000),
+          resetTokenExpires: new Date(Date.now() + RESET_TTL_MS),
         },
       })
       const baseUrl = process.env.NEXTAUTH_URL ?? ''

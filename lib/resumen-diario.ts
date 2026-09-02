@@ -17,7 +17,7 @@ export interface ResumenDiario {
   ventas: { total: number; transacciones: number; promedio: number }
   porMetodo: { efectivo: number; tarjeta: number; transferencia: number; credito: number }
   utilidad: { costo: number; gastos: number; neta: number }
-  caja: { apertura: number; ingresos: number; gastos: number; esperado: number; turnoAbierto: boolean }
+  caja: { apertura: number; ingresos: number; gastos: number; esperado: number; turnoAbierto: boolean; turnosAbiertos: number }
   cierres: Array<{ contado: number; esperado: number; diferencia: number; hora: string }>
   credito: { otorgado: number; abonado: number }
   compras: { total: number; cantidad: number }
@@ -125,24 +125,25 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
     .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
     .reduce((a, m) => a + Number(m.amount), 0)
 
-  const abierta = sesiones.find((s) => s.status === 'OPEN')
-  const apertura = abierta ? Number(abierta.openingBalance) : 0
-  // El saldo esperado de "caja" sí es de UN cajón físico concreto: solo
-  // cuenta lo de ESE turno — no de todo el día: puede haber turnos ya
-  // cerrados antes (su efectivo ya se contó y se retiró al cerrar) u otros
-  // cajeros con turno propio abierto a la vez ("caja por usuario").
-  const movimientosTurno = abierta ? movimientos.filter((m) => m.cashSessionId === abierta.id) : []
+  // "Caja por usuario" (CLAUDE.md) permite varios cajeros con turno propio
+  // abierto AL MISMO TIEMPO: tomar solo uno con .find() (el primero que
+  // encontrara la consulta) le escondía al dueño el saldo esperado de los
+  // demás cajones abiertos esa noche. Se suman TODOS los turnos abiertos —
+  // no cuenta lo de turnos ya cerrados antes (su efectivo ya se contó y se
+  // retiró al cerrar).
+  const abiertas = sesiones.filter((s) => s.status === 'OPEN')
+  const apertura = abiertas.reduce((a, s) => a + Number(s.openingBalance), 0)
+  const idsAbiertas = new Set(abiertas.map((s) => s.id))
+  const movimientosTurno = movimientos.filter((m) => m.cashSessionId && idsAbiertas.has(m.cashSessionId))
   const ingresosTurno = movimientosTurno
     .filter((m) => m.type === 'INCOME')
     .reduce((a, m) => a + Number(m.amount), 0)
   const gastosTurno = movimientosTurno
     .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
     .reduce((a, m) => a + Number(m.amount), 0)
-  const efectivoTurno = abierta
-    ? ventas
-        .filter((v) => v.cashSessionId === abierta.id)
-        .reduce((a, v) => a + cashPortion({ ...v, total: Number(v.total) }), 0)
-    : 0
+  const efectivoTurno = ventas
+    .filter((v) => v.cashSessionId && idsAbiertas.has(v.cashSessionId))
+    .reduce((a, v) => a + cashPortion({ ...v, total: Number(v.total) }), 0)
 
   const productos = new Map<string, { cantidad: number; total: number }>()
   for (const v of ventas) {
@@ -181,7 +182,8 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
       ingresos: ingresosTurno,
       gastos: gastosTurno,
       esperado: apertura + efectivoTurno + ingresosTurno - gastosTurno,
-      turnoAbierto: !!abierta,
+      turnoAbierto: abiertas.length > 0,
+      turnosAbiertos: abiertas.length,
     },
     cierres: sesiones
       .filter((s) => s.status !== 'OPEN' && s.closedAt)

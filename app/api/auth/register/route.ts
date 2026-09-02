@@ -73,6 +73,11 @@ export async function POST(request: Request) {
     // entregue tokens de verificación directamente usables.
     const verifyToken = needsVerify ? randomBytes(32).toString('hex') : null
     const verifyTokenHash = verifyToken ? hashToken(verifyToken) : null
+    // 24h, no 1h como el reset: verificar el correo no es tan urgente como
+    // recuperar el acceso a la cuenta, y sin este vencimiento el token
+    // (guardado ahora como hash, pero antes en texto plano) quedaba vigente
+    // para siempre si el usuario nunca abría el enlace.
+    const verifyTokenExpires = needsVerify ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null
 
     // IP de registro (en Vercel llega en x-forwarded-for): el super admin ve
     // cuando varios negocios nacen de la misma conexión — posible prueba
@@ -101,6 +106,7 @@ export async function POST(request: Request) {
             password: hashedPassword,
             role: 'ADMIN',
             verifyToken: verifyTokenHash,
+            verifyTokenExpires,
             emailVerified: needsVerify ? null : new Date(),
           },
         },

@@ -153,7 +153,10 @@ export function textoResumen(r: ResumenDiario): string {
       )
     }
   } else if (r.caja.turnoAbierto) {
-    lineas.push(`ATENCIÓN: la caja quedó abierta. Saldo esperado ${pesos(r.caja.esperado, m)}.`)
+    const plural = r.caja.turnosAbiertos > 1
+    lineas.push(
+      `ATENCIÓN: ${plural ? `quedaron ${r.caja.turnosAbiertos} cajas abiertas` : 'la caja quedó abierta'}. Saldo esperado ${plural ? 'combinado ' : ''}${pesos(r.caja.esperado, m)}.`,
+    )
   }
   if (r.compras.cantidad) lineas.push(`Compras: ${pesos(r.compras.total, m)} en ${r.compras.cantidad}`)
   if (r.credito.otorgado || r.credito.abonado)
@@ -185,7 +188,7 @@ export async function sendDailySummaryEmail(to: string, r: ResumenDiario): Promi
         .join('')
     : r.caja.turnoAbierto
       ? `<tr><td colspan="2" style="padding:10px;background:#fdf4e5;border-radius:8px;color:#8a6b2e;font-size:13.5px">
-          La caja quedó <b>abierta</b>. Saldo esperado: ${pesos(r.caja.esperado, m)}.</td></tr>`
+          ${r.caja.turnosAbiertos > 1 ? `Quedaron <b>${r.caja.turnosAbiertos} cajas abiertas</b>. Saldo esperado combinado` : 'La caja quedó <b>abierta</b>. Saldo esperado'}: ${pesos(r.caja.esperado, m)}.</td></tr>`
       : ''
 
   const agotados = r.agotados.length

@@ -30,10 +30,19 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
+  // verifyTokenExpires null = token emitido antes de este cambio (sin
+  // vencimiento en ese entonces): se deja pasar para no invalidar enlaces ya
+  // enviados. Todo token nuevo (registro o reenvío) sí trae vencimiento.
+  if (user.verifyTokenExpires && user.verifyTokenExpires < new Date()) {
+    return NextResponse.json(
+      { error: 'El enlace ya venció. Pide que te reenvíen la verificación.' },
+      { status: 400 },
+    )
+  }
 
   await db.user.update({
     where: { id: user.id },
-    data: { emailVerified: new Date(), verifyToken: null },
+    data: { emailVerified: new Date(), verifyToken: null, verifyTokenExpires: null },
   })
 
   return NextResponse.json({ verified: true, email: user.email })

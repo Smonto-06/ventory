@@ -14,8 +14,8 @@ export const dynamic = 'force-dynamic'
 // por minuto por correo, para que nadie use esto para llenarle la bandeja
 // a otra persona.
 
-// Último reenvío por correo (memoria del proceso: suficiente como freno)
-const ultimoReenvio = new Map<string, number>()
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000
+
 export async function POST(req: Request) {
   let body: unknown
   try {
@@ -31,11 +31,15 @@ export async function POST(req: Request) {
     message: 'Si la cuenta existe y está pendiente de verificar, el correo va en camino.',
   })
 
-  if (Date.now() - (ultimoReenvio.get(email) ?? 0) < 60_000) return generico
-  ultimoReenvio.set(email, Date.now())
-
   const user = await db.user.findUnique({ where: { email } })
   if (!user || user.emailVerified || !mailerConfigured()) return generico
+
+  // Máximo un reenvío por minuto por correo, derivado del propio
+  // verifyTokenExpires (persistido en BD) en vez de un Map en memoria del
+  // proceso: en Vercel cada instancia serverless tiene la suya, así que un
+  // Map no frena nada si dos peticiones caen en instancias distintas.
+  const ultimoEnvio = user.verifyTokenExpires ? user.verifyTokenExpires.getTime() - VERIFY_TTL_MS : 0
+  if (Date.now() - ultimoEnvio < 60_000) return generico
 
   // En BD solo se guarda el hash del token (lib/tokens.ts), así que si ya
   // había uno no se puede recuperar el texto plano original para reenviar
@@ -43,7 +47,10 @@ export async function POST(req: Request) {
   // enlace viejo sin usar deja de servir, que es lo esperado: solo el
   // último correo enviado debe ser el válido).
   const verifyToken = randomBytes(32).toString('hex')
-  await db.user.update({ where: { id: user.id }, data: { verifyToken: hashToken(verifyToken) } })
+  await db.user.update({
+    where: { id: user.id },
+    data: { verifyToken: hashToken(verifyToken), verifyTokenExpires: new Date(Date.now() + VERIFY_TTL_MS) },
+  })
 
   const base = process.env.NEXTAUTH_URL ?? ''
   try {
