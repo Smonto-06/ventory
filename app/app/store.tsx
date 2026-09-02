@@ -394,10 +394,13 @@ export interface AppStore extends AppData {
   setCompraDetId: (id: string | null) => void
 
   // usuarios / ajustes
-  saveUser: (data: Record<string, unknown>, editId: string | null) => Promise<boolean>
+  /** Devuelve el usuario creado/editado (para poder encadenar, p. ej. asignarle el PIN), o null si falló */
+  saveUser: (data: Record<string, unknown>, editId: string | null) => Promise<AppUser | null>
   toggleUser: (u: AppUser) => Promise<void>
   /** Borra un empleado sin historial; con historial el servidor pide desactivarlo */
   deleteUser: (u: AppUser) => Promise<void>
+  /** pin=null quita el PIN de acceso rápido (/pin-login) */
+  setUserPin: (userId: string, pin: string | null) => Promise<boolean>
   editUserId: string | null
   setEditUserId: (id: string | null) => void
   saveSettings: (data: Record<string, unknown>) => Promise<void>
@@ -1864,13 +1867,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveUser = useCallback(
     async (payload: Record<string, unknown>, editId: string | null) => {
       try {
+        let user: AppUser
         if (editId) {
-          await api.updateUser(editId, payload)
+          user = (await api.updateUser(editId, payload)).user
           toast('Usuario actualizado')
         } else {
-          await api.createUser(payload)
+          user = (await api.createUser(payload)).user
           toast('Usuario creado')
         }
+        await refreshUsers()
+        return user
+      } catch (e) {
+        onError(e)
+        return null
+      }
+    },
+    [toast, refreshUsers, onError],
+  )
+
+  const setUserPin = useCallback(
+    async (userId: string, pin: string | null) => {
+      try {
+        await api.setUserPin(userId, pin)
+        toast(pin === null ? 'PIN eliminado' : 'PIN configurado')
         await refreshUsers()
         return true
       } catch (e) {
@@ -2155,6 +2174,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveUser,
       toggleUser,
       deleteUser,
+      setUserPin,
       editUserId,
       setEditUserId,
       saveSettings,

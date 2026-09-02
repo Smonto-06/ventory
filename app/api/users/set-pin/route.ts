@@ -9,7 +9,12 @@ export const dynamic = 'force-dynamic'
 
 const setPinSchema = z.object({
   userId: z.string().optional(),
-  pin: z.string().length(4, 'PIN debe ser de 4 dígitos').regex(/^\d+$/, 'PIN solo debe contener números'),
+  // null = quitar el PIN (vuelve a exigir correo y contraseña)
+  pin: z
+    .string()
+    .length(4, 'PIN debe ser de 4 dígitos')
+    .regex(/^\d+$/, 'PIN solo debe contener números')
+    .nullable(),
 })
 
 export async function POST(request: Request) {
@@ -45,14 +50,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
     }
 
-    const hashedPin = await bcrypt.hash(pin, 12)
+    const hashedPin = pin === null ? null : await bcrypt.hash(pin, 12)
 
     await db.user.update({
       where: { id: targetUserId },
-      data: { pin: hashedPin },
+      // al asignar un PIN nuevo también se limpia cualquier bloqueo por intentos fallidos
+      data: { pin: hashedPin, failedAttempts: 0, lockedAt: null },
     })
 
-    return NextResponse.json({ message: 'PIN configurado exitosamente' })
+    return NextResponse.json({
+      message: pin === null ? 'PIN eliminado' : 'PIN configurado exitosamente',
+    })
   } catch (error) {
     console.error('Set PIN error:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
