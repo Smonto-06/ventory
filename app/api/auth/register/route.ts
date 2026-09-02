@@ -5,6 +5,7 @@ import { mailerConfigured, sendVerificationEmail } from '@/lib/mailer'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { TRIAL_DAYS } from '@/lib/plan'
+import { hashToken } from '@/lib/tokens'
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Nombre debe tener al menos 2 caracteres'),
@@ -67,7 +68,11 @@ export async function POST(request: Request) {
     // Verificación de correo: si el mailer no está configurado, la cuenta
     // queda verificada de una (no se bloquea el registro por configuración)
     const needsVerify = mailerConfigured()
+    // El token en texto plano solo vive en el correo enviado al usuario; en
+    // la BD se guarda su hash (lib/tokens.ts) para que una fuga de la BD no
+    // entregue tokens de verificación directamente usables.
     const verifyToken = needsVerify ? randomBytes(32).toString('hex') : null
+    const verifyTokenHash = verifyToken ? hashToken(verifyToken) : null
 
     // IP de registro (en Vercel llega en x-forwarded-for): el super admin ve
     // cuando varios negocios nacen de la misma conexión — posible prueba
@@ -95,7 +100,7 @@ export async function POST(request: Request) {
             email: normalizedEmail,
             password: hashedPassword,
             role: 'ADMIN',
-            verifyToken,
+            verifyToken: verifyTokenHash,
             emailVerified: needsVerify ? null : new Date(),
           },
         },

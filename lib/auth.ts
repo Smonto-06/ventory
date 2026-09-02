@@ -14,6 +14,9 @@ interface VentoryUser extends User {
   businessSlug: string
 }
 
+const LOCK_DURATION_MS = 15 * 60 * 1000
+const MAX_FAILED_ATTEMPTS = 5
+
 export const authOptions: NextAuthOptions = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   adapter: PrismaAdapter(db) as any,
@@ -47,9 +50,32 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Correo o contraseña incorrectos')
         }
 
+        // Igual que en el login por PIN: sin este freno, el email+contraseña
+        // (la puerta de entrada principal) se podía probar por fuerza bruta
+        // sin ningún límite. Aquí sí es inequívoco a quién bloquear (un solo
+        // correo, no varios cajeros compartiendo el mismo intento).
+        if (user.lockedAt) {
+          const lockExpires = new Date(user.lockedAt.getTime() + LOCK_DURATION_MS)
+          if (new Date() < lockExpires) {
+            throw new Error('Demasiados intentos fallidos. Intenta de nuevo en unos minutos.')
+          }
+          await db.user.update({
+            where: { id: user.id },
+            data: { failedAttempts: 0, lockedAt: null },
+          })
+        }
+
         const passwordValid = await bcrypt.compare(credentials.password, user.password)
 
         if (!passwordValid) {
+          const failedAttempts = user.failedAttempts + 1
+          await db.user.update({
+            where: { id: user.id },
+            data: {
+              failedAttempts,
+              ...(failedAttempts >= MAX_FAILED_ATTEMPTS ? { lockedAt: new Date() } : {}),
+            },
+          })
           throw new Error('Correo o contraseña incorrectos')
         }
 
@@ -62,6 +88,13 @@ export const authOptions: NextAuthOptions = {
 
         if (!user.emailVerified) {
           throw new Error('Confirma tu correo antes de entrar. Revisa tu bandeja (y el spam).')
+        }
+
+        if (user.failedAttempts > 0 || user.lockedAt) {
+          await db.user.update({
+            where: { id: user.id },
+            data: { failedAttempts: 0, lockedAt: null },
+          })
         }
 
         return {
@@ -97,9 +130,14 @@ export const authOptions: NextAuthOptions = {
       // un usuario desactivado a mitad de turno debe perder acceso de una,
       // no seguir vendiendo hasta que la cookie de 8h expire por su cuenta.
       // NextAuth trata null/undefined como "sin sesión" para getServerSession.
+      // De paso se refrescan role/branchId desde la BD (no solo isActive):
+      // el rol y la sucursal quedaban "congelados" en el JWT firmado al
+      // iniciar sesión, así que degradar a un ADMIN a CAJERO (o reasignarlo
+      // de sucursal) no le quitaba esos permisos hasta que la cookie de 8h
+      // expirara por su cuenta.
       const activo = await db.user.findUnique({
         where: { id: token.id as string },
-        select: { isActive: true },
+        select: { isActive: true, role: true, branchId: true },
       })
       if (!activo?.isActive) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -107,9 +145,9 @@ export const authOptions: NextAuthOptions = {
       }
 
       session.user.id = token.id as string
-      session.user.role = token.role as UserRole
+      session.user.role = activo.role
       session.user.businessId = token.businessId as string
-      session.user.branchId = token.branchId as string | undefined
+      session.user.branchId = activo.branchId ?? undefined
       session.user.businessName = token.businessName as string
       session.user.businessSlug = token.businessSlug as string
       return session

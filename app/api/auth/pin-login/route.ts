@@ -138,10 +138,18 @@ export async function POST(request: Request) {
       },
     })
 
-    // Set the session cookie
-    response.cookies.set('next-auth.session-token', token, {
+    // El nombre de la cookie tiene que calcularse EXACTAMENTE como lo hace
+    // NextAuth (next-auth/jwt: secureCookie = NEXTAUTH_URL empieza por
+    // https, o si no, si corre en Vercel) — si no coincide, el middleware y
+    // getServerSession/getCurrentUser (que sí usan el cálculo real de
+    // NextAuth) no encuentran esta cookie y el login por PIN queda roto en
+    // producción (HTTPS) aunque funcione perfecto en local (HTTP), donde
+    // los dos nombres coinciden por casualidad.
+    const secureCookie = process.env.NEXTAUTH_URL?.startsWith('https://') ?? !!process.env.VERCEL
+    const cookieName = secureCookie ? '__Secure-next-auth.session-token' : 'next-auth.session-token'
+    response.cookies.set(cookieName, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: secureCookie,
       sameSite: 'lax',
       path: '/',
       maxAge: 8 * 60 * 60,

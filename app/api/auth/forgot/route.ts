@@ -3,10 +3,17 @@ import crypto from 'crypto'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { mailerConfigured, sendPasswordResetEmail } from '@/lib/mailer'
+import { hashToken } from '@/lib/tokens'
 
 export const dynamic = 'force-dynamic'
 
 const ForgotSchema = z.object({ email: z.string().email() })
+
+// Último envío por correo (memoria del proceso: mismo freno que
+// verify/resend) — sin esto, cualquiera podía inundar la bandeja de un
+// tercero con correos de "Restablecer tu contraseña" pidiendo el mismo
+// correo una y otra vez.
+const ultimoEnvio = new Map<string, number>()
 
 // Solicitud de recuperación de contraseña: genera un token de un solo uso (1 hora)
 // y envía el enlace por correo. Siempre responde ok para no revelar qué correos existen.
@@ -31,6 +38,13 @@ export async function POST(request: Request) {
 
   const email = parsed.data.email.toLowerCase()
 
+  // Máximo un envío por minuto por correo — sin esto, cualquiera podía
+  // pedir esto en bucle con el correo de un tercero y llenarle la bandeja.
+  if (Date.now() - (ultimoEnvio.get(email) ?? 0) < 60_000) {
+    return NextResponse.json({ ok: true })
+  }
+  ultimoEnvio.set(email, Date.now())
+
   try {
     const user = await db.user.findUnique({ where: { email } })
     if (user && user.isActive) {
@@ -38,7 +52,7 @@ export async function POST(request: Request) {
       await db.user.update({
         where: { id: user.id },
         data: {
-          resetToken: token,
+          resetToken: hashToken(token),
           resetTokenExpires: new Date(Date.now() + 60 * 60 * 1000),
         },
       })

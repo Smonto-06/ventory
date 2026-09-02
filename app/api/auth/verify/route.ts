@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { hashToken } from '@/lib/tokens'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Token requerido' }, { status: 400 })
   }
 
-  const user = await db.user.findUnique({ where: { verifyToken: token } })
+  const user = await db.user.findUnique({ where: { verifyToken: hashToken(token) } })
   if (!user) {
     return NextResponse.json(
       { error: 'El enlace no es válido o ya fue usado. Si ya verificaste, inicia sesión.' },

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { db } from '@/lib/db'
 import { mailerConfigured, sendVerificationEmail } from '@/lib/mailer'
+import { hashToken } from '@/lib/tokens'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,14 +37,13 @@ export async function POST(req: Request) {
   const user = await db.user.findUnique({ where: { email } })
   if (!user || user.emailVerified || !mailerConfigured()) return generico
 
-  // El MISMO enlace del correo original: si el primero llega tarde (Gmail a
-  // veces demora minutos), su enlace sigue sirviendo. Invalidarlo aquí creaba
-  // una trampa: el usuario reenviaba por la demora y el correo que por fin
-  // llegaba traía un enlace ya muerto. Solo se genera token si no hay.
-  const verifyToken = user.verifyToken ?? randomBytes(32).toString('hex')
-  if (!user.verifyToken) {
-    await db.user.update({ where: { id: user.id }, data: { verifyToken } })
-  }
+  // En BD solo se guarda el hash del token (lib/tokens.ts), así que si ya
+  // había uno no se puede recuperar el texto plano original para reenviar
+  // el MISMO enlace — se genera uno nuevo y se invalida el anterior (un
+  // enlace viejo sin usar deja de servir, que es lo esperado: solo el
+  // último correo enviado debe ser el válido).
+  const verifyToken = randomBytes(32).toString('hex')
+  await db.user.update({ where: { id: user.id }, data: { verifyToken: hashToken(verifyToken) } })
 
   const base = process.env.NEXTAUTH_URL ?? ''
   try {

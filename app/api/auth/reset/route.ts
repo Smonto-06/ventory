@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { hashToken } from '@/lib/tokens'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const user = await db.user.findUnique({ where: { resetToken: parsed.data.token } })
+    const user = await db.user.findUnique({ where: { resetToken: hashToken(parsed.data.token) } })
     if (!user || !user.resetTokenExpires || user.resetTokenExpires < new Date()) {
       return NextResponse.json(
         { error: 'El enlace ya no es válido. Solicita uno nuevo.' },
