@@ -79,6 +79,7 @@ export type ModalId =
   | 'ajusteinv'
   | 'traslado'
   | 'itemDsc'
+  | 'itemPrecio'
   | 'usuarios'
   | 'usuarioForm'
   | 'ajustes'
@@ -275,6 +276,7 @@ export interface AppStore extends AppData {
   confirmPeso: (kg: number) => void
   editPeso: (productId: string) => void
   setItemDsc: (productId: string, pct: number) => void
+  setItemPrice: (productId: string, price: number) => void
   clearCart: () => void
   discount: number
   discountIsPct: boolean
@@ -846,6 +848,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setItemDsc = useCallback((productId: string, pct: number) => {
     setCart((c) => c.map((i) => (i.productId === productId ? { ...i, dscPct: pct } : i)))
+  }, [])
+
+  // Cambia el precio de venta de una línea solo para esta venta — no toca el
+  // precio del catálogo. El servidor acepta cualquier precio positivo por
+  // línea (igual que ya pasa con el descuento), así que no hace falta nada
+  // en la API, solo en el carrito.
+  const setItemPrice = useCallback((productId: string, price: number) => {
+    setCart((c) => c.map((i) => (i.productId === productId ? { ...i, price } : i)))
   }, [])
 
   const clearCart = useCallback(() => {
@@ -2041,6 +2051,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       confirmPeso,
       editPeso,
       setItemDsc,
+      setItemPrice,
       clearCart,
       discount,
       discountIsPct,

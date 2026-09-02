@@ -17,6 +17,7 @@ import ProveedorModal from './modals/ProveedorModal'
 import AbonoCompraModal from './modals/AbonoCompraModal'
 import CompraDetalleModal from './modals/CompraDetalleModal'
 import ItemDscModal from './modals/ItemDscModal'
+import ItemPrecioModal from './modals/ItemPrecioModal'
 import UsuariosModal from './modals/UsuariosModal'
 import UsuarioFormModal from './modals/UsuarioFormModal'
 import AjustesModal from './modals/AjustesModal'
@@ -61,6 +62,8 @@ export default function Modals() {
       return <CompraDetalleModal />
     case 'itemDsc':
       return <ItemDscModal />
+    case 'itemPrecio':
+      return <ItemPrecioModal />
     case 'usuarios':
       return <UsuariosModal />
     case 'usuarioForm':
