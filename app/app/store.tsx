@@ -80,6 +80,7 @@ export type ModalId =
   | 'traslado'
   | 'itemDsc'
   | 'itemPrecio'
+  | 'cantidad'
   | 'usuarios'
   | 'usuarioForm'
   | 'ajustes'
@@ -277,6 +278,7 @@ export interface AppStore extends AppData {
   editPeso: (productId: string) => void
   setItemDsc: (productId: string, pct: number) => void
   setItemPrice: (productId: string, price: number) => void
+  setItemQty: (productId: string, qty: number) => void
   clearCart: () => void
   discount: number
   discountIsPct: boolean
@@ -856,6 +858,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // en la API, solo en el carrito.
   const setItemPrice = useCallback((productId: string, price: number) => {
     setCart((c) => c.map((i) => (i.productId === productId ? { ...i, price } : i)))
+  }, [])
+
+  // Cantidad exacta digitada en el teclado numérico (solo unidades enteras;
+  // los productos por peso usan confirmPeso en su lugar).
+  const setItemQty = useCallback((productId: string, qty: number) => {
+    if (qty <= 0) return
+    setCart((c) => c.map((i) => (i.productId === productId ? { ...i, qty: Math.round(qty) } : i)))
   }, [])
 
   const clearCart = useCallback(() => {
@@ -2052,6 +2061,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editPeso,
       setItemDsc,
       setItemPrice,
+      setItemQty,
       clearCart,
       discount,
       discountIsPct,

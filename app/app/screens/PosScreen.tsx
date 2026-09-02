@@ -34,9 +34,16 @@ function CartItems() {
                   −
                 </button>
                 <span
-                  onClick={it.unit === 'kg' ? () => s.editPeso(it.productId) : undefined}
-                  title={it.unit === 'kg' ? 'Toca para digitar el peso' : undefined}
-                  style={{ minWidth: 22, textAlign: 'center', fontWeight: 700, fontSize: it.unit === 'kg' ? 12.5 : 14, cursor: it.unit === 'kg' ? 'pointer' : undefined, color: it.unit === 'kg' ? '#6366F1' : undefined, whiteSpace: 'nowrap' }}
+                  onClick={() => {
+                    if (it.unit === 'kg') {
+                      s.editPeso(it.productId)
+                    } else {
+                      s.setDscId(it.productId)
+                      s.openModal('cantidad')
+                    }
+                  }}
+                  title={it.unit === 'kg' ? 'Toca para digitar el peso' : 'Toca para digitar la cantidad'}
+                  style={{ minWidth: 22, textAlign: 'center', fontWeight: 700, fontSize: it.unit === 'kg' ? 12.5 : 14, cursor: 'pointer', color: '#6366F1', whiteSpace: 'nowrap' }}
                 >
                   {it.unit === 'kg' ? `${fmtQty(it.qty)} kg` : it.qty}
                 </span>

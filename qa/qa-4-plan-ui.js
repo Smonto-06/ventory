@@ -189,6 +189,21 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE } = requir
     check('interfaz', 'editar el precio de un artículo actualiza el total a cobrar', false, e.message.slice(0, 60))
   }
 
+  // ── ELEGIR LA CANTIDAD DE UN ARTÍCULO CON EL TECLADO NUMÉRICO ──
+  try {
+    await page.locator('span[title="Toca para digitar la cantidad"]').click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    const modalCant = page.locator('div', { hasText: 'Cantidad' }).last()
+    await modalCant.locator('button', { hasText: /^3$/ }).click()
+    await modalCant.locator('button', { hasText: /^0$/ }).click()
+    await modalCant.locator('button:has-text("Aplicar")').click()
+    await page.waitForTimeout(700)
+    const conNuevaCantidad = await page.locator('body').innerText()
+    check('interfaz', 'elegir la cantidad con el teclado numérico actualiza el carrito', conNuevaCantidad.includes('30'), 'no quedó en 30')
+  } catch (e) {
+    check('interfaz', 'elegir la cantidad con el teclado numérico actualiza el carrito', false, e.message.slice(0, 60))
+  }
+
   // modales principales
   const volver = await page.locator('button:has-text("Inicio")').count()
   if (volver) { await page.locator('button:has-text("Inicio")').first().click(); await page.waitForTimeout(800) }
