@@ -6,6 +6,7 @@
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
 import { Modal, ModalTitle, saveBtnStyle, labelStyle } from '../ui'
+import CampoNumerico from './CampoNumerico'
 
 type Metodo = 'CASH' | 'CARD' | 'TRANSFER'
 
@@ -69,11 +70,10 @@ export default function AbonoModal() {
 
       <label style={labelStyle}>Monto del abono</label>
       <div style={{ display: 'flex', gap: 8 }}>
-        <input
+        <CampoNumerico
           value={amount ? String(amount) : ''}
-          onChange={(e) => setAmount(parseInt((e.target.value || '').replace(/\D/g, ''), 10) || 0)}
-          inputMode="numeric"
-          placeholder="0"
+          onChange={(raw) => setAmount(parseInt(raw.replace(/\D/g, ''), 10) || 0)}
+          titulo="Monto del abono"
           style={{
             flex: 1,
             height: 48,

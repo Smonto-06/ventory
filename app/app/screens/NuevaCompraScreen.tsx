@@ -8,6 +8,7 @@ import { useApp, NcItem } from '../store'
 import { Product } from '../api'
 import { tileFor, saveBtnStyle, fmtQty, parseQty } from '../ui'
 import { priceFromMargin, marginFromPrice } from '@/lib/pos'
+import CampoNumerico from '../modals/CampoNumerico'
 
 const num = (v: unknown) => parseInt(String(v ?? '').replace(/\D/g, '')) || 0
 
@@ -306,11 +307,10 @@ export default function NuevaCompraScreen() {
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>Abono inicial $</label>
-                  <input
+                  <CampoNumerico
                     value={s.ncAbono || ''}
-                    onChange={(e) => s.setNcAbono(num(e.target.value))}
-                    inputMode="numeric"
-                    placeholder="0"
+                    onChange={(raw) => s.setNcAbono(num(raw))}
+                    titulo="Abono inicial"
                     style={{ flex: 1, height: 40, padding: '0 12px', border: '1.5px solid var(--border)', borderRadius: 10, background: 'var(--surface)', fontSize: 14, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
                   />
                 </div>
@@ -383,68 +383,64 @@ export default function NuevaCompraScreen() {
                 <label style={{ ...editLabelStyle, margin: '11px 0 5px' }}>
                   {isKg(edit.productId) ? 'Cantidad recibida (kg)' : 'Cantidad recibida'}
                 </label>
-                <input
-                  key={edit.productId}
-                  defaultValue={edit.qty || ''}
-                  onChange={(e) => {
-                    const qty = isKg(edit.productId) ? parseQty(e.target.value) : num(e.target.value)
+                <CampoNumerico
+                  value={edit.qty || ''}
+                  onChange={(raw) => {
+                    const qty = isKg(edit.productId) ? parseQty(raw) : num(raw)
                     setEdit({ ...edit, qty, total: Math.round(qty * (edit.unit || 0)) })
                   }}
-                  inputMode={isKg(edit.productId) ? 'decimal' : 'numeric'}
+                  decimales={isKg(edit.productId)}
+                  titulo={isKg(edit.productId) ? 'Cantidad recibida (kg)' : 'Cantidad recibida'}
                   placeholder={isKg(edit.productId) ? '0,000' : '0'}
                   style={editInputStyle}
                 />
               </div>
               <div>
                 <label style={{ ...editLabelStyle, margin: '11px 0 5px' }}>Costo por unidad $</label>
-                <input
+                <CampoNumerico
                   value={edit.unit || ''}
-                  onChange={(e) => {
-                    const unit = num(e.target.value)
+                  onChange={(raw) => {
+                    const unit = num(raw)
                     setEdit({ ...edit, unit, total: (edit.qty || 0) * unit, price: priceFromMargin(unit, edit.pct || 0) })
                   }}
-                  inputMode="numeric"
-                  placeholder="0"
+                  titulo="Costo por unidad"
                   style={editInputStyle}
                 />
               </div>
             </div>
             <label style={editLabelStyle}>Costo total $</label>
-            <input
+            <CampoNumerico
               value={edit.total || ''}
-              onChange={(e) => {
-                const total = num(e.target.value)
+              onChange={(raw) => {
+                const total = num(raw)
                 const unit = (edit.qty || 0) > 0 ? Math.round(total / edit.qty) : 0
                 setEdit({ ...edit, total, unit, price: priceFromMargin(unit, edit.pct || 0) })
               }}
-              inputMode="numeric"
-              placeholder="0"
+              titulo="Costo total"
               style={editInputStyle}
             />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={editLabelStyle}>% de ganancia</label>
-                <input
+                <CampoNumerico
                   value={edit.pct || ''}
-                  onChange={(e) => {
-                    const pct = num(e.target.value)
+                  onChange={(raw) => {
+                    const pct = num(raw)
                     setEdit({ ...edit, pct, price: priceFromMargin(edit.unit || 0, pct) })
                   }}
-                  inputMode="numeric"
-                  placeholder="0"
+                  titulo="% de ganancia"
                   style={editInputStyle}
                 />
               </div>
               <div>
                 <label style={editLabelStyle}>Precio de venta $</label>
-                <input
+                <CampoNumerico
                   value={edit.price || ''}
-                  onChange={(e) => {
-                    const price = num(e.target.value)
+                  onChange={(raw) => {
+                    const price = num(raw)
                     setEdit({ ...edit, price, pct: marginFromPrice(edit.unit || 0, price) })
                   }}
-                  inputMode="numeric"
-                  placeholder="0"
+                  titulo="Precio de venta"
                   style={editInputStyle}
                 />
               </div>

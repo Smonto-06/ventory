@@ -7,6 +7,7 @@
 
 import { CSSProperties, useMemo, useState } from 'react'
 import { Icono } from '@/components/Icono'
+import CampoNumerico from './CampoNumerico'
 
 export interface FilaVariante {
   label: string
@@ -230,20 +231,21 @@ export default function EditorVariantes({
                   </button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(96px,1fr))', gap: 7 }}>
-                  <input
+                  <CampoNumerico
                     value={f.stock}
-                    onChange={(e) => setFila(i, { stock: e.target.value })}
-                    inputMode="numeric"
+                    onChange={(raw) => setFila(i, { stock: raw })}
+                    decimales={porPeso}
                     placeholder={porPeso ? 'kg' : 'Stock'}
-                    aria-label={`Stock de ${f.label}`}
+                    ariaLabel={`Stock de ${f.label}`}
+                    titulo={`Stock de ${f.label}`}
                     style={campoNum}
                   />
-                  <input
+                  <CampoNumerico
                     value={f.price}
-                    onChange={(e) => setFila(i, { price: e.target.value })}
-                    inputMode="numeric"
+                    onChange={(raw) => setFila(i, { price: raw })}
                     placeholder="Precio"
-                    aria-label={`Precio de ${f.label}`}
+                    ariaLabel={`Precio de ${f.label}`}
+                    titulo={`Precio de ${f.label}`}
                     style={campoNum}
                   />
                   <input

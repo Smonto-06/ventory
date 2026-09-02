@@ -7,7 +7,7 @@
 // real. Cerrar caja sigue exigiendo internet a propósito: el cierre compara
 // contra los datos reales del servidor.
 
-const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE } = require('./qa-lib')
+const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE, usarTecladoNumerico } = require('./qa-lib')
 
 const colaPendiente = (page) =>
   page.evaluate(
@@ -68,7 +68,9 @@ const colaPendiente = (page) =>
   await page.waitForTimeout(700)
   await page.locator('main button', { hasText: `Panela ${t}` }).first().click()
   await page.waitForTimeout(600)
-  await page.fill('div:has(> label:has-text("Cantidad recibida")) > input', '10')
+  await page.locator('div:has(> label:has-text("Cantidad recibida")) > button').click()
+  await page.waitForTimeout(400)
+  await usarTecladoNumerico(page, '10')
   await page.waitForTimeout(300)
   await page.locator('button:has-text("Agregar a la compra")').first().click()
   await page.waitForTimeout(500)
@@ -101,8 +103,14 @@ const colaPendiente = (page) =>
   await page.locator('button:has-text("Nuevo producto")').first().click()
   await page.waitForTimeout(700)
   await page.fill('input[placeholder="Ej. Camiseta Estampada M"]', `Aromatica ${t}`)
-  await page.fill('div:has(> label:has-text("Precio de venta")) > input', '3000')
-  await page.fill('div:has(> label:has-text("Stock inicial")) > input', '5')
+  await page.locator('div:has(> label:has-text("Precio de venta")) > button').click()
+  await page.waitForTimeout(400)
+  await usarTecladoNumerico(page, '3000')
+  await page.waitForTimeout(300)
+  await page.locator('div:has(> label:has-text("Stock inicial")) > button').click()
+  await page.waitForTimeout(400)
+  await usarTecladoNumerico(page, '5')
+  await page.waitForTimeout(300)
   await page.locator('button:has-text("Guardar producto")').first().click()
   await page.waitForTimeout(1500)
   const trasProducto = await page.textContent('body')
@@ -218,7 +226,10 @@ const colaPendiente = (page) =>
   await page.waitForTimeout(1000)
   await page.locator('nav button', { hasText: 'Cerrar caja' }).first().click()
   await page.waitForTimeout(1200)
-  await page.fill('div:has(> label:has-text("Total contado")) > input', '53000')
+  await page.locator('div:has(> label:has-text("Total contado")) > button').click()
+  await page.waitForTimeout(400)
+  await usarTecladoNumerico(page, '53000')
+  await page.waitForTimeout(300)
   await page.locator('button:has-text("Cerrar caja")').last().click()
   await page.waitForTimeout(800)
   // en el modal, cerrar sin abrir turno nuevo

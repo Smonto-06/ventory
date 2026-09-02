@@ -6,6 +6,7 @@
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
 import { chipStyle } from '../ui'
+import CampoNumerico from '../modals/CampoNumerico'
 
 const cardShell: CSSProperties = {
   background: 'var(--surface)',
@@ -107,11 +108,10 @@ export default function MovimientosScreen() {
 
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Monto</label>
-            <input
+            <CampoNumerico
               value={movAmount || ''}
-              onChange={(e) => setMovAmount(parseInt(String(e.target.value).replace(/\D/g, '')) || 0)}
-              inputMode="numeric"
-              placeholder="0"
+              onChange={(raw) => setMovAmount(parseInt(raw.replace(/\D/g, '')) || 0)}
+              titulo="Monto del movimiento"
               style={{ width: '100%', height: 48, padding: '0 14px', border: '1.5px solid var(--border)', borderRadius: 11, background: 'var(--input)', fontSize: 16, fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
             />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(90px,1fr))', gap: 8, marginTop: 10 }}>

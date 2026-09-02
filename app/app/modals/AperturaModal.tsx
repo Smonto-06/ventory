@@ -5,6 +5,7 @@
 
 import { useState } from 'react'
 import { useApp } from '../store'
+import CampoNumerico from './CampoNumerico'
 
 export default function AperturaModal() {
   const s = useApp()
@@ -44,11 +45,11 @@ export default function AperturaModal() {
         <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: '11px 0 5px' }}>
           Apertura del nuevo turno $
         </label>
-        <input
+        <CampoNumerico
           value={nextApertura || ''}
-          onChange={(e) => setNextApertura(parseInt((e.target.value || '').replace(/\D/g, '')) || 0)}
-          inputMode="numeric"
+          onChange={(raw) => setNextApertura(parseInt(raw.replace(/\D/g, '')) || 0)}
           placeholder="0"
+          titulo="Apertura del nuevo turno"
           style={{ width: '100%', height: 48, padding: '0 14px', border: '1.5px solid var(--border)', borderRadius: 11, background: 'var(--input)', fontSize: 16, fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
         />
         <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--muted)' }}>

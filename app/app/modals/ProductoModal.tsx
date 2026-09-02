@@ -6,6 +6,7 @@ import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
 import { Modal, ModalTitle, saveBtnStyle, parseQty } from '../ui'
 import EditorVariantes, { type FilaVariante, type OpcionVariante } from './variantes'
+import CampoNumerico from './CampoNumerico'
 
 const num = (v: string | number | null | undefined) =>
   parseInt(String(v ?? '').replace(/\D/g, '')) || 0
@@ -430,11 +431,11 @@ export default function ProductoModal() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
           <label style={lblStyle}>{f.unit === 'kg' ? 'Precio por kg $' : 'Precio de venta $'}</label>
-          <input value={f.price} onChange={(e) => set('price')(e.target.value)} inputMode="numeric" placeholder="0" style={numFieldStyle} />
+          <CampoNumerico value={f.price} onChange={set('price')} placeholder="0" titulo={f.unit === 'kg' ? 'Precio por kg' : 'Precio de venta'} style={numFieldStyle} />
         </div>
         <div>
           <label style={lblStyle}>{f.unit === 'kg' ? 'Costo por kg $' : 'Costo $'}</label>
-          <input value={f.cost} onChange={(e) => set('cost')(e.target.value)} inputMode="numeric" placeholder="0" style={numFieldStyle} />
+          <CampoNumerico value={f.cost} onChange={set('cost')} placeholder="0" titulo={f.unit === 'kg' ? 'Costo por kg' : 'Costo'} style={numFieldStyle} />
         </div>
       </div>
 
@@ -442,20 +443,20 @@ export default function ProductoModal() {
         {!variantesVisibles && (
         <div>
           <label style={lblStyle}>{f.unit === 'kg' ? 'Stock inicial (kg)' : 'Stock inicial'}</label>
-          <input
+          <CampoNumerico
             value={f.stock}
-            onChange={(e) => set('stock')(e.target.value)}
-            inputMode="numeric"
+            onChange={set('stock')}
+            decimales={f.unit === 'kg'}
             placeholder="0"
             disabled={!!s.editProdId}
-            title={s.editProdId ? 'El stock se modifica con compras o ajustes de inventario' : undefined}
+            titulo={f.unit === 'kg' ? 'Stock inicial (kg)' : 'Stock inicial'}
             style={{ ...numFieldStyle, ...(s.editProdId ? { opacity: 0.55, cursor: 'not-allowed' } : {}) }}
           />
         </div>
         )}
         <div>
           <label style={lblStyle}>{f.unit === 'kg' ? 'Stock mínimo (kg)' : 'Stock mínimo'}</label>
-          <input value={f.min} onChange={(e) => set('min')(e.target.value)} inputMode="numeric" placeholder="0" style={numFieldStyle} />
+          <CampoNumerico value={f.min} onChange={set('min')} decimales={f.unit === 'kg'} placeholder="0" titulo={f.unit === 'kg' ? 'Stock mínimo (kg)' : 'Stock mínimo'} style={numFieldStyle} />
         </div>
       </div>
 
