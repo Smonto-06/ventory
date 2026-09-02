@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { useApp } from '../store'
 import { Modal, ModalTitle, saveBtnStyle, labelStyle } from '../ui'
+import CampoNumerico from './CampoNumerico'
 
 type MethodKey = 'efectivo' | 'tarjeta' | 'transferencia'
 
@@ -69,11 +70,11 @@ export default function AbonoCompraModal() {
       </div>
       <label style={{ ...labelStyle, margin: '10px 0 5px' }}>Monto del pago</label>
       <div style={{ display: 'flex', gap: 8 }}>
-        <input
+        <CampoNumerico
           value={amount || ''}
-          onChange={(e) => setAmount(parseInt(String(e.target.value).replace(/\D/g, '')) || 0)}
-          inputMode="numeric"
+          onChange={(raw) => setAmount(parseInt(raw.replace(/\D/g, '')) || 0)}
           placeholder="0"
+          titulo="Monto del pago"
           style={{ flex: 1, height: 48, padding: '0 14px', border: '1.5px solid var(--border)', borderRadius: 11, background: 'var(--input)', fontSize: 16, fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
         />
         <button

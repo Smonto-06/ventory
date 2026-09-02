@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useApp } from '../store'
 import { BILLS, COINS } from '../ui'
+import CampoNumerico from './CampoNumerico'
 
 export default function AperturaCajaModal() {
   const s = useApp()
@@ -29,11 +30,11 @@ export default function AperturaCajaModal() {
   const countRow = (v: number) => (
     <div key={v} style={{ display: 'grid', gridTemplateColumns: '1fr 78px 1fr', alignItems: 'center', gap: 10, padding: '4px 0' }}>
       <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{s.fmt(v)}</span>
-      <input
+      <CampoNumerico
         value={counts[v] || ''}
-        onChange={(e) => setCount(v, e.target.value)}
-        inputMode="numeric"
+        onChange={(raw) => setCount(v, raw)}
         placeholder="0"
+        titulo={`${s.fmt(v)} — cuántos`}
         style={{ height: 36, border: '1.5px solid var(--border)', borderRadius: 9, background: 'var(--surface)', textAlign: 'center', fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}
       />
       <span style={{ textAlign: 'right', fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
@@ -81,11 +82,11 @@ export default function AperturaCajaModal() {
           Base de caja inicial (efectivo contado)
         </label>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <input
+          <CampoNumerico
             value={amount || ''}
-            onChange={(e) => setAmount(parseInt((e.target.value || '').replace(/\D/g, '')) || 0)}
-            inputMode="numeric"
+            onChange={(raw) => setAmount(parseInt(raw.replace(/\D/g, '')) || 0)}
             placeholder="0"
+            titulo="Base de caja inicial"
             style={{ flex: 1, height: 48, padding: '0 14px', border: '1.5px solid var(--border)', borderRadius: 11, background: 'var(--input)', fontSize: 18, fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 0 }}
           />
           <button

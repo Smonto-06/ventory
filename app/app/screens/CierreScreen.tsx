@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useApp } from '../store'
 import { BILLS, COINS } from '../ui'
+import CampoNumerico from '../modals/CampoNumerico'
 
 export default function CierreScreen() {
   const s = useApp()
@@ -26,11 +27,10 @@ export default function CierreScreen() {
   const countRow = (v: number) => (
     <div key={v} style={{ display: 'grid', gridTemplateColumns: '1fr 78px 1fr', alignItems: 'center', gap: 10, padding: '4px 0' }}>
       <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{s.fmt(v)}</span>
-      <input
+      <CampoNumerico
         value={counts[v] || ''}
-        onChange={(e) => setCount(v, e.target.value)}
-        inputMode="numeric"
-        placeholder="0"
+        onChange={(raw) => setCount(v, raw)}
+        titulo={`${s.fmt(v)} — cuántos`}
         style={{ height: 38, border: '1.5px solid var(--border)', borderRadius: 9, background: 'var(--surface)', textAlign: 'center', fontWeight: 700, fontSize: 14 }}
       />
       <span style={{ textAlign: 'right', fontSize: 13.5, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
@@ -112,11 +112,10 @@ export default function CierreScreen() {
               <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'flex-end' }}>
                 <div style={{ flex: 1 }}>
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 7 }}>Total contado</label>
-                  <input
+                  <CampoNumerico
                     value={declared || ''}
-                    onChange={(e) => setDeclared(parseInt((e.target.value || '').replace(/\D/g, '')) || 0)}
-                    inputMode="numeric"
-                    placeholder="0"
+                    onChange={(raw) => setDeclared(parseInt(raw.replace(/\D/g, '')) || 0)}
+                    titulo="Total contado"
                     style={{ width: '100%', height: 48, padding: '0 14px', border: '1.5px solid var(--border)', borderRadius: 12, background: 'var(--input)', fontSize: 16, fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
                   />
                 </div>

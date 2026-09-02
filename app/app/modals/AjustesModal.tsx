@@ -7,6 +7,7 @@ import { useApp } from '../store'
 import { Modal, ModalTitle } from '../ui'
 import { connectUsb, connectBt, forgetPrinter, printerPref, testPrint } from '../printer'
 import { Icono } from '@/components/Icono'
+import CampoNumerico from './CampoNumerico'
 
 const sectionStyle: CSSProperties = {
   fontSize: 11,
@@ -233,11 +234,10 @@ export default function AjustesModal() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
           <label style={fieldLabelStyle}>IVA (%) incluido</label>
-          <input
+          <CampoNumerico
             value={ivaPct ? String(ivaPct) : ''}
-            onChange={(e) => setIvaPct(Math.min(30, parseInt(String(e.target.value).replace(/\D/g, '')) || 0))}
-            inputMode="numeric"
-            placeholder="0"
+            onChange={(raw) => setIvaPct(Math.min(30, parseInt(raw.replace(/\D/g, '')) || 0))}
+            titulo="IVA (%) incluido"
             style={numInputStyle}
           />
         </div>
@@ -443,11 +443,10 @@ export default function AjustesModal() {
         <>
           <div style={sectionStyle}>Caja</div>
           <label style={fieldLabelStyle}>Base de caja por defecto</label>
-          <input
+          <CampoNumerico
             value={apertura ? String(apertura) : ''}
-            onChange={(e) => setApertura(parseInt(String(e.target.value).replace(/\D/g, '')) || 0)}
-            inputMode="numeric"
-            placeholder="0"
+            onChange={(raw) => setApertura(parseInt(raw.replace(/\D/g, '')) || 0)}
+            titulo="Base de caja por defecto"
             style={numInputStyle}
           />
           <div style={{ marginTop: 8, fontSize: 12.5, color: '#94A3B8' }}>

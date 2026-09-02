@@ -103,4 +103,18 @@ async function loginOnly(browser, email, password) {
   return loginExisting(ctx, page, email, password)
 }
 
-module.exports = { BASE, check, summary, newBrowser, registerAndLogin, loginOnly, enlaceDeVerificacion, results }
+/**
+ * Digita un valor en el teclado numérico propio del sistema (CampoNumerico):
+ * asume que el botón que abre el teclado ya fue clicado y el popover está
+ * visible (marcado con data-no-print="true"), pulsa cada dígito y confirma
+ * con "Aplicar".
+ */
+async function usarTecladoNumerico(page, valor) {
+  const modal = page.locator('div[data-no-print="true"]').last()
+  for (const ch of String(valor)) {
+    await modal.locator('button', { hasText: new RegExp(`^${ch}$`) }).click()
+  }
+  await modal.locator('button:has-text("Aplicar")').click()
+}
+
+module.exports = { BASE, check, summary, newBrowser, registerAndLogin, loginOnly, enlaceDeVerificacion, usarTecladoNumerico, results }

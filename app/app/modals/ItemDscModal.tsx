@@ -4,6 +4,7 @@
 
 import { useState } from 'react'
 import { useApp } from '../store'
+import CampoNumerico from './CampoNumerico'
 
 export default function ItemDscModal() {
   const s = useApp()
@@ -27,12 +28,11 @@ export default function ItemDscModal() {
         <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: '11px 0 5px' }}>
           % de descuento (0–100)
         </label>
-        <input
+        <CampoNumerico
           value={val || ''}
-          onChange={(e) => setVal(Math.min(100, parseInt((e.target.value || '').replace(/\D/g, '')) || 0))}
-          inputMode="numeric"
+          onChange={(raw) => setVal(Math.min(100, parseInt(raw.replace(/\D/g, '')) || 0))}
           placeholder="0"
-          autoFocus
+          titulo="% de descuento del artículo"
           style={{ width: '100%', height: 48, padding: '0 14px', border: '1.5px solid var(--border)', borderRadius: 11, background: 'var(--input)', fontSize: 16, fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
         />
         <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>

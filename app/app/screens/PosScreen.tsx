@@ -11,6 +11,7 @@ import { tileFor, VLogo, fmtQty } from '../ui'
 import { Icono } from '@/components/Icono'
 import { BotonPantallaCompleta } from '../Pantalla'
 import { useModoTactil } from '../Shell'
+import CampoNumerico from '../modals/CampoNumerico'
 
 function CartItems() {
   const s = useApp()
@@ -140,15 +141,14 @@ function CartFooter({ onAction }: { onAction?: () => void }) {
         >
           %
         </button>
-        <input
+        <CampoNumerico
           value={s.discount || ''}
-          onChange={(e) => {
-            let v = parseInt((e.target.value || '').replace(/\D/g, '')) || 0
+          onChange={(raw) => {
+            let v = parseInt(raw.replace(/\D/g, '')) || 0
             if (s.discountIsPct) v = Math.min(100, v)
             s.setDiscount(v)
           }}
-          inputMode="numeric"
-          placeholder="0"
+          titulo={s.discountIsPct ? 'Descuento (%)' : 'Descuento ($)'}
           style={{ flex: 1, height: 40, padding: '0 12px', border: '1.5px solid var(--border)', borderRadius: 10, background: 'var(--surface)', fontSize: 14, textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 0 }}
         />
       </div>

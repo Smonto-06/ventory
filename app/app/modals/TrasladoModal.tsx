@@ -5,6 +5,7 @@
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
 import { Modal, ModalTitle, saveBtnStyle } from '../ui'
+import CampoNumerico from './CampoNumerico'
 
 const lblStyle: CSSProperties = {
   display: 'block',
@@ -57,11 +58,10 @@ export default function TrasladoModal() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
           <label style={lblStyle}>Cantidad</label>
-          <input
+          <CampoNumerico
             value={qty || ''}
-            onChange={(e) => setQty(parseInt((e.target.value || '').replace(/\D/g, '')) || 0)}
-            inputMode="numeric"
-            placeholder="0"
+            onChange={(raw) => setQty(parseInt(raw.replace(/\D/g, '')) || 0)}
+            titulo="Cantidad a trasladar"
             style={{
               width: '100%',
               height: 38,

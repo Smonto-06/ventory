@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { useApp } from '../store'
 import { Modal, ModalTitle } from '../ui'
+import CampoNumerico from './CampoNumerico'
 
 const num = (v: string) => parseInt(String(v || '').replace(/\D/g, '')) || 0
 
@@ -72,14 +73,15 @@ export default function AjusteInvModal() {
             <span style={{ textAlign: 'right', fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
               Stock {p.stock}
             </span>
-            <input
+            <CampoNumerico
               value={qty[p.id] ?? ''}
-              onChange={(e) => {
-                const v = e.target.value.replace(/\D/g, '')
+              onChange={(raw) => {
+                const v = raw.replace(/\D/g, '')
                 setQty((st) => ({ ...st, [p.id]: v }))
               }}
-              inputMode="numeric"
               placeholder="—"
+              titulo={`Conteo físico — ${p.name}`}
+              ariaLabel={`Conteo físico de ${p.name}`}
               style={{
                 height: 36,
                 border: '1.5px solid var(--border)',

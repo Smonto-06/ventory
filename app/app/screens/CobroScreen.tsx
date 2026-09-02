@@ -7,6 +7,7 @@ import { CSSProperties } from 'react'
 import { useApp } from '../store'
 import { DENOMS, DENOM_LABELS } from '../ui'
 import { useWindowWidth } from '../Shell'
+import CampoNumerico from '../modals/CampoNumerico'
 
 export default function CobroScreen() {
   const s = useApp()
@@ -99,11 +100,10 @@ export default function CobroScreen() {
               {nonCashSel.map((k) => (
                 <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: 12, padding: '6px 6px 6px 16px' }}>
                   <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', whiteSpace: 'nowrap' }}>{k === 'tarjeta' ? 'Tarjeta' : 'Transferencia'}</span>
-                  <input
+                  <CampoNumerico
                     value={s.amounts[k] || ''}
-                    onChange={(e) => s.setAmount(k, parseInt((e.target.value || '').replace(/\D/g, '')) || 0)}
-                    inputMode="numeric"
-                    placeholder="0"
+                    onChange={(raw) => s.setAmount(k, parseInt(raw.replace(/\D/g, '')) || 0)}
+                    titulo={k === 'tarjeta' ? 'Monto con tarjeta' : 'Monto por transferencia'}
                     style={{ flex: 1, minWidth: 80, height: 42, border: 'none', background: 'var(--bg)', borderRadius: 9, textAlign: 'right', padding: '0 14px', fontWeight: 700, fontSize: 16, fontVariantNumeric: 'tabular-nums' }}
                   />
                 </div>
