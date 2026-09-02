@@ -39,7 +39,7 @@ import {
   ShiftStat,
 } from './api'
 import { cartSubtotal, saleTotal, resolvePayment, expectedBalance } from '@/lib/pos'
-import { queueOp, syncPendingOps, pendingOps, registerServiceWorker, nuevoTempId, esTempId, type PendingOp } from './offline'
+import { queueOp, syncPendingOps, pendingOps, registerServiceWorker, nuevoTempId, type PendingOp } from './offline'
 
 export type Screen =
   | 'panel'
@@ -513,14 +513,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshProducts = useCallback(async () => {
     // El stock mostrado es el de la sucursal activa (donde se abre la caja)
     const branch = typeof window !== 'undefined' ? window.localStorage.getItem('ventory-branch') : null
-    const r = await api.productsIn(branch ?? undefined)
+    const [r, queued] = await Promise.all([api.productsIn(branch ?? undefined), pendingOps()])
+    // Solo se preservan los productos con id provisional (offline-*) que
+    // SIGUEN en la cola: antes se conservaba cualquier "offline-*" que ya
+    // estuviera en pantalla, así que uno recién sincronizado (su operación ya
+    // se borró de la cola, pero el producto viejo seguía en el estado) se
+    // quedaba como un duplicado fantasma para siempre junto al producto real
+    // — venderlo mandaba el id provisional, que el servidor ya no reconoce.
+    const idsPendientes = new Set(
+      queued.filter((q) => q.tipo === 'producto' && q.tempId).map((q) => q.tempId),
+    )
     setData((prev) => {
-      // Los productos creados sin conexión (id "offline-*") solo existen acá
-      // hasta que el servidor confirma su creación y la cola los remapea — un
-      // reemplazo total de la lista los hacía desaparecer de golpe de la
-      // búsqueda de cobro mientras la operación seguía pendiente (p. ej. el
-      // refresco automático de 30 s corriendo justo cuando la señal titila).
-      const sinSincronizar = prev.products.filter((p) => esTempId(p.id))
+      const sinSincronizar = prev.products.filter((p) => idsPendientes.has(p.id))
       return { ...prev, products: sinSincronizar.length ? [...r.products, ...sinSincronizar] : r.products }
     })
   }, [])

@@ -68,6 +68,13 @@ export async function POST(request: Request) {
             where: { id: user.id },
             data: { failedAttempts: 0, lockedAt: null },
           })
+          // Se actualiza también el objeto en memoria (mismo `user` que
+          // queda en `users` para el conteo de más abajo): sin esto, un PIN
+          // equivocado justo después de vencer el bloqueo volvía a leer el
+          // contador viejo (5 o más) y relanzaba el bloqueo de una, en vez
+          // de dar las 5 oportunidades nuevas prometidas.
+          user.failedAttempts = 0
+          user.lockedAt = null
         }
       }
 

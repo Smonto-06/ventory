@@ -110,6 +110,14 @@ export async function aplicarPagoAprobado(
       where: { id: pago.businessId },
       select: { status: true, trialEndsAt: true, paidUntil: true, activatedAt: true },
     })
+    // SUSPENDED es una decisión manual del super admin (app/api/admin/businesses/[id]/route.ts),
+    // no un simple vencimiento — el pago queda registrado como APPROVED (el
+    // cobro sí ocurrió), pero un pago que llega tarde (reintento de un
+    // rechazo previo, con el guard de arriba ampliado a "no está ya
+    // APPROVED") no puede reactivar por su cuenta un negocio que el super
+    // admin suspendió a propósito.
+    if (negocio.status === 'SUSPENDED') return true
+
     const ahora = Date.now()
     // Base: lo que aún tenga vigente (mensualidad o días de prueba restantes)
     const base = Math.max(

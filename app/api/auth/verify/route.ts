@@ -17,7 +17,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Token requerido' }, { status: 400 })
   }
 
-  const user = await db.user.findUnique({ where: { verifyToken: hashToken(token) } })
+  // Mismo respaldo que /api/auth/reset: cuentas registradas antes de este
+  // cambio tienen su verifyToken en texto plano (y este, a diferencia del de
+  // reset, no vence nunca) — sin el respaldo, cualquier enlace de
+  // verificación pendiente de antes del despliegue quedaría muerto de por
+  // vida en vez de solo hasta que el usuario pida reenviarlo.
+  const hash = hashToken(token)
+  const user = await db.user.findFirst({ where: { OR: [{ verifyToken: hash }, { verifyToken: token }] } })
   if (!user) {
     return NextResponse.json(
       { error: 'El enlace no es válido o ya fue usado. Si ya verificaste, inicia sesión.' },

@@ -54,6 +54,7 @@ export const authOptions: NextAuthOptions = {
         // (la puerta de entrada principal) se podía probar por fuerza bruta
         // sin ningún límite. Aquí sí es inequívoco a quién bloquear (un solo
         // correo, no varios cajeros compartiendo el mismo intento).
+        let intentosPrevios = user.failedAttempts
         if (user.lockedAt) {
           const lockExpires = new Date(user.lockedAt.getTime() + LOCK_DURATION_MS)
           if (new Date() < lockExpires) {
@@ -63,12 +64,18 @@ export const authOptions: NextAuthOptions = {
             where: { id: user.id },
             data: { failedAttempts: 0, lockedAt: null },
           })
+          // El bloqueo ya venció y se limpió en BD, pero `user` sigue con el
+          // valor viejo (5 o más) leído antes del reset — sin esto, el
+          // primer intento fallido tras vencer el bloqueo volvía a calcular
+          // 6 y relanzaba el bloqueo de una, en vez de dar las 5
+          // oportunidades nuevas prometidas.
+          intentosPrevios = 0
         }
 
         const passwordValid = await bcrypt.compare(credentials.password, user.password)
 
         if (!passwordValid) {
-          const failedAttempts = user.failedAttempts + 1
+          const failedAttempts = intentosPrevios + 1
           await db.user.update({
             where: { id: user.id },
             data: {
