@@ -19,52 +19,68 @@ function CartItems() {
         const t = tileFor({ id: it.productId, name: it.name, imageUrl: it.imageUrl })
         const lineVal = Math.round(it.price * it.qty * (1 - (it.dscPct || 0) / 100))
         return (
-          <div key={it.productId} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '13px 0', borderBottom: '1px solid #EEF2F7' }}>
-            <div style={{ width: 42, height: 42, borderRadius: 10, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, overflow: 'hidden', color: t.tileFg, ...t.tileStyle }}>
-              {t.tileText}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.25 }}>{it.name}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-                <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>{s.fmt(it.price)} c/u</span>
-                <button
-                  onClick={() => {
-                    s.setDscId(it.productId)
-                    s.openModal('itemPrecio')
-                  }}
-                  title="Cambiar el precio de este artículo"
-                  className="v-hover-primary"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 21, height: 21, borderRadius: 6, background: '#EEF0FE', color: '#6366F1', cursor: 'pointer', flex: 'none', padding: 0 }}
+          <div key={it.productId} style={{ padding: '13px 0', borderBottom: '1px solid #EEF2F7' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 10, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, overflow: 'hidden', color: t.tileFg, ...t.tileStyle }}>
+                {t.tileText}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.25 }}>{it.name}</div>
+                <div style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 2 }}>{s.fmt(it.price)} c/u</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 'none' }}>
+                <button onClick={() => s.changeQty(it.productId, -1)} style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--bg)', color: 'var(--text)', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  −
+                </button>
+                <span
+                  onClick={it.unit === 'kg' ? () => s.editPeso(it.productId) : undefined}
+                  title={it.unit === 'kg' ? 'Toca para digitar el peso' : undefined}
+                  style={{ minWidth: 22, textAlign: 'center', fontWeight: 700, fontSize: it.unit === 'kg' ? 12.5 : 14, cursor: it.unit === 'kg' ? 'pointer' : undefined, color: it.unit === 'kg' ? '#6366F1' : undefined, whiteSpace: 'nowrap' }}
                 >
-                  <Icono n="lapiz" tam={11} grosor={2.1} />
+                  {it.unit === 'kg' ? `${fmtQty(it.qty)} kg` : it.qty}
+                </span>
+                <button onClick={() => s.changeQty(it.productId, 1)} style={{ width: 30, height: 30, borderRadius: 8, background: '#EEF0FE', color: '#6366F1', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  +
                 </button>
               </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 'none' }}>
-              <button onClick={() => s.changeQty(it.productId, -1)} style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--bg)', color: 'var(--text)', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                −
-              </button>
-              <span
-                onClick={it.unit === 'kg' ? () => s.editPeso(it.productId) : undefined}
-                title={it.unit === 'kg' ? 'Toca para digitar el peso' : undefined}
-                style={{ minWidth: 22, textAlign: 'center', fontWeight: 700, fontSize: it.unit === 'kg' ? 12.5 : 14, cursor: it.unit === 'kg' ? 'pointer' : undefined, color: it.unit === 'kg' ? '#6366F1' : undefined, whiteSpace: 'nowrap' }}
+              <button
+                onClick={() => {
+                  s.setDscId(it.productId)
+                  s.openModal('itemDsc')
+                }}
+                title="Descuento del artículo"
+                style={{ textAlign: 'right', cursor: 'pointer', flex: 'none', padding: 0, background: 'none' }}
               >
-                {it.unit === 'kg' ? `${fmtQty(it.qty)} kg` : it.qty}
-              </span>
-              <button onClick={() => s.changeQty(it.productId, 1)} style={{ width: 30, height: 30, borderRadius: 8, background: '#EEF0FE', color: '#6366F1', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                +
+                <div style={{ fontWeight: 800, fontSize: 13.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{s.fmt(lineVal)}</div>
+                {it.dscPct > 0 && <div style={{ fontSize: 11, color: '#D9820E', fontWeight: 700 }}>−{it.dscPct}%</div>}
               </button>
             </div>
             <button
               onClick={() => {
                 s.setDscId(it.productId)
-                s.openModal('itemDsc')
+                s.openModal('itemPrecio')
               }}
-              title="Descuento del artículo"
-              style={{ textAlign: 'right', cursor: 'pointer', flex: 'none', padding: 0, background: 'none' }}
+              title="Cambiar el precio de este artículo"
+              className="v-hover-primary"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                marginTop: 9,
+                marginLeft: 53,
+                height: 38,
+                padding: '0 16px',
+                borderRadius: 10,
+                background: '#EEF0FE',
+                color: '#6366F1',
+                fontWeight: 700,
+                fontSize: 13.5,
+                cursor: 'pointer',
+              }}
             >
-              <div style={{ fontWeight: 800, fontSize: 13.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{s.fmt(lineVal)}</div>
-              {it.dscPct > 0 && <div style={{ fontSize: 11, color: '#D9820E', fontWeight: 700 }}>−{it.dscPct}%</div>}
+              <Icono n="lapiz" tam={15} grosor={2} />
+              Editar precio
             </button>
           </div>
         )
