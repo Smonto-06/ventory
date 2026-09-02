@@ -91,6 +91,18 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const { price, cost, categoryId, minStock, ...rest } = parsed.data
 
+    // No es alcanzable desde la UI normal (la lista de productos y los
+    // modales de edición/ajuste/traslado ya excluyen los archivados al pedir
+    // status=ACTIVE por defecto), pero la API en sí no lo impedía: una
+    // llamada directa podía seguir editando precio/nombre/costo de un
+    // producto archivado. Reactivarlo (status: 'ACTIVE') sigue permitido.
+    if (existing.status === 'ARCHIVED' && rest.status !== 'ACTIVE') {
+      return NextResponse.json(
+        { error: 'Este producto está archivado. Reactívalo antes de editarlo.' },
+        { status: 400 },
+      )
+    }
+
     const effectivePrice = price ?? Number(existing.price)
     const effectiveCost = cost ?? (existing.cost ? Number(existing.cost) : undefined)
     if (effectiveCost !== undefined && effectiveCost > effectivePrice) {
@@ -99,7 +111,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
     if (categoryId !== undefined && categoryId !== null) {
       const cat = await db.category.findFirst({
-        where: { id: categoryId, businessId: session.user.businessId },
+        where: { id: categoryId, businessId: session.user.businessId, isActive: true },
       })
       if (!cat) {
         return NextResponse.json({ error: 'Categoría no encontrada' }, { status: 400 })

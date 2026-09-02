@@ -54,12 +54,15 @@ export async function POST(req: NextRequest) {
     if (!branchId) return badRequest('Sucursal no encontrada')
 
     const productIds = parsed.data.adjustments.map((a) => a.productId)
+    // status: ACTIVE — no alcanzable desde el modal de ajuste (ya filtra
+    // productos archivados), pero la API en sí no lo bloqueaba: un producto
+    // que el negocio ya no vende no debería seguir recibiendo conteos.
     const products = await db.product.findMany({
-      where: { id: { in: productIds }, businessId: user.businessId },
+      where: { id: { in: productIds }, businessId: user.businessId, status: 'ACTIVE' },
       select: { id: true, name: true },
     })
     if (products.length !== productIds.length) {
-      return badRequest('Uno o más productos no encontrados')
+      return badRequest('Uno o más productos no encontrados o están archivados')
     }
 
     const results = await db.$transaction(async (tx) => {

@@ -151,7 +151,7 @@ export async function POST(request: Request) {
 
     if (categoryId) {
       const cat = await db.category.findFirst({
-        where: { id: categoryId, businessId: session.user.businessId },
+        where: { id: categoryId, businessId: session.user.businessId, isActive: true },
       })
       if (!cat) {
         return NextResponse.json({ error: 'Categoría no encontrada' }, { status: 400 })

@@ -88,8 +88,10 @@ export async function POST(request: Request) {
     const bySku = new Set(existing.filter((p) => p.sku).map((p) => p.sku!.trim().toUpperCase()))
     const byBarcode = new Set(existing.filter((p) => p.barcode).map((p) => p.barcode!.trim()))
 
-    // Categorías: resolver por nombre, creando las que falten
-    const categories = await db.category.findMany({ where: { businessId } })
+    // Categorías: resolver por nombre, creando las que falten. Solo activas:
+    // reutilizar el id de una archivada por nombre asignaría productos
+    // nuevos a una categoría que el negocio ya no usa, sin reactivarla.
+    const categories = await db.category.findMany({ where: { businessId, isActive: true } })
     const catByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c.id]))
     const newCatNames = new Set<string>()
     for (const r of rows) {
