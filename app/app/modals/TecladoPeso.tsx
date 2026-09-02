@@ -1,14 +1,18 @@
 'use client'
 
-// Teclado numérico tipo calculadora para digitar pesos en kilos.
+// Teclado numérico tipo calculadora — para pesos en kilos (con coma decimal)
+// o cantidades enteras de unidades (sin coma, con "00" en su lugar).
 //
-// Lo comparten el modal de venta por peso y el de devolución: en un mostrador
-// táctil sin teclado físico esta es la única forma de escribir "0,750", y no
-// tiene sentido que cada pantalla tenga el suyo.
+// Lo comparten el modal de venta por peso, el de devolución y el de elegir
+// cantidad: en un mostrador táctil sin teclado físico es la única forma de
+// escribir un número, y no tiene sentido que cada pantalla tenga el suyo.
 
 import { useEffect } from 'react'
 
 const TECLAS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', ',', '0', '⌫'] as const
+// Sin decimales (cantidad de unidades, no por peso): la coma no aplica, en
+// su lugar un "00" para escribir cantidades grandes más rápido.
+const TECLAS_ENTERAS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '00', '0', '⌫'] as const
 
 /** Aplica una tecla al texto digitado. Máximo 3 decimales (gramos). */
 export function aplicarTecla(actual: string, tecla: string): string {
@@ -41,13 +45,17 @@ export function useTecladoFisico(press: (k: string) => void, activo = true) {
 export default function TecladoPeso({
   onTecla,
   alto = 52,
+  decimales = true,
 }: {
   onTecla: (k: string) => void
   alto?: number
+  /** false = cantidad de unidades, sin coma decimal (ej. elegir cuántos artículos) */
+  decimales?: boolean
 }) {
+  const teclas = decimales ? TECLAS : TECLAS_ENTERAS
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-      {TECLAS.map((k) => (
+      {teclas.map((k) => (
         <button
           key={k}
           onClick={() => onTecla(k)}
