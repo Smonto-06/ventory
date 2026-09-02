@@ -12,6 +12,7 @@ import {
 } from '@/lib/api-helpers'
 import { MovementType } from '@prisma/client'
 import { moveStock, InsufficientStockError } from '@/lib/inventory'
+import { requireActiveBusiness } from '@/lib/plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +42,10 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return badRequest(parsed.error.issues[0].message)
 
   const { productId, quantity, direction, notes } = parsed.data
+
+  // Prueba vencida o plan suspendido → no se puede seguir moviendo inventario
+  const planBlock = await requireActiveBusiness(user.businessId)
+  if (planBlock) return planBlock
 
   try {
     const branchId = await resolveBranchId(user.businessId, parsed.data.branchId)

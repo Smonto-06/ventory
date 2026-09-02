@@ -4,7 +4,7 @@
 
 import { useState } from 'react'
 import { useApp } from '../store'
-import { Modal, ModalTitle } from '../ui'
+import { Modal, ModalTitle, parseQty } from '../ui'
 import CampoNumerico from './CampoNumerico'
 
 const num = (v: string) => parseInt(String(v || '').replace(/\D/g, '')) || 0
@@ -23,11 +23,13 @@ export default function AjusteInvModal() {
       (p.barcode ?? '').includes(q),
   )
 
+  const isKg = (productId: string) => s.products.find((p) => p.id === productId)?.unitOfMeasure === 'kg'
+
   const apply = () => {
     const out: Record<string, number> = {}
     Object.entries(qty).forEach(([id, v]) => {
       if (v === '') return
-      out[id] = num(v)
+      out[id] = isKg(id) ? parseQty(v) : num(v)
     })
     if (!Object.keys(out).length) return
     s.applyAjuste(out)
@@ -76,9 +78,10 @@ export default function AjusteInvModal() {
             <CampoNumerico
               value={qty[p.id] ?? ''}
               onChange={(raw) => {
-                const v = raw.replace(/\D/g, '')
+                const v = isKg(p.id) ? String(parseQty(raw)) : raw.replace(/\D/g, '')
                 setQty((st) => ({ ...st, [p.id]: v }))
               }}
+              decimales={isKg(p.id)}
               placeholder="—"
               titulo={`Conteo físico — ${p.name}`}
               ariaLabel={`Conteo físico de ${p.name}`}

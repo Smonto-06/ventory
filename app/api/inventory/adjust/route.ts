@@ -12,6 +12,7 @@ import {
 } from '@/lib/api-helpers'
 import { MovementType } from '@prisma/client'
 import { setStock } from '@/lib/inventory'
+import { requireActiveBusiness } from '@/lib/plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,10 @@ export async function POST(req: NextRequest) {
   }
   const parsed = AdjustSchema.safeParse(body)
   if (!parsed.success) return badRequest(parsed.error.issues[0].message)
+
+  // Prueba vencida o plan suspendido → no se puede seguir moviendo inventario
+  const planBlock = await requireActiveBusiness(user.businessId)
+  if (planBlock) return planBlock
 
   try {
     const branchId = await resolveBranchId(user.businessId, parsed.data.branchId)
@@ -84,7 +89,11 @@ export async function POST(req: NextRequest) {
     db.auditLog
       .create({
         data: {
-          action: 'ADJUST',
+          // 'ADJUSTMENT', no 'ADJUST': así lo espera el diccionario de
+          // traducción del registro de auditoría (AuditoriaModal.tsx) — con
+          // el nombre viejo, la acción más sensible del sistema (ajuste
+          // manual de stock) se mostraba como texto técnico crudo.
+          action: 'ADJUSTMENT',
           entity: 'Inventory',
           entityId: branchId,
           payload: { adjustments: results },

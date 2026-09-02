@@ -6,6 +6,14 @@ import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
+/** Otra petición concurrente (doble clic) ya creó una variante con ese nombre */
+class VariantAlreadyExistsError extends Error {
+  constructor(label: string) {
+    super(`La variante "${label}" ya existe`)
+    this.name = 'VariantAlreadyExistsError'
+  }
+}
+
 // Agrega variantes a un producto que ya existe.
 //
 // Sirve para dos casos: sumar una talla nueva a un producto que ya tiene
@@ -65,6 +73,17 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     }
     const { variantes, variantOptions, branchId } = parsed.data
+
+    // El id de sucursal es un cuid global (no compuesto con businessId): sin
+    // este chequeo se podía crear inventario en una sucursal de OTRO negocio.
+    if (branchId) {
+      const suc = await db.branch.findFirst({
+        where: { id: branchId, businessId: session.user.businessId, isActive: true },
+      })
+      if (!suc) {
+        return NextResponse.json({ error: 'Sucursal no encontrada' }, { status: 400 })
+      }
+    }
 
     const existentes = await db.product.findMany({
       where: { parentId: padre.id, businessId: session.user.businessId },
@@ -130,6 +149,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
         await tx.product.update({ where: { id: padre.id }, data: { variantOptions } })
       }
 
+      // Revalidado DENTRO de la transacción (no solo antes de abrirla): un
+      // doble clic en "Guardar" puede llegar con dos peticiones casi
+      // simultáneas que vieron la misma lista de variantes existentes y
+      // ambas creerían que ninguna se repite.
+      const existentesTx = await tx.product.findMany({
+        where: { parentId: padre.id, businessId: session.user.businessId },
+        select: { variantLabel: true },
+      })
+      const yaHayTx = new Set(existentesTx.map((v) => (v.variantLabel ?? '').toLowerCase()))
+      const repetida = nuevas.find((v) => yaHayTx.has(v.label.toLowerCase()))
+      if (repetida) {
+        throw new VariantAlreadyExistsError(repetida.label)
+      }
+
       const salida = []
       for (let i = 0; i < nuevas.length; i++) {
         const v = nuevas[i]
@@ -167,6 +200,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     return NextResponse.json({ creadas: creadas.length, convertido: convirtiendo }, { status: 201 })
   } catch (error) {
+    if (error instanceof VariantAlreadyExistsError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     console.error('POST /api/products/[id]/variants error:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }

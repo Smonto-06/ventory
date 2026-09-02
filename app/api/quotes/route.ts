@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     const { branchId, customerId, customerName, notes, validDays, discount, discountIsPct, items } = parsed.data
 
     const sucursal = await db.branch.findFirst({
-      where: { id: branchId, businessId: user.businessId },
+      where: { id: branchId, businessId: user.businessId, isActive: true },
       select: { id: true },
     })
     if (!sucursal) return badRequest('Sucursal no encontrada')

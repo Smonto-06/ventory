@@ -14,6 +14,14 @@ import { CashMovementType } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
+/** Otro abono concurrente ya redujo el saldo por debajo de lo que este abono necesitaba */
+class BalanceChangedError extends Error {
+  constructor() {
+    super('El saldo del cliente cambió por otra operación simultánea. Vuelve a intentar el abono.')
+    this.name = 'BalanceChangedError'
+  }
+}
+
 const PaymentSchema = z.object({
   amount: z.number().positive('El abono debe ser mayor a 0'),
   method: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
@@ -74,10 +82,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         cashMovementId = movement.id
       }
 
-      const updated = await tx.customer.update({
-        where: { id: customer.id },
+      // Decremento CONDICIONADO al saldo vigente (no al leído antes de abrir
+      // la transacción): dos abonos casi simultáneos por el saldo completo
+      // no deben poder dejarlo negativo ni duplicar el ingreso de caja.
+      const dec = await tx.customer.updateMany({
+        where: { id: customer.id, balance: { gte: amount } },
         data: { balance: { decrement: amount } },
       })
+      if (dec.count === 0) {
+        throw new BalanceChangedError()
+      }
+      const updated = await tx.customer.findUniqueOrThrow({ where: { id: customer.id } })
 
       const payment = await tx.customerPayment.create({
         data: {
@@ -122,6 +137,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       { status: 201 },
     )
   } catch (error) {
+    if (error instanceof BalanceChangedError) {
+      return badRequest(error.message)
+    }
     return serverError('POST /api/customers/[id]/payments', error)
   }
 }
