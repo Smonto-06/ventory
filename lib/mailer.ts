@@ -13,6 +13,20 @@
 
 import nodemailer from 'nodemailer'
 
+// El resumen diario interpola nombres controlados por el usuario (nombre del
+// negocio, nombre de producto — este último editable incluso por rol
+// SUPERVISOR) directo en un template HTML. Sin escapar, un nombre con
+// "<a href=...>" rompe la maquetación del correo o inserta un enlace con
+// apariencia legítima dentro de un correo de confianza.
+function escapeHtml(texto: string): string {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export function mailerConfigured(): boolean {
   const gmail = !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
   const smtp =
@@ -183,7 +197,7 @@ export async function sendDailySummaryEmail(to: string, r: ResumenDiario): Promi
           .slice(0, 15)
           .map(
             (a) =>
-              `<div style="font-size:13.5px;color:#0f172a;padding:3px 0">${a.nombre} —
+              `<div style="font-size:13.5px;color:#0f172a;padding:3px 0">${escapeHtml(a.nombre)} —
                <b>${a.stock <= 0 ? 'agotado' : `quedan ${a.stock}${a.unidad === 'kg' ? ' kg' : ''}`}</b></div>`,
           )
           .join('')}
@@ -198,7 +212,7 @@ export async function sendDailySummaryEmail(to: string, r: ResumenDiario): Promi
           .map(
             (p) =>
               `<div style="display:flex;justify-content:space-between;font-size:13.5px;padding:4px 0;color:#0f172a">
-                <span>${p.nombre} · ${p.cantidad}</span><span style="font-weight:600">${pesos(p.total, m)}</span></div>`,
+                <span>${escapeHtml(p.nombre)} · ${p.cantidad}</span><span style="font-weight:600">${pesos(p.total, m)}</span></div>`,
           )
           .join('')}
       </div>`
@@ -207,7 +221,7 @@ export async function sendDailySummaryEmail(to: string, r: ResumenDiario): Promi
   const html = `<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#f6f8fb;padding:24px">
     <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:28px">
       <div style="font-size:12px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#4f46e5">Ventory</div>
-      <h1 style="margin:8px 0 2px;font-size:22px;color:#0f172a">${r.negocio}</h1>
+      <h1 style="margin:8px 0 2px;font-size:22px;color:#0f172a">${escapeHtml(r.negocio)}</h1>
       <div style="color:#64748b;font-size:14px;text-transform:capitalize">${fecha}</div>
 
       <div style="margin:22px 0;padding:20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:14px;color:#fff">
