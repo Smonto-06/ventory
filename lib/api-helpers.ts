@@ -55,7 +55,7 @@ export async function resolveBranchId(
   requested?: string | null,
 ): Promise<string | null> {
   if (requested) {
-    const branch = await db.branch.findFirst({ where: { id: requested, businessId } })
+    const branch = await db.branch.findFirst({ where: { id: requested, businessId, isActive: true } })
     return branch?.id ?? null
   }
   const branch = await db.branch.findFirst({
@@ -63,6 +63,31 @@ export async function resolveBranchId(
     orderBy: { createdAt: 'asc' },
   })
   return branch?.id ?? null
+}
+
+/**
+ * Resuelve el proveedor de un producto por nombre (texto libre del
+ * formulario/CSV) contra la tabla real Supplier — creándolo si no existe, o
+ * reactivándolo si estaba archivado. Mismo patrón que ya usa la creación de
+ * compras (app/api/purchases/route.ts): sin este enlace, `Product.supplierId`
+ * quedaba siempre vacío y la pantalla de Proveedores mostraba 0 productos
+ * para todos, sin importar cuántos tuvieran ese proveedor en el texto libre.
+ */
+export async function resolveOrCreateSupplier(
+  client: Tx | typeof db,
+  businessId: string,
+  name: string,
+): Promise<string> {
+  const trimmed = name.trim()
+  let supplier = await client.supplier.findFirst({
+    where: { businessId, name: { equals: trimmed, mode: 'insensitive' } },
+  })
+  if (!supplier) {
+    supplier = await client.supplier.create({ data: { name: trimmed, businessId } })
+  } else if (!supplier.isActive) {
+    supplier = await client.supplier.update({ where: { id: supplier.id }, data: { isActive: true } })
+  }
+  return supplier.id
 }
 
 /** Serializa Decimals de Prisma a number recursivamente para respuestas JSON */

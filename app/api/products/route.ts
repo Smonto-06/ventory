@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
+import { resolveOrCreateSupplier } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
 
@@ -156,6 +158,41 @@ export async function POST(request: Request) {
       }
     }
 
+    // El id de sucursal es un cuid global (no compuesto con businessId): sin
+    // este chequeo se podía crear inventario en una sucursal de OTRO negocio.
+    if (branchId) {
+      const suc = await db.branch.findFirst({
+        where: { id: branchId, businessId: session.user.businessId, isActive: true },
+      })
+      if (!suc) {
+        return NextResponse.json({ error: 'Sucursal no encontrada' }, { status: 400 })
+      }
+    }
+
+    // El código de barras no tiene constraint único en la BD (a diferencia
+    // del SKU) — sin este chequeo se podían crear dos productos activos con
+    // el mismo barcode, y el escáner de cobro (ScannerModal) siempre toma el
+    // primero que encuentre, pudiendo cobrar el precio equivocado.
+    if (barcode?.trim()) {
+      const dupBarcode = await db.product.findFirst({
+        where: { businessId: session.user.businessId, barcode: barcode.trim(), status: 'ACTIVE' },
+        select: { id: true, name: true },
+      })
+      if (dupBarcode) {
+        return NextResponse.json(
+          { error: `El código de barras ya está en uso por "${dupBarcode.name}"` },
+          { status: 400 },
+        )
+      }
+    }
+
+    // El campo "proveedor" del formulario es texto libre (legado); se enlaza
+    // con la tabla real Supplier para que la pantalla de Proveedores pueda
+    // listar sus productos — sin esto, supplierId quedaba siempre vacío.
+    const supplierId = supplier?.trim()
+      ? await resolveOrCreateSupplier(db, session.user.businessId, supplier.trim())
+      : null
+
     // ── Producto con variantes ──
     // El padre no lleva inventario ni se vende; cada variante es un producto
     // completo (stock, SKU, precio propios), así que el resto del sistema
@@ -187,6 +224,7 @@ export async function POST(request: Request) {
             taxRate: taxRate ?? 0.16,
             unitOfMeasure,
             supplier,
+            supplierId,
             imageUrl,
             businessId: session.user.businessId,
             categoryId: categoryId ?? null,
@@ -208,6 +246,7 @@ export async function POST(request: Request) {
               taxRate: taxRate ?? 0.16,
               unitOfMeasure,
               supplier,
+              supplierId,
               imageUrl,
               businessId: session.user.businessId,
               categoryId: categoryId ?? null,
@@ -254,6 +293,7 @@ export async function POST(request: Request) {
         taxRate: taxRate ?? 0.16,
         unitOfMeasure,
         supplier,
+        supplierId,
         imageUrl,
         businessId: session.user.businessId,
         categoryId: categoryId ?? null,
@@ -286,6 +326,12 @@ export async function POST(request: Request) {
       { status: 201 }
     )
   } catch (error) {
+    // SKU sí tiene constraint único en BD (@@unique([businessId, sku])): sin
+    // este catch, un duplicado exacto caía al 500 genérico en vez de un
+    // mensaje claro.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return NextResponse.json({ error: 'Ya existe un producto con ese SKU' }, { status: 400 })
+    }
     console.error('POST /api/products error:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
