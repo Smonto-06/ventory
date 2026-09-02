@@ -17,7 +17,7 @@
 //  - Eventos: Wompi firma cada webhook con sha256(propiedades + timestamp +
 //    secreto de eventos); un evento sin firma válida se rechaza con 403.
 
-import { createHash } from 'crypto'
+import { createHash, timingSafeEqual } from 'crypto'
 
 /** Plan único: $59.900 COP al mes. Wompi trabaja en centavos. */
 export const PLAN_PRECIO_COP = 59_900
@@ -110,7 +110,12 @@ export function eventoValido(evento: EventoWompi): boolean {
   if (!firma?.checksum || !Array.isArray(firma.properties) || evento.timestamp === undefined) return false
   const concatenado = firma.properties.map((p) => propiedad(evento.data, p)).join('')
   const esperado = sha256(`${concatenado}${evento.timestamp}${env('WOMPI_EVENTS_SECRET')}`)
-  return esperado === firma.checksum.toLowerCase()
+  const recibido = firma.checksum.toLowerCase()
+  // Comparación en tiempo constante: sha256 siempre produce 64 hex chars,
+  // pero por si el checksum recibido viniera con otra longitud, comparar
+  // largo primero evita que timingSafeEqual lance por buffers desiguales.
+  if (recibido.length !== esperado.length) return false
+  return timingSafeEqual(Buffer.from(esperado), Buffer.from(recibido))
 }
 
 /**

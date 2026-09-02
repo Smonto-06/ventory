@@ -82,8 +82,12 @@ export async function requireActiveBusiness(businessId: string): Promise<NextRes
  * Aplica un pago aprobado de Wompi: marca el PlanPayment y extiende la
  * vigencia 30 días sobre lo que quede (o sobre hoy si ya venció; si está en
  * prueba, los días de prueba restantes no se pierden). El updateMany
- * condicionado a status PENDING garantiza que el webhook y la consulta de
- * respaldo no sumen los 30 días dos veces por el mismo pago.
+ * condicionado a status != APPROVED garantiza que el webhook y la consulta
+ * de respaldo no sumen los 30 días dos veces por el mismo pago, PERO sigue
+ * aplicando el pago si la referencia había quedado antes en DECLINED/VOIDED/
+ * ERROR: tanto Wompi (Web Checkout) como Mercado Pago (Checkout Pro) dejan
+ * reintentar un pago rechazado sin cambiar de referencia, así que un cobro
+ * finalmente aprobado para una referencia ya declinada no puede perderse.
  */
 export async function aplicarPagoAprobado(
   paymentId: string,
@@ -92,7 +96,7 @@ export async function aplicarPagoAprobado(
   const DIA = 86400000
   return db.$transaction(async (tx) => {
     const cambiado = await tx.planPayment.updateMany({
-      where: { id: paymentId, status: 'PENDING' },
+      where: { id: paymentId, status: { not: 'APPROVED' } },
       data: {
         status: 'APPROVED',
         wompiId: datos.wompiId,
