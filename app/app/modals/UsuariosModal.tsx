@@ -96,6 +96,7 @@ export default function UsuariosModal() {
               <span style={u.isActive ? chipStyle('#D1FAE5', '#0B6E63') : chipStyle('#FDECEC', '#C9433B')}>
                 {u.isActive ? 'Activo' : 'Inactivo'}
               </span>
+              {u.hasPin && <span style={chipStyle('#EEF0FE', '#4338CA')}>PIN</span>}
               <button
                 onClick={() => {
                   s.setEditUserId(u.id)

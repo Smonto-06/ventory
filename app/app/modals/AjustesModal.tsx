@@ -190,6 +190,15 @@ export default function AjustesModal() {
         placeholder="Nombre del negocio"
         style={textInputStyle}
       />
+      {s.settings?.slug && (
+        <>
+          <label style={{ ...fieldLabelStyle, marginTop: 10 }}>Identificador del negocio</label>
+          <input value={s.settings.slug} readOnly style={{ ...textInputStyle, color: 'var(--muted)', cursor: 'default' }} />
+          <div style={{ marginTop: 6, fontSize: 12.5, color: '#94A3B8' }}>
+            Es lo primero que se escribe en el ingreso rápido por PIN (<code>/pin-login</code>). No se puede cambiar.
+          </div>
+        </>
+      )}
 
       <div style={sectionStyle}>Facturación</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

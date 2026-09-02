@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       name: true,
+      slug: true,
       currency: true,
       locale: true,
       ivaPct: true,

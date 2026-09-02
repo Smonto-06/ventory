@@ -3,7 +3,7 @@
 Pruebas de extremo a extremo contra un servidor real, complementarias a
 `npm test` (que cubre las reglas de negocio con Jest).
 
-## Qué cubre — 452 pruebas
+## Qué cubre — 460 pruebas
 
 | Archivo | Área | Pruebas |
 |---|---|---|
@@ -21,6 +21,7 @@ Pruebas de extremo a extremo contra un servidor real, complementarias a
 | `qa-12-offline-ampliado.js` | Offline ampliado: compras, crédito y crear productos sin red, cola en orden con remapeo de ids | 24 |
 | `qa-13-pagos.js` | Pasarela Wompi: checkout firmado, webhook con firma, activación automática sin duplicar, respaldo sin webhook, sección Mi plan | 33 |
 | `qa-14-pagos-mp.js` | Pasarela Mercado Pago (interina): webhook verificado contra su API, monto exacto, idempotencia, respaldo por referencia | 25 |
+| `qa-15-pin.js` | PIN de acceso rápido: identificador del negocio visible en Ajustes, asignarlo/quitarlo desde Usuarios con el teclado numérico propio, entrar por /pin-login con PIN correcto e incorrecto | 8 |
 
 ## Cómo ejecutarlas
 

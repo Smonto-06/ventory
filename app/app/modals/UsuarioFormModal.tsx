@@ -6,6 +6,7 @@
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
 import { Modal, saveBtnStyle } from '../ui'
+import CampoNumerico from './CampoNumerico'
 
 const fieldLabelStyle: CSSProperties = {
   display: 'block',
@@ -51,6 +52,7 @@ export default function UsuarioFormModal() {
   )
   const [branchId, setBranchId] = useState(editing?.branchId ?? '')
   const [password, setPassword] = useState('')
+  const [pin, setPin] = useState('')
 
   const backToUsuarios = () => s.openModal('usuarios')
 
@@ -60,7 +62,8 @@ export default function UsuarioFormModal() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return s.toast('El correo no tiene un formato válido')
     if (!editing && password.length < 8) return s.toast('La contraseña debe tener al menos 8 caracteres')
     if (editing && password && password.length < 8) return s.toast('La contraseña debe tener al menos 8 caracteres')
-    const ok = await s.saveUser(
+    if (pin && pin.length !== 4) return s.toast('El PIN debe tener 4 dígitos')
+    const user = await s.saveUser(
       {
         name: name.trim(),
         email: email.trim(),
@@ -70,7 +73,14 @@ export default function UsuarioFormModal() {
       },
       s.editUserId,
     )
-    if (ok) s.openModal('usuarios')
+    if (!user) return
+    if (pin) await s.setUserPin(user.id, pin)
+    s.openModal('usuarios')
+  }
+
+  const quitarPin = async () => {
+    if (!editing) return
+    if (await s.setUserPin(editing.id, null)) setPin('')
   }
 
   return (
@@ -187,6 +197,31 @@ export default function UsuarioFormModal() {
       {editing && (
         <div style={{ marginTop: 6, fontSize: 12.5, color: '#94A3B8' }}>Dejar en blanco para no cambiarla.</div>
       )}
+
+      <label style={fieldLabelStyle}>PIN de acceso rápido (opcional)</label>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <CampoNumerico
+          value={pin}
+          onChange={(raw) => setPin(raw.replace(/\D/g, '').slice(0, 4))}
+          placeholder={editing?.hasPin ? 'Sin cambios' : '0000'}
+          titulo="PIN de acceso rápido"
+          style={{ ...fieldInputStyle, flex: 1, textAlign: 'center', fontWeight: 800, letterSpacing: 4 }}
+        />
+        {editing?.hasPin && (
+          <button
+            type="button"
+            onClick={quitarPin}
+            style={{ height: 42, padding: '0 14px', borderRadius: 11, background: '#FDECEC', color: '#C9433B', fontWeight: 700, fontSize: 13, cursor: 'pointer', flex: 'none' }}
+          >
+            Quitar
+          </button>
+        )}
+      </div>
+      <div style={{ marginTop: 6, fontSize: 12.5, color: '#94A3B8', lineHeight: 1.55 }}>
+        {editing?.hasPin
+          ? 'Ya tiene un PIN configurado. Escribe 4 dígitos para cambiarlo, o déjalo así.'
+          : 'Sirve para entrar rápido desde /pin-login sin escribir correo ni contraseña.'}
+      </div>
 
       <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
         <button

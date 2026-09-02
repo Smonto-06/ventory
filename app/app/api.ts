@@ -273,6 +273,8 @@ export interface AppUser {
   isActive: boolean
   branchId: string | null
   branch?: { id: string; name: string } | null
+  /** true si ya tiene PIN configurado para el ingreso rápido (/pin-login) */
+  hasPin?: boolean
 }
 
 export interface PlanInfo {
@@ -293,6 +295,8 @@ export interface ShiftStat {
 export interface Settings {
   id: string
   name: string
+  /** identificador del negocio para /pin-login — solo lectura, se genera al registrarse */
+  slug?: string
   currency: string
   ivaPct: number
   defaultOpeningAmount: number
@@ -512,6 +516,9 @@ export const api = {
   createUser: (data: unknown) => post<{ user: AppUser }>('/api/users', data),
   updateUser: (id: string, data: unknown) => put<{ user: AppUser }>(`/api/users/${id}`, data),
   deleteUser: (id: string) => del<{ deleted: boolean }>(`/api/users/${id}`),
+  /** pin=null quita el PIN de acceso rápido */
+  setUserPin: (userId: string, pin: string | null) =>
+    post<{ message: string }>('/api/users/set-pin', { userId, pin }),
 
   settings: () => get<{ settings: Settings }>('/api/settings'),
   // Pago del plan por Wompi

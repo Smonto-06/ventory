@@ -14,7 +14,7 @@ const CreateUserSchema = z.object({
   email: z.string().email('El correo no tiene un formato válido'),
   password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
   role: z.enum(['ADMIN', 'SUPERVISOR', 'CASHIER', 'SELLER']).default('CASHIER'),
-  branchId: z.string().optional(),
+  branchId: z.string().nullable().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -33,11 +33,15 @@ export async function GET(req: NextRequest) {
       branchId: true,
       branch: { select: { id: true, name: true } },
       createdAt: true,
+      pin: true,
     },
     orderBy: { createdAt: 'asc' },
   })
 
-  return NextResponse.json({ users })
+  // el hash del PIN no sale del servidor: solo si hay uno configurado o no
+  const withHasPin = users.map(({ pin, ...u }) => ({ ...u, hasPin: pin !== null }))
+
+  return NextResponse.json({ users: withHasPin })
 }
 
 export async function POST(req: NextRequest) {
