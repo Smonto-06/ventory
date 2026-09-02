@@ -110,12 +110,13 @@ export async function aplicarPagoAprobado(
       where: { id: pago.businessId },
       select: { status: true, trialEndsAt: true, paidUntil: true, activatedAt: true },
     })
-    // SUSPENDED es una decisión manual del super admin (app/api/admin/businesses/[id]/route.ts),
-    // no un simple vencimiento — el pago queda registrado como APPROVED (el
-    // cobro sí ocurrió), pero un pago que llega tarde (reintento de un
-    // rechazo previo, con el guard de arriba ampliado a "no está ya
-    // APPROVED") no puede reactivar por su cuenta un negocio que el super
-    // admin suspendió a propósito.
+    // SUSPENDED es una decisión manual del super admin (app/api/admin/businesses/[id]/route.ts)
+    // o automática por un contracargo/reembolso (ver revertirPagoAprobado
+    // más abajo) — nunca un simple vencimiento. El pago queda registrado
+    // como APPROVED (el cobro sí ocurrió), pero un pago que llega tarde
+    // (reintento de un rechazo previo, con el guard de arriba ampliado a
+    // "no está ya APPROVED") no puede reactivar por su cuenta un negocio
+    // suspendido.
     if (negocio.status === 'SUSPENDED') return true
 
     const ahora = Date.now()
@@ -133,6 +134,54 @@ export async function aplicarPagoAprobado(
         activatedAt: negocio.activatedAt ?? new Date(),
       },
     })
+    return true
+  })
+}
+
+/**
+ * Marca un pago como rechazado/anulado y, si ESE pago era el que sostenía el
+ * acceso vigente del negocio (estaba APPROVED y ningún pago posterior lo
+ * reemplazó), suspende el negocio de una. Cubre dos casos bien distintos con
+ * el mismo estado final (DECLINED/VOIDED/ERROR):
+ *  - Un intento que nunca llegó a aprobarse (rechazo inicial, o el reintento
+ *    fallido de una referencia ya declinada): el negocio no cambia — nunca
+ *    tuvo acceso por este pago.
+ *  - Un reembolso o contracargo sobre un pago que SÍ estaba APPROVED: el
+ *    dinero ya no está, así que el acceso tampoco debería seguir — decisión
+ *    de producto explícita (no basta con "avisar y seguir activo").
+ */
+export async function revertirPagoAprobado(
+  paymentId: string,
+  nuevoEstado: 'DECLINED' | 'VOIDED' | 'ERROR',
+  datos: { wompiId?: string; paymentMethod?: string },
+): Promise<boolean> {
+  return db.$transaction(async (tx) => {
+    const pago = await tx.planPayment.findUnique({ where: { id: paymentId }, select: { status: true, businessId: true } })
+    if (!pago) return false
+    const eraAprobado = pago.status === 'APPROVED'
+
+    const cambiado = await tx.planPayment.updateMany({
+      where: { id: paymentId, status: { not: nuevoEstado } },
+      data: { status: nuevoEstado, wompiId: datos.wompiId, paymentMethod: datos.paymentMethod },
+    })
+    if (cambiado.count === 0) return false
+
+    if (eraAprobado) {
+      // ¿Sigue vigente el negocio por OTRO pago más reciente? (p. ej. ya
+      // pagó de nuevo el mes siguiente antes de que este contracargo viejo
+      // llegara) — de ser así, no corresponde suspender por una disputa
+      // sobre un cobro ya superado.
+      const masReciente = await tx.planPayment.findFirst({
+        where: { businessId: pago.businessId, status: 'APPROVED' },
+        orderBy: { paidAt: 'desc' },
+      })
+      if (!masReciente) {
+        await tx.business.updateMany({
+          where: { id: pago.businessId, status: 'ACTIVE' },
+          data: { status: 'SUSPENDED' },
+        })
+      }
+    }
     return true
   })
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { aplicarPagoAprobado } from '@/lib/plan'
-import { wompiConfigurado, eventoValido, EventoWompi } from '@/lib/wompi'
+import { aplicarPagoAprobado, revertirPagoAprobado } from '@/lib/plan'
+import { wompiConfigurado, eventoValido, EventoWompi, referenciaCoincide } from '@/lib/wompi'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,15 +46,30 @@ export async function POST(req: NextRequest) {
   }
 
   if (tx.status === 'APPROVED') {
+    // `reference` no está cubierto por el HMAC del evento (solo id/status/
+    // amount_in_cents lo están) — un payload real y firmado se podría
+    // reenviar cambiando solo la referencia hacia el pago PENDING de otro
+    // negocio con el mismo monto. Se cruza contra la propia API de Wompi
+    // antes de activar nada; si la API confirma que NO es así, se rechaza.
+    // Si la API no responde (ver referenciaCoincide), no se bloquea un pago
+    // que el HMAC ya validó solo por una falla de red ajena a este evento.
+    const coincide = await referenciaCoincide(tx.reference, tx.id)
+    if (coincide === false) {
+      console.error(`Wompi: referencia ${tx.reference} no coincide con transacción ${tx.id}`)
+      return NextResponse.json({ error: 'Referencia no coincide' }, { status: 422 })
+    }
     await aplicarPagoAprobado(pago.id, {
       wompiId: tx.id,
       paymentMethod: tx.payment_method_type,
       finalizedAt: tx.finalized_at,
     })
   } else if (['DECLINED', 'VOIDED', 'ERROR'].includes(tx.status)) {
-    await db.planPayment.updateMany({
-      where: { id: pago.id, status: 'PENDING' },
-      data: { status: tx.status as 'DECLINED' | 'VOIDED' | 'ERROR', wompiId: tx.id, paymentMethod: tx.payment_method_type },
+    // Si el pago YA estaba APPROVED (reembolso/contracargo, no un simple
+    // rechazo de intento), esto también suspende el negocio — ver el
+    // comentario de revertirPagoAprobado.
+    await revertirPagoAprobado(pago.id, tx.status as 'DECLINED' | 'VOIDED' | 'ERROR', {
+      wompiId: tx.id,
+      paymentMethod: tx.payment_method_type,
     })
   }
 

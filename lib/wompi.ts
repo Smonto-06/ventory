@@ -118,13 +118,9 @@ export function eventoValido(evento: EventoWompi): boolean {
   return timingSafeEqual(Buffer.from(esperado), Buffer.from(recibido))
 }
 
-/**
- * Consulta de respaldo: busca en la API de Wompi la transacción de una
- * referencia (cuando el webhook aún no ha llegado). Devuelve la más reciente.
- */
-export async function consultarTransaccion(
+async function listarTransacciones(
   reference: string,
-): Promise<{ id: string; status: string; payment_method_type?: string; finalized_at?: string | null } | null> {
+): Promise<Array<{ id: string; status: string; payment_method_type?: string; finalized_at?: string | null; created_at?: string }> | null> {
   try {
     const res = await fetch(`${wompiApiBase()}/transactions?reference=${encodeURIComponent(reference)}`, {
       headers: { Authorization: `Bearer ${env('WOMPI_PRIVATE_KEY')}` },
@@ -132,10 +128,40 @@ export async function consultarTransaccion(
     })
     if (!res.ok) return null
     const body = (await res.json()) as { data?: Array<{ id: string; status: string; payment_method_type?: string; finalized_at?: string | null; created_at?: string }> }
-    const lista = body.data ?? []
-    if (!lista.length) return null
-    return lista[lista.length - 1]
+    return body.data ?? []
   } catch {
     return null
   }
+}
+
+/**
+ * Consulta de respaldo: busca en la API de Wompi la transacción de una
+ * referencia (cuando el webhook aún no ha llegado). Devuelve la más reciente.
+ */
+export async function consultarTransaccion(
+  reference: string,
+): Promise<{ id: string; status: string; payment_method_type?: string; finalized_at?: string | null } | null> {
+  const lista = await listarTransacciones(reference)
+  if (!lista || !lista.length) return null
+  return lista[lista.length - 1]
+}
+
+/**
+ * Cruza el `reference` del webhook contra la propia API de Wompi: el HMAC
+ * del evento firma `id`/`status`/`amount_in_cents`, pero NO `reference` — un
+ * payload real y firmado se podría reenviar cambiando solo la referencia
+ * hacia el pago PENDING de otro negocio con el mismo monto, sin invalidar el
+ * checksum. Si la API confirma que esa transacción (por id) sí pertenece a
+ * esa referencia, `reference` queda efectivamente atado a datos que la propia
+ * API de Wompi entrega (HTTPS + nuestra llave privada), no solo al HMAC.
+ *
+ * true = confirmado; false = la API respondió pero esa transacción no está
+ * en la lista de esa referencia (evidencia de manipulación → rechazar);
+ * null = no se pudo confirmar (API de Wompi inalcanzable) — no es evidencia
+ * de nada, así que no bloquea por sí solo un pago que el HMAC ya validó.
+ */
+export async function referenciaCoincide(reference: string, transactionId: string): Promise<boolean | null> {
+  const lista = await listarTransacciones(reference)
+  if (lista === null) return null
+  return lista.some((t) => t.id === transactionId)
 }

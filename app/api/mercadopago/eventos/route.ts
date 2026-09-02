@@ -1,10 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { aplicarPagoAprobado } from '@/lib/plan'
+import { aplicarPagoAprobado, revertirPagoAprobado } from '@/lib/plan'
 import { mpConfigurado, consultarPagoMp, estadoDesdeMp } from '@/lib/mercadopago'
 import { PLAN_PRECIO_COP } from '@/lib/wompi'
 
 export const dynamic = 'force-dynamic'
+
+// Sin firma que verificar en la notificación de MP, cualquiera puede pedir
+// POST /api/mercadopago/eventos con un id de pago arbitrario y forzar una
+// consulta saliente a la API de Mercado Pago con nuestro token — no compromete
+// otros negocios (la referencia sí se valida después), pero sí puede agotar
+// cuota/latencia del token de la cuenta real. Freno simple por IP, en memoria
+// del proceso: no sobrevive a varias instancias serverless, pero encarece lo
+// suficiente un abuso sostenido desde una sola fuente sin bloquear el tráfico
+// real de MP (una notificación ocasional por pago).
+const CONSULTAS_POR_MINUTO = 20
+const consultasPorIp = new Map<string, { desde: number; conteo: number }>()
+function limiteExcedido(ip: string): boolean {
+  const ahora = Date.now()
+  const v = consultasPorIp.get(ip)
+  if (!v || ahora - v.desde > 60_000) {
+    consultasPorIp.set(ip, { desde: ahora, conteo: 1 })
+    return false
+  }
+  v.conteo++
+  return v.conteo > CONSULTAS_POR_MINUTO
+}
 
 // Webhook de Mercado Pago. Llega sin sesión — el middleware lo exceptúa igual
 // que /api/cron y /api/wompi.
@@ -21,6 +42,11 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   if (!mpConfigurado()) {
     return NextResponse.json({ error: 'Pago en línea no habilitado' }, { status: 404 })
+  }
+
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'desconocida'
+  if (limiteExcedido(ip)) {
+    return NextResponse.json({ error: 'Demasiadas solicitudes' }, { status: 429 })
   }
 
   // El id del pago puede venir en el cuerpo ({data:{id}}) o en la URL (?id=)
@@ -62,9 +88,12 @@ export async function POST(req: NextRequest) {
       finalizedAt: mp.date_approved,
     })
   } else if (estado === 'DECLINED' || estado === 'VOIDED') {
-    await db.planPayment.updateMany({
-      where: { id: pago.id, status: 'PENDING' },
-      data: { status: estado, wompiId: String(mp.id), paymentMethod: mp.payment_method_id },
+    // Si el pago YA estaba APPROVED, "VOIDED" acá cubre justo el caso de un
+    // reembolso o contracargo (estadoDesdeMp mapea refunded/charged_back a
+    // VOIDED) — también suspende el negocio si sigue vigente por este pago.
+    await revertirPagoAprobado(pago.id, estado, {
+      wompiId: String(mp.id),
+      paymentMethod: mp.payment_method_id,
     })
   }
 
