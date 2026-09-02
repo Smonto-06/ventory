@@ -17,6 +17,15 @@ interface VentoryUser extends User {
 const LOCK_DURATION_MS = 15 * 60 * 1000
 const MAX_FAILED_ATTEMPTS = 5
 
+// Hash sin dueño (de una contraseña que nadie usa), con el mismo costo (12)
+// que bcrypt.hash() en el resto del código: sirve solo para que un correo
+// inexistente tome aproximadamente el mismo tiempo en responder que uno que
+// sí existe pero con contraseña incorrecta. Sin esto, un correo inexistente
+// respondía casi de inmediato (sin bcrypt.compare) mientras uno real
+// tardaba los ~50-100ms del hash — una diferencia de tiempo medible que
+// permite enumerar qué correos están registrados.
+const DUMMY_HASH = '$2b$12$yAM3N2fqGIQeIIh/IudS3eApU7UUXRp0RYCTjkkkwRBCGmYEUdSrm'
+
 export const authOptions: NextAuthOptions = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   adapter: PrismaAdapter(db) as any,
@@ -47,6 +56,9 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (!user) {
+          // Compara igual contra un hash de relleno, para no delatar por el
+          // tiempo de respuesta que este correo no existe (ver DUMMY_HASH).
+          await bcrypt.compare(credentials.password, DUMMY_HASH)
           throw new Error('Correo o contraseña incorrectos')
         }
 
