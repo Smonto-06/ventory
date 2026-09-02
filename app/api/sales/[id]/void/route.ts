@@ -15,6 +15,14 @@ import { cashPortion } from '@/lib/pos'
 
 export const dynamic = 'force-dynamic'
 
+/** Otra anulación concurrente de la misma venta ya ganó la carrera */
+class AlreadyVoidedError extends Error {
+  constructor() {
+    super('La venta ya está anulada')
+    this.name = 'AlreadyVoidedError'
+  }
+}
+
 const VoidSchema = z.object({ reason: z.string().optional() })
 
 /**
@@ -44,11 +52,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!sale) return NextResponse.json({ error: 'Venta no encontrada' }, { status: 404 })
     if (sale.status === 'CANCELLED') return badRequest('La venta ya está anulada')
 
-    // Valor ya devuelto en devoluciones previas (unitario proporcional × retQty)
-    const refunded = sale.items.reduce(
-      (sum, it) => sum + Math.round(Number(it.total) / Number(it.quantity)) * Number(it.returnedQty),
-      0,
-    )
+    // Valor ya devuelto en devoluciones previas: se suma el totalRefund real
+    // que quedó guardado en cada SaleReturn (calculado con la fórmula
+    // proporcional redondeada UNA vez, igual que return/route.ts), no una
+    // reconstrucción con otra fórmula — dos redondeos distintos del mismo
+    // valor pueden no coincidir y dejar $1 de más o de menos en el cajón.
+    const refunded = sale.returns.reduce((sum, r) => sum + Number(r.totalRefund), 0)
     const refund = Math.max(0, Number(sale.total) - refunded)
     const isCredit = sale.paymentMethod === 'CREDIT'
 
@@ -59,16 +68,42 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const saleCashPortion = cashPortion({ total: saleTotal, paymentMethod: sale.paymentMethod, payments: sale.payments })
     const cashRefund = saleTotal > 0 ? Math.round((refund * saleCashPortion) / saleTotal) : 0
 
+    // Las ventas ANULADAS se excluyen de "ventas en efectivo del turno"
+    // (Sale.status ya no es COMPLETED), así que si la venta sigue en el
+    // MISMO turno todavía abierto donde se hizo, esa exclusión YA le resta
+    // su parte en efectivo al esperado — crear además un gasto de caja
+    // restaría el mismo dinero dos veces. Solo hace falta el gasto cuando el
+    // efectivo tiene que salir de un cajón DISTINTO al de la venta original
+    // (turno ya cerrado, u otro cajero anulando desde su propio turno).
     let cashSessionId: string | null = null
     if (cashRefund > 0 && !isCredit) {
-      const cashSession = await findOpenCashSession(db, sale.branchId)
-      if (!cashSession) {
+      const cashSession = await findOpenCashSession(db, sale.branchId, user.id)
+      if (cashSession && cashSession.id !== sale.cashSessionId) {
+        cashSessionId = cashSession.id
+      } else if (!cashSession) {
         return badRequest('No hay caja abierta. Abre un turno antes de anular ventas.')
       }
-      cashSessionId = cashSession.id
     }
 
     const voided = await db.$transaction(async (tx) => {
+      // Reclama la anulación PRIMERO y de forma condicionada al estado
+      // vigente: si dos anulaciones de la misma venta llegan casi
+      // simultáneas (doble clic, reintento de red), la segunda no encuentra
+      // fila COMPLETED que actualizar y se revierte entera — nunca se
+      // duplica el reintegro de stock ni el gasto de caja.
+      const marcada = await tx.sale.updateMany({
+        where: { id: sale.id, status: 'COMPLETED' },
+        data: {
+          status: 'CANCELLED',
+          voidedAt: new Date(),
+          voidedById: user.id,
+          voidReason: reason,
+        },
+      })
+      if (marcada.count === 0) {
+        throw new AlreadyVoidedError()
+      }
+
       // Regresa el stock restante de cada artículo
       for (const item of sale.items) {
         const remaining = Number(item.quantity) - Number(item.returnedQty)
@@ -110,14 +145,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         })
       }
 
-      return tx.sale.update({
+      return tx.sale.findUniqueOrThrow({
         where: { id: sale.id },
-        data: {
-          status: 'CANCELLED',
-          voidedAt: new Date(),
-          voidedById: user.id,
-          voidReason: reason,
-        },
         include: {
           items: { include: { product: { select: { id: true, name: true } } } },
           customer: { select: { id: true, name: true } },
@@ -139,6 +168,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     return NextResponse.json({ sale: serialize(voided), refund })
   } catch (error) {
+    if (error instanceof AlreadyVoidedError) {
+      return badRequest(error.message)
+    }
     return serverError('POST /api/sales/[id]/void', error)
   }
 }

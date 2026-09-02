@@ -15,6 +15,14 @@ import { cashPortion } from '@/lib/pos'
 
 export const dynamic = 'force-dynamic'
 
+/** Otra devolución concurrente ya alcanzó (o superó) el tope vendido de esa línea */
+class OverReturnedError extends Error {
+  constructor() {
+    super('Esa cantidad ya se devolvió por otra operación simultánea')
+    this.name = 'OverReturnedError'
+  }
+}
+
 const ReturnSchema = z.object({
   items: z
     .array(
@@ -109,7 +117,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // La devolución (no el cambio) reembolsa la parte en efectivo: requiere caja abierta
     let cashSessionId: string | null = null
     if (!exchange && cashRefund > 0) {
-      const cashSession = await findOpenCashSession(db, sale.branchId)
+      const cashSession = await findOpenCashSession(db, sale.branchId, user.id)
       if (!cashSession) {
         return badRequest('No hay caja abierta. Abre un turno antes de registrar devoluciones.')
       }
@@ -132,10 +140,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             createdById: user.id,
           },
         })
-        await tx.saleItem.update({
-          where: { id: r.saleItemId },
-          data: { returnedQty: { increment: r.quantity } },
-        })
+        // Incremento CONDICIONADO al valor vigente de returnedQty (no al que
+        // se leyó al validar, fuera de la transacción): si dos devoluciones
+        // de la misma línea llegan casi simultáneas, la segunda encuentra
+        // 0 filas afectadas y se revierte entera, en vez de dejar
+        // returnedQty por encima de lo vendido y pagar el reembolso dos veces.
+        const updated = await tx.$queryRaw<Array<{ returnedQty: unknown }>>`
+          UPDATE "sale_items"
+          SET "returnedQty" = "returnedQty" + ${r.quantity}
+          WHERE "id" = ${r.saleItemId} AND "returnedQty" + ${r.quantity} <= "quantity"
+          RETURNING "returnedQty"
+        `
+        if (updated.length === 0) {
+          throw new OverReturnedError()
+        }
       }
 
       // Devolución → gasto de caja por la parte en efectivo. Cambio → sin gasto
@@ -196,6 +214,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       { status: 201 },
     )
   } catch (error) {
+    if (error instanceof OverReturnedError) {
+      return badRequest(error.message)
+    }
     return serverError('POST /api/sales/[id]/return', error)
   }
 }
