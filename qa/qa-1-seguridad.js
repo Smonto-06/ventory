@@ -197,6 +197,40 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly } = require('./q
     check('interfaz', 'al confirmar eliminar un empleado, el aviso se cierra solo', avisoSigue === 0, 'el aviso de confirmación sigue visible')
   }
 
+  // ── USUARIO DESACTIVADO NO PUEDE ENTRAR (ni con sesión ya iniciada) ──
+  // Bug real: "Desactivar" (Ajustes → Usuarios) marcaba isActive:false pero
+  // ni el login ni el PIN revisaban ese campo, y una sesión JWT ya abierta
+  // tampoco se cortaba a mitad de turno.
+  const desactivable = await A.post('/api/users', {
+    name: 'Empleado Desactivable', email: `desact-${t}@test.com`, password: 'ClaveSegura99', role: 'CASHIER',
+  })
+  if (desactivable.status < 300) {
+    const idDesact = desactivable.data.user.id
+    // Antes de desactivar: el login funciona con normalidad
+    const D = await loginOnly(browser, `desact-${t}@test.com`, 'ClaveSegura99')
+    const antesDeDesactivar = await D.get('/api/products')
+    check('desactivación', 'antes de desactivar, el empleado sí puede entrar', antesDeDesactivar.status === 200, `status ${antesDeDesactivar.status}`)
+
+    // La sesión de D queda abierta (misma cookie) mientras se desactiva
+    await A.put(`/api/users/${idDesact}`, { isActive: false })
+
+    // La sesión YA ABIERTA de D debe cortarse de una, no seguir funcionando
+    const conSesionVieja = await D.get('/api/products')
+    check('desactivación', 'una sesión ya abierta se corta al desactivar (no sigue vendiendo)', conSesionVieja.status === 401, `status ${conSesionVieja.status}`)
+
+    // Un login NUEVO con la contraseña correcta tampoco debe entrar
+    const nuevoIntento = await browser.newContext()
+    const loginPage = await nuevoIntento.newPage()
+    await loginPage.goto('http://localhost:3100/login')
+    await loginPage.fill('input[type=email]', `desact-${t}@test.com`)
+    await loginPage.fill('input[placeholder="Contraseña"]', 'ClaveSegura99')
+    await loginPage.click('button[type=submit]')
+    await loginPage.waitForTimeout(1500)
+    const sigueEnLogin = loginPage.url().includes('/login')
+    check('desactivación', 'un login nuevo con la contraseña correcta es rechazado', sigueEnLogin, `terminó en ${loginPage.url()}`)
+    await nuevoIntento.close()
+  }
+
   // ── SIN SESIÓN ──
   const anon = await browser.newContext()
   const anonPage = await anon.newPage()

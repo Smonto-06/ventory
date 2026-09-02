@@ -19,6 +19,7 @@ jest.mock('@/lib/db', () => ({
     product: { findMany: jest.fn() },
     inventory: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     sale: { count: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
+    customer: { findFirst: jest.fn() },
     saleItem: { create: jest.fn() },
     salePayment: { create: jest.fn() },
     inventoryMovement: { create: jest.fn() },
@@ -275,5 +276,44 @@ describe('POST /api/sales', () => {
     })
     const res = await POST(req)
     expect(res.status).toBe(201)
+  })
+
+  // Bug real encontrado en auditoría: customerId nunca se validaba contra
+  // businessId (products/cashSession/quoteId sí lo hacían) — un id de
+  // cliente de OTRO negocio se podía fiar y su saldo quedaba corrupto.
+  it('returns 400 when customerId does not belong to this business', async () => {
+    ;(db.customer.findFirst as jest.Mock).mockResolvedValueOnce(null)
+    const req = makeRequest({
+      cashSessionId: 'cs-1',
+      items: [{ productId: 'prod-1', quantity: 1, unitPrice: 25 }],
+      paymentMethod: 'CREDIT',
+      customerId: 'customer-from-another-business',
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Cliente no encontrado')
+    // Nunca debió llegar a incrementar el saldo de un cliente ajeno
+    expect(db.$transaction).not.toHaveBeenCalled()
+  })
+
+  // Bug real: un producto agrupador de variantes (hasVariants) no tiene
+  // stock propio y no debería poder venderse directamente — solo sus
+  // variantes concretas. quotes/route.ts y products/search/route.ts ya
+  // filtraban esto; sales/route.ts no.
+  it('returns 400 when trying to sell a variant-grouper product directly', async () => {
+    ;(db.product.findMany as jest.Mock).mockResolvedValueOnce([
+      { ...mockProduct, hasVariants: true },
+    ])
+    const req = makeRequest({
+      cashSessionId: 'cs-1',
+      items: [{ productId: 'prod-1', quantity: 1, unitPrice: 25 }],
+      paymentMethod: 'CASH',
+      amountPaid: 30,
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('tiene variantes')
   })
 })

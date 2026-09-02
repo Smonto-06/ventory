@@ -53,6 +53,13 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Correo o contraseña incorrectos')
         }
 
+        // Un usuario desactivado (Ajustes → Usuarios) no puede entrar, ni
+        // siquiera si todavía recuerda su contraseña — si no, "Desactivar"
+        // no protege nada de verdad.
+        if (!user.isActive) {
+          throw new Error('Esta cuenta está desactivada. Contacta al administrador del negocio.')
+        }
+
         if (!user.emailVerified) {
           throw new Error('Confirma tu correo antes de entrar. Revisa tu bandeja (y el spam).')
         }
@@ -84,14 +91,27 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id as string
-        session.user.role = token.role as UserRole
-        session.user.businessId = token.businessId as string
-        session.user.branchId = token.branchId as string | undefined
-        session.user.businessName = token.businessName as string
-        session.user.businessSlug = token.businessSlug as string
+      if (!token?.id) return session
+
+      // Se revisa en cada resolución de sesión (no solo al iniciar sesión):
+      // un usuario desactivado a mitad de turno debe perder acceso de una,
+      // no seguir vendiendo hasta que la cookie de 8h expire por su cuenta.
+      // NextAuth trata null/undefined como "sin sesión" para getServerSession.
+      const activo = await db.user.findUnique({
+        where: { id: token.id as string },
+        select: { isActive: true },
+      })
+      if (!activo?.isActive) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return null as any
       }
+
+      session.user.id = token.id as string
+      session.user.role = token.role as UserRole
+      session.user.businessId = token.businessId as string
+      session.user.branchId = token.branchId as string | undefined
+      session.user.businessName = token.businessName as string
+      session.user.businessSlug = token.businessSlug as string
       return session
     },
   },
