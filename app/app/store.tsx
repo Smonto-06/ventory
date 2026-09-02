@@ -1009,10 +1009,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const r = await api.createSale(payload)
       await afterSale(r.sale)
     } catch (e) {
-      // Sin conexión: la venta se guarda y se envía sola al volver el internet
+      // Sin conexión: la venta se guarda y se envía sola al volver el internet.
+      // El stock local se baja de una (igual que saveNuevaCompra lo sube): sin
+      // esto, el cajero podía cobrar el mismo producto varias veces por
+      // encima del stock real sin ningún aviso — el rechazo por servidor solo
+      // llegaba, tarde, al sincronizar, con la mercancía ya entregada.
       if (!navigator.onLine || (e instanceof TypeError)) {
         await queueOp({ tipo: 'venta', payload, resumen: fmt(total) })
         setPendingCount((n) => n + 1)
+        const salidas = new Map<string, number>()
+        for (const i of cart) salidas.set(i.productId, (salidas.get(i.productId) ?? 0) + i.qty)
+        setData((prev) => ({
+          ...prev,
+          products: prev.products.map((p) =>
+            salidas.has(p.id) ? { ...p, stock: p.stock - (salidas.get(p.id) ?? 0) } : p,
+          ),
+        }))
         toast('Sin conexión — venta guardada, se enviará al volver el internet')
         newSale()
         return
@@ -1043,10 +1055,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const r = await api.createSale(payload)
         await afterSale(r.sale)
       } catch (e) {
-        // Sin conexión: el fiado también se guarda y se envía solo después
+        // Sin conexión: el fiado también se guarda y se envía solo después.
+        // Mismo descuento local de stock que la venta de contado.
         if (!navigator.onLine || (e instanceof TypeError)) {
           await queueOp({ tipo: 'venta', payload, resumen: `${fmt(total)} a crédito` })
           setPendingCount((n) => n + 1)
+          const salidas = new Map<string, number>()
+          for (const i of cart) salidas.set(i.productId, (salidas.get(i.productId) ?? 0) + i.qty)
+          setData((prev) => ({
+            ...prev,
+            products: prev.products.map((p) =>
+              salidas.has(p.id) ? { ...p, stock: p.stock - (salidas.get(p.id) ?? 0) } : p,
+            ),
+          }))
           setModal(null)
           toast('Sin conexión — venta a crédito guardada, se enviará al volver el internet')
           newSale()

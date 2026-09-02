@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { tileFor, methodLabel } from '../ui'
 import { Icono } from '@/components/Icono'
+import { api, type Sale } from '../api'
+import { diaColombiano } from '@/lib/pos'
 
 const GUIA_KEY = 'ventory-guia-oculta'
 
@@ -181,9 +183,28 @@ function GuiaInicio() {
 export default function PanelScreen() {
   const s = useApp()
 
-  const activeSales = s.sales.filter((v) => v.status === 'COMPLETED')
-  const today = new Date()
-  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+  // s.sales es la lista compartida de "ventas recientes" (tope de 100, sin
+  // filtro de fecha, para Ventas/otras pantallas) — un negocio con más de
+  // ~15 ventas/día ya la agota antes de cubrir los últimos 7 días, así que
+  // "hoy" y el gráfico semanal podían mostrar cifras truncadas. El Panel
+  // pide aparte, con rango de fechas explícito (sin ese tope), exactamente
+  // los últimos 7 días en hora Colombia — no la del navegador.
+  const [weekSales, setWeekSales] = useState<Sale[] | null>(null)
+  useEffect(() => {
+    const hoy = diaColombiano(new Date())
+    const hace6 = diaColombiano(new Date(Date.now() - 6 * 86400000))
+    api
+      .sales(`?dateFrom=${hace6.desde.toISOString()}&dateTo=${hoy.hasta.toISOString()}`)
+      .then((r) => setWeekSales(r.sales))
+      .catch(() => setWeekSales(null))
+  }, [])
+
+  // Mientras carga (o si falla), se usa la lista compartida como respaldo
+  // aproximado — mejor una cifra que puede quedarse corta que una pantalla
+  // vacía en el primer render.
+  const activeSales = (weekSales ?? s.sales).filter((v) => v.status === 'COMPLETED')
+  const hoyRango = diaColombiano(new Date())
+  const startOfDay = hoyRango.desde.getTime()
   const todaySales = activeSales.filter((v) => new Date(v.createdAt).getTime() >= startOfDay)
   const salesTotal = todaySales.reduce((a, v) => a + v.total, 0)
 
@@ -224,13 +245,13 @@ export default function PanelScreen() {
   })
   const donutBg = `conic-gradient(${stops.join(',')})`
 
-  // Línea de los últimos 7 días con datos reales
+  // Línea de los últimos 7 días con datos reales, en días calendario Colombia
   const daySeries: Array<{ label: string; total: number }> = []
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i)
-    const from = d.getTime()
-    const to = from + 86400000
-    const label = i === 0 ? 'Hoy' : d.toLocaleDateString('es-CO', { weekday: 'short' })
+    const dia = diaColombiano(new Date(Date.now() - i * 86400000))
+    const from = dia.desde.getTime()
+    const to = dia.hasta.getTime()
+    const label = i === 0 ? 'Hoy' : dia.etiqueta.toLocaleDateString('es-CO', { weekday: 'short', timeZone: 'UTC' })
     daySeries.push({
       label: label.charAt(0).toUpperCase() + label.slice(1).replace('.', ''),
       total: activeSales
