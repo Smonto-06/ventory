@@ -105,6 +105,44 @@ const { check, summary, newBrowser, registerAndLogin } = require('./qa-lib')
   const doblreAnul = await S.post(`/api/sales/${ventaAnular.data.sale.id}/void`, {})
   check('anulaciones', 'no se puede anular dos veces la misma venta', doblreAnul.status >= 400, `status ${doblreAnul.status}`)
 
+  // ── REEMBOLSOS: solo la parte en EFECTIVO sale del cajón ──
+  // Tarjeta/transferencia no ponen billetes en la caja (cashPortion()); el
+  // reembolso de una devolución o anulación tampoco debería sacarlos si la
+  // venta nunca los metió — si no, cada cierre da un "faltante" ficticio.
+  const prodReemb = (await S.post('/api/products', { name: `ProdReemb ${t}`, price: 20000, branchId, initialStock: 100 })).data.product
+
+  const ventaTransf = await vender({
+    items: [{ productId: prodReemb.id, quantity: 1, unitPrice: 20000 }],
+    paymentMethod: 'TRANSFER', amountPaid: 20000,
+  })
+  const esperadoAntesTransf = (await S.get('/api/cash-registers/current')).data.summary.expectedBalance
+  const devTransf = await S.post(`/api/sales/${ventaTransf.data.sale.id}/return`, {
+    items: [{ saleItemId: ventaTransf.data.sale.items[0].id, quantity: 1 }], exchange: false,
+  })
+  const esperadoDespTransf = (await S.get('/api/cash-registers/current')).data.summary.expectedBalance
+  check('reembolsos', 'devolver una venta por TRANSFERENCIA no toca el efectivo esperado', esperadoDespTransf === esperadoAntesTransf, `${esperadoAntesTransf} → ${esperadoDespTransf}`)
+  check('reembolsos', 'esa devolución no genera gasto de caja (no hay cashMovementId)', devTransf.data.return?.cashMovementId === null, JSON.stringify(devTransf.data.return?.cashMovementId))
+
+  const ventaTarjeta = await vender({
+    items: [{ productId: prodReemb.id, quantity: 1, unitPrice: 20000 }],
+    paymentMethod: 'CARD', payments: { cashActive: false, cashReceived: 0, card: 20000, transfer: 0 },
+  })
+  const esperadoAntesTarjeta = (await S.get('/api/cash-registers/current')).data.summary.expectedBalance
+  await S.post(`/api/sales/${ventaTarjeta.data.sale.id}/void`, {})
+  const esperadoDespTarjeta = (await S.get('/api/cash-registers/current')).data.summary.expectedBalance
+  check('reembolsos', 'anular una venta 100% TARJETA no toca el efectivo esperado', esperadoDespTarjeta === esperadoAntesTarjeta, `${esperadoAntesTarjeta} → ${esperadoDespTarjeta}`)
+
+  const ventaMixta = await vender({
+    items: [{ productId: prodReemb.id, quantity: 1, unitPrice: 30000 }],
+    paymentMethod: 'MIXED', payments: { cashActive: true, cashReceived: 15000, card: 0, transfer: 15000 },
+  })
+  const esperadoAntesMixta = (await S.get('/api/cash-registers/current')).data.summary.expectedBalance
+  await S.post(`/api/sales/${ventaMixta.data.sale.id}/return`, {
+    items: [{ saleItemId: ventaMixta.data.sale.items[0].id, quantity: 1 }], exchange: false,
+  })
+  const esperadoDespMixta = (await S.get('/api/cash-registers/current')).data.summary.expectedBalance
+  check('reembolsos', 'devolver una venta MIXTA solo descuenta su parte en efectivo (15.000, no 30.000)', esperadoAntesMixta - esperadoDespMixta === 15000, `bajó ${esperadoAntesMixta - esperadoDespMixta}`)
+
   // ── COMPRAS ──
   const compraContado = await S.post('/api/purchases', { branchId, supplierName: `Prov ${t}`, method: 'CASH', items: [{ productId: prod.id, quantity: 10, unitCost: 6000 }] })
   check('compras', 'compra de contado registrada', compraContado.status === 201, `status ${compraContado.status}`)

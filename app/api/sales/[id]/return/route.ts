@@ -11,6 +11,7 @@ import {
 } from '@/lib/api-helpers'
 import { CashMovementType, MovementType } from '@prisma/client'
 import { moveStock } from '@/lib/inventory'
+import { cashPortion } from '@/lib/pos'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   try {
     const sale = await db.sale.findFirst({
       where: { id: params.id, branch: { businessId: user.businessId } },
-      include: { items: true },
+      include: { items: true, payments: true },
     })
     if (!sale) return NextResponse.json({ error: 'Venta no encontrada' }, { status: 404 })
     if (sale.status === 'CANCELLED') return badRequest('La venta está anulada')
@@ -93,9 +94,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return badRequest('No hay cantidades disponibles para devolver')
     }
 
-    // La devolución (no el cambio) reembolsa efectivo: requiere caja abierta
+    // Solo la parte de la venta que SÍ entró en efectivo sale del cajón al
+    // devolver; tarjeta/transferencia se reembolsan por fuera y no lo tocan
+    // (misma regla que cashPortion() ya aplica para las ventas). Proporcional
+    // a lo devuelto: una devolución parcial solo arrastra su parte del pago.
+    const saleTotal = Number(sale.total)
+    const saleCashPortion = cashPortion({
+      total: saleTotal,
+      paymentMethod: sale.paymentMethod,
+      payments: sale.payments,
+    })
+    const cashRefund = saleTotal > 0 ? Math.round((totalRefund * saleCashPortion) / saleTotal) : 0
+
+    // La devolución (no el cambio) reembolsa la parte en efectivo: requiere caja abierta
     let cashSessionId: string | null = null
-    if (!exchange && totalRefund > 0) {
+    if (!exchange && cashRefund > 0) {
       const cashSession = await findOpenCashSession(db, sale.branchId)
       if (!cashSession) {
         return badRequest('No hay caja abierta. Abre un turno antes de registrar devoluciones.')
@@ -125,13 +138,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         })
       }
 
-      // Devolución → gasto de caja. Cambio → sin gasto (se aplica como descuento en nueva venta).
+      // Devolución → gasto de caja por la parte en efectivo. Cambio → sin gasto
+      // (se aplica como descuento en nueva venta).
       let cashMovementId: string | null = null
-      if (!exchange && totalRefund > 0 && cashSessionId) {
+      if (!exchange && cashRefund > 0 && cashSessionId) {
         const movement = await tx.cashMovement.create({
           data: {
             type: CashMovementType.EXPENSE,
-            amount: totalRefund,
+            amount: cashRefund,
             description: 'Devolución',
             comment: sale.folio,
             cashSessionId,

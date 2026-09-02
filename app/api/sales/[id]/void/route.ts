@@ -11,6 +11,7 @@ import {
 } from '@/lib/api-helpers'
 import { CashMovementType, MovementType } from '@prisma/client'
 import { moveStock } from '@/lib/inventory'
+import { cashPortion } from '@/lib/pos'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   try {
     const sale = await db.sale.findFirst({
       where: { id: params.id, branch: { businessId: user.businessId } },
-      include: { items: true, returns: true },
+      include: { items: true, returns: true, payments: true },
     })
     if (!sale) return NextResponse.json({ error: 'Venta no encontrada' }, { status: 404 })
     if (sale.status === 'CANCELLED') return badRequest('La venta ya está anulada')
@@ -51,8 +52,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const refund = Math.max(0, Number(sale.total) - refunded)
     const isCredit = sale.paymentMethod === 'CREDIT'
 
+    // Solo la parte de la venta que SÍ entró en efectivo sale del cajón al
+    // anular; tarjeta/transferencia no lo tocan (misma regla que cashPortion()
+    // ya aplica para las ventas), proporcional a lo que queda por anular.
+    const saleTotal = Number(sale.total)
+    const saleCashPortion = cashPortion({ total: saleTotal, paymentMethod: sale.paymentMethod, payments: sale.payments })
+    const cashRefund = saleTotal > 0 ? Math.round((refund * saleCashPortion) / saleTotal) : 0
+
     let cashSessionId: string | null = null
-    if (refund > 0 && !isCredit) {
+    if (cashRefund > 0 && !isCredit) {
       const cashSession = await findOpenCashSession(db, sale.branchId)
       if (!cashSession) {
         return badRequest('No hay caja abierta. Abre un turno antes de anular ventas.')
@@ -80,12 +88,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         })
       }
 
-      // Gasto de caja por lo no devuelto (venta de contado/combinada)
-      if (refund > 0 && !isCredit && cashSessionId) {
+      // Gasto de caja por la parte en efectivo de lo no devuelto (venta de contado/combinada)
+      if (cashRefund > 0 && !isCredit && cashSessionId) {
         await tx.cashMovement.create({
           data: {
             type: CashMovementType.EXPENSE,
-            amount: refund,
+            amount: cashRefund,
             description: 'Anulación de venta',
             comment: sale.folio,
             cashSessionId,
