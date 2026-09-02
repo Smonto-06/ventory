@@ -39,6 +39,8 @@ export default function NuevaCompraScreen() {
   const [query, setQuery] = useState('')
   const [provOpen, setProvOpen] = useState(false)
   const [edit, setEdit] = useState<NcItem | null>(null)
+  // Evita doble toque en "Guardar compra" mientras la primera petición sigue en vuelo
+  const [guardando, setGuardando] = useState(false)
 
   const openEditor = (p: Product) => {
     const cost = p.cost || 0
@@ -75,7 +77,17 @@ export default function NuevaCompraScreen() {
   const showProvSuggs = provOpen && provSuggs.length > 0
 
   const ncTotal = s.ncItems.reduce((a, i) => a + (i.total || 0), 0)
-  const canSave = !!s.ncProv.trim() && s.ncItems.length > 0
+  const canSave = !!s.ncProv.trim() && s.ncItems.length > 0 && !guardando
+
+  const guardarCompra = async () => {
+    if (!canSave) return
+    setGuardando(true)
+    try {
+      await s.saveNuevaCompra()
+    } finally {
+      setGuardando(false)
+    }
+  }
   // Productos vendidos por peso: cantidades decimales (kg)
   const isKg = (productId: string) => s.products.find((p) => p.id === productId)?.unitOfMeasure === 'kg'
 
@@ -333,9 +345,8 @@ export default function NuevaCompraScreen() {
               {(s.ncItems.length ? 'Poner en espera' : 'Ver esperas') + (s.heldPurchases.length ? ' · ' + s.heldPurchases.length : '')}
             </button>
             <button
-              onClick={() => {
-                if (canSave) s.saveNuevaCompra()
-              }}
+              onClick={guardarCompra}
+              disabled={!canSave}
               className={canSave ? 'v-hover-primary' : undefined}
               style={{
                 width: '100%',
@@ -349,7 +360,7 @@ export default function NuevaCompraScreen() {
                 boxShadow: canSave ? '0 8px 18px -8px #6366F1cc' : undefined,
               }}
             >
-              Guardar compra
+              {guardando ? 'Guardando…' : 'Guardar compra'}
             </button>
           </div>
         </aside>
