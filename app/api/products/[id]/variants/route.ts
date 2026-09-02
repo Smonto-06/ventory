@@ -48,7 +48,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const padre = await db.product.findFirst({
       where: { id: params.id, businessId: session.user.businessId },
-      include: { inventory: { select: { branchId: true, quantity: true, minStock: true } } },
     })
     if (!padre) {
       return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
@@ -93,15 +92,27 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // Un producto suelto que pasa a tener variantes: su inventario actual se
     // mueve a la primera variante y el padre queda solo como agrupador.
     const convirtiendo = !padre.hasVariants
-    const stockHeredado = convirtiendo
-      ? padre.inventory.map((i) => ({
-          branchId: i.branchId,
-          quantity: Number(i.quantity),
-          minStock: Number(i.minStock),
-        }))
-      : []
 
     const creadas = await db.$transaction(async (tx) => {
+      // El stock heredado se lee y se bloquea DENTRO de la transacción (no
+      // antes de abrirla): si una venta concurrente del producto suelto
+      // alcanza a descontar stock mientras se arma este formulario, la
+      // primera variante hereda el valor real y actual, no uno viejo —
+      // mismo idioma que setStock() en lib/inventory.ts.
+      const stockHeredado = convirtiendo
+        ? (
+            await tx.$queryRaw<Array<{ branchId: string; quantity: string; minStock: string }>>`
+              SELECT "branchId", "quantity", "minStock" FROM "inventory"
+              WHERE "productId" = ${padre.id}
+              FOR UPDATE
+            `
+          ).map((i) => ({
+            branchId: i.branchId,
+            quantity: Number(i.quantity),
+            minStock: Number(i.minStock),
+          }))
+        : []
+
       if (convirtiendo) {
         await tx.product.update({
           where: { id: padre.id },

@@ -92,8 +92,16 @@ export async function POST(req: NextRequest) {
   if (planBlock) return planBlock
 
   try {
+    // Caja por usuario: cada quien vende contra SU propio turno abierto, no
+    // el de otro cajero (aunque esté abierto en la misma sucursal) — si no,
+    // el efectivo cobrado por uno termina en el cierre de otro.
     const cashSession = await db.cashSession.findFirst({
-      where: { id: cashSessionId, status: CashSessionStatus.OPEN, branch: { businessId } },
+      where: {
+        id: cashSessionId,
+        status: CashSessionStatus.OPEN,
+        openedById: cashierId,
+        branch: { businessId },
+      },
     })
     if (!cashSession) {
       return NextResponse.json(
@@ -120,7 +128,27 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       )
     }
+    // Un agrupador de variantes no se vende (no tiene stock propio): se
+    // vende la variante concreta. Mismo guard que ya aplica quotes/route.ts.
+    const agrupador = products.find((p) => p.hasVariants)
+    if (agrupador) {
+      return NextResponse.json(
+        { error: `"${agrupador.name}" tiene variantes: elige una para vender` },
+        { status: 400 },
+      )
+    }
     const productMap = new Map(products.map((p) => [p.id, p]))
+
+    // El cliente (crédito o solo asociado a una venta de contado) debe ser
+    // del mismo negocio: el id es un cuid global, no compuesto con
+    // businessId, así que sin este chequeo se podría fiar o adjuntar a un
+    // cliente de OTRO negocio (fuga de datos + saldo corrupto ajeno).
+    if (customerId) {
+      const customer = await db.customer.findFirst({ where: { id: customerId, businessId } })
+      if (!customer) {
+        return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 400 })
+      }
+    }
 
     const inventoryRecords = await db.inventory.findMany({
       where: { productId: { in: productIds }, branchId },

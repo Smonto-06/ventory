@@ -98,17 +98,28 @@ export async function GET(req: NextRequest) {
         cashier: { select: { name: true } },
         customer: { select: { name: true } },
         payments: { select: { method: true, amount: true } },
-        items: { select: { quantity: true } },
+        items: { select: { quantity: true, returnedQty: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: 10000,
     })
+    // SaleStatus.REFUNDED nunca se asigna en ningún endpoint: una devolución
+    // (total o parcial) no cambia sale.status, solo SaleItem.returnedQty —
+    // se deriva la etiqueta a partir de eso, si no toda venta devuelta salía
+    // como "completada" en el CSV.
+    const estadoVenta = (v: (typeof sales)[number]) => {
+      if (v.status === 'CANCELLED') return 'anulada'
+      const vendido = v.items.reduce((s, i) => s + Number(i.quantity), 0)
+      const devuelto = v.items.reduce((s, i) => s + Number(i.returnedQty), 0)
+      if (devuelto <= 0) return 'completada'
+      return devuelto >= vendido ? 'devuelta total' : 'devuelta parcial'
+    }
     const rows: Array<Array<string | number>> = [
       ['fecha', 'factura', 'estado', 'cajero', 'cliente', 'metodo', 'articulos', 'subtotal', 'descuento', 'total', 'iva_incluido'],
     ]
     for (const v of sales) {
       rows.push([
-        fdate(v.createdAt), v.folio, v.status === 'COMPLETED' ? 'completada' : v.status === 'CANCELLED' ? 'anulada' : 'devuelta',
+        fdate(v.createdAt), v.folio, estadoVenta(v),
         v.cashier?.name ?? '', v.customer?.name ?? '',
         methodLabel(v.paymentMethod, v.payments.map((p) => ({ method: p.method }))),
         v.items.reduce((s, i) => s + Number(i.quantity), 0),

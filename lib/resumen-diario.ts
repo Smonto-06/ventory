@@ -50,12 +50,14 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
       select: {
         total: true,
         paymentMethod: true,
+        cashSessionId: true,
         payments: { select: { method: true, amount: true } },
         items: {
           select: {
             quantity: true,
             unitPrice: true,
-            product: { select: { name: true, cost: true } },
+            costPrice: true,
+            product: { select: { name: true } },
           },
         },
       },
@@ -74,11 +76,12 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
     }),
     db.cashMovement.findMany({
       where: { cashSession: { branch: { businessId } }, createdAt: enElDia },
-      select: { type: true, amount: true },
+      select: { type: true, amount: true, cashSessionId: true },
     }),
     db.cashSession.findMany({
       where: { branch: { businessId }, openedAt: enElDia },
       select: {
+        id: true,
         status: true,
         openingBalance: true,
         closingBalance: true,
@@ -116,21 +119,37 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
     }
   }
 
+  // Costo snapshot de cada línea (SaleItem.costPrice), no el costo ACTUAL del
+  // producto: si el costo cambió el mismo día (p. ej. tras una compra), usar
+  // el valor en vivo desajusta esta utilidad frente a la que ya congelaron
+  // /api/reports/daily y /api/reports/range para el mismo día.
   const costo = ventas.reduce(
-    (a, v) => a + v.items.reduce((b, i) => b + Number(i.quantity) * Number(i.product.cost ?? 0), 0),
+    (a, v) => a + v.items.reduce((b, i) => b + Number(i.quantity) * Number(i.costPrice ?? 0), 0),
     0,
   )
-  const ingresos = movimientos
-    .filter((m) => m.type === 'INCOME')
-    .reduce((a, m) => a + Number(m.amount), 0)
+  // Gastos operativos del día completo (todos los turnos) — es lo que resta
+  // en la utilidad neta del negocio, sin importar en qué cajón se registraron.
   const gastos = movimientos
     .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
     .reduce((a, m) => a + Number(m.amount), 0)
 
   const abierta = sesiones.find((s) => s.status === 'OPEN')
   const apertura = abierta ? Number(abierta.openingBalance) : 0
+  // El saldo esperado de "caja" sí es de UN cajón físico concreto: solo
+  // cuenta lo de ESE turno — no de todo el día: puede haber turnos ya
+  // cerrados antes (su efectivo ya se contó y se retiró al cerrar) u otros
+  // cajeros con turno propio abierto a la vez ("caja por usuario").
+  const movimientosTurno = abierta ? movimientos.filter((m) => m.cashSessionId === abierta.id) : []
+  const ingresosTurno = movimientosTurno
+    .filter((m) => m.type === 'INCOME')
+    .reduce((a, m) => a + Number(m.amount), 0)
+  const gastosTurno = movimientosTurno
+    .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
+    .reduce((a, m) => a + Number(m.amount), 0)
   const efectivoTurno = abierta
-    ? ventas.reduce((a, v) => a + cashPortion({ ...v, total: Number(v.total) }), 0)
+    ? ventas
+        .filter((v) => v.cashSessionId === abierta.id)
+        .reduce((a, v) => a + cashPortion({ ...v, total: Number(v.total) }), 0)
     : 0
 
   const productos = new Map<string, { cantidad: number; total: number }>()
@@ -167,9 +186,9 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
     utilidad: { costo, gastos, neta: profitReport(total, costo, gastos).net },
     caja: {
       apertura,
-      ingresos,
-      gastos,
-      esperado: apertura + efectivoTurno + ingresos - gastos,
+      ingresos: ingresosTurno,
+      gastos: gastosTurno,
+      esperado: apertura + efectivoTurno + ingresosTurno - gastosTurno,
       turnoAbierto: !!abierta,
     },
     cierres: sesiones

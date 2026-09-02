@@ -36,11 +36,16 @@ export function isFullAdmin(user: SessionUser): boolean {
 
 type Tx = Prisma.TransactionClient
 
-/** Sesión de caja abierta de una sucursal (para movimientos de caja generados por otras operaciones) */
-export async function findOpenCashSession(client: Tx | typeof db, branchId: string) {
+/**
+ * La caja abierta del usuario que hace la operación (para movimientos de
+ * caja generados por otras operaciones: devoluciones, abonos, compras…).
+ * Cada usuario abre/cierra SU turno — nunca la "más reciente de la
+ * sucursal": con dos cajeros abiertos a la vez en la misma sucursal, eso
+ * metía el movimiento de uno en el cajón físico del otro.
+ */
+export async function findOpenCashSession(client: Tx | typeof db, branchId: string, openedById: string) {
   return client.cashSession.findFirst({
-    where: { branchId, status: CashSessionStatus.OPEN },
-    orderBy: { openedAt: 'desc' },
+    where: { branchId, status: CashSessionStatus.OPEN, openedById },
   })
 }
 

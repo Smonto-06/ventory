@@ -108,13 +108,17 @@ export async function POST(req: NextRequest) {
     const paidAmount =
       method === 'CREDIT' ? Math.min(Math.round(initialPayment), total) : total
 
-    // El pago de contado sale de la caja física: requiere turno abierto
+    // Lo que sale de la caja física: el total si es de contado, o el abono
+    // inicial en efectivo si es a crédito (transferencia no toca el cajón).
+    const cashOutflow = method === 'CASH' ? total : method === 'CREDIT' ? paidAmount : 0
+
+    // El pago en efectivo sale de la caja física: requiere turno abierto
     let cashSessionId: string | null = null
-    if (method === 'CASH' && total > 0) {
-      const cashSession = await findOpenCashSession(db, branchId)
+    if (cashOutflow > 0) {
+      const cashSession = await findOpenCashSession(db, branchId, user.id)
       if (!cashSession) {
         return badRequest(
-          'No hay caja abierta. Abre un turno antes de registrar compras de contado.',
+          'No hay caja abierta. Abre un turno antes de registrar compras o abonos en efectivo.',
         )
       }
       cashSessionId = cashSession.id
@@ -194,15 +198,17 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      // Contado → gasto de caja "Pago a proveedor". Transferencia no toca caja física.
-      // Crédito: el abono inicial tampoco genera movimiento (regla del prototipo).
+      // Contado → gasto de caja "Pago a proveedor" por el total. Crédito con
+      // abono inicial en efectivo → gasto de caja por ese abono (SÍ sale
+      // plata real del cajón, aunque el resto de la compra quede fiado).
+      // Transferencia no toca caja física.
       let cashMovementId: string | null = null
-      if (method === 'CASH' && total > 0 && cashSessionId) {
+      if (cashOutflow > 0 && cashSessionId) {
         const movement = await tx.cashMovement.create({
           data: {
             type: CashMovementType.EXPENSE,
-            amount: total,
-            description: 'Pago a proveedor',
+            amount: cashOutflow,
+            description: method === 'CREDIT' ? 'Abono inicial a proveedor' : 'Pago a proveedor',
             comment: supplier.name,
             cashSessionId,
             createdById: user.id,

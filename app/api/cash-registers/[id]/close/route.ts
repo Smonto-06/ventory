@@ -8,6 +8,14 @@ import { serialize } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
 
+/** Otro cierre concurrente de la misma sesión ya ganó la carrera */
+class AlreadyClosedError extends Error {
+  constructor() {
+    super('Sesión de caja no encontrada o ya está cerrada')
+    this.name = 'AlreadyClosedError'
+  }
+}
+
 const closeSchema = z.object({
   // Total contado físicamente (calculadora de billetes del prototipo)
   closingBalance: z.number().min(0, 'El monto contado no puede ser negativo'),
@@ -104,40 +112,64 @@ export async function POST(
     )
   }
 
-  const result = await db.$transaction(async (tx) => {
-    const closed = await tx.cashSession.update({
-      where: { id: params.id },
-      data: {
-        status: 'CLOSED',
-        closingBalance,
-        expectedBalance: calc.expectedBalance,
-        difference: calc.difference,
-        closingNotes,
-        closedAt: new Date(),
-        closedById: user.id,
-      },
-      include: {
-        branch: { select: { id: true, name: true } },
-        openedBy: { select: { id: true, name: true } },
-        closedBy: { select: { id: true, name: true } },
-      },
-    })
-
-    // Apertura del siguiente turno (prefill = contado, como el prototipo)
-    let next = null
-    if (openNext) {
-      next = await tx.cashSession.create({
+  const closeSession = async () => {
+    return db.$transaction(async (tx) => {
+      // Reclama el cierre PRIMERO, condicionado al estado vigente: si dos
+      // cierres de la misma sesión llegan casi simultáneos (doble clic,
+      // reintento de red), el segundo no encuentra fila OPEN que actualizar
+      // y se revierte entero — nunca se abren dos turnos siguientes ni se
+      // pisan expectedBalance/difference entre sí.
+      const marcada = await tx.cashSession.updateMany({
+        where: { id: params.id, status: 'OPEN' },
         data: {
-          openingBalance: nextOpeningAmount ?? closingBalance,
-          branchId: session.branchId,
-          openedById: user.id,
-          notes: 'Apertura tras cierre de turno',
+          status: 'CLOSED',
+          closingBalance,
+          expectedBalance: calc.expectedBalance,
+          difference: calc.difference,
+          closingNotes,
+          closedAt: new Date(),
+          closedById: user.id,
         },
       })
-    }
+      if (marcada.count === 0) {
+        throw new AlreadyClosedError()
+      }
 
-    return { closed, next }
-  })
+      const closed = await tx.cashSession.findUniqueOrThrow({
+        where: { id: params.id },
+        include: {
+          branch: { select: { id: true, name: true } },
+          openedBy: { select: { id: true, name: true } },
+          closedBy: { select: { id: true, name: true } },
+        },
+      })
+
+      // Apertura del siguiente turno (prefill = contado, como el prototipo)
+      let next = null
+      if (openNext) {
+        next = await tx.cashSession.create({
+          data: {
+            openingBalance: nextOpeningAmount ?? closingBalance,
+            branchId: session.branchId,
+            openedById: user.id,
+            notes: 'Apertura tras cierre de turno',
+          },
+        })
+      }
+
+      return { closed, next }
+    })
+  }
+
+  let result: Awaited<ReturnType<typeof closeSession>>
+  try {
+    result = await closeSession()
+  } catch (error) {
+    if (error instanceof AlreadyClosedError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    throw error
+  }
 
   db.auditLog
     .create({

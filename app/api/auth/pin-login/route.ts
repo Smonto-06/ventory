@@ -37,11 +37,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // Find users with PIN in this business
+    // Find active users with PIN in this business — un usuario desactivado
+    // (Ajustes → Usuarios) tampoco puede entrar por PIN
     const users = await db.user.findMany({
       where: {
         businessId: business.id,
         pin: { not: null },
+        isActive: true,
       },
     })
 
@@ -77,24 +79,23 @@ export async function POST(request: Request) {
     }
 
     if (!matchedUser) {
-      // Increment failed attempts for all PIN users in this business
-      await db.user.updateMany({
-        where: { businessId: business.id, pin: { not: null } },
-        data: { failedAttempts: { increment: 1 } },
-      })
-
-      // Check if any should be locked
-      const updatedUsers = await db.user.findMany({
-        where: { businessId: business.id, pin: { not: null } },
-      })
-
-      for (const u of updatedUsers) {
-        if (u.failedAttempts >= MAX_FAILED_ATTEMPTS && !u.lockedAt) {
-          await db.user.update({
-            where: { id: u.id },
-            data: { lockedAt: new Date() },
-          })
-        }
+      // El PIN se compara contra TODOS los usuarios del negocio a la vez (no
+      // se elige antes a quién pertenece), así que no hay forma de saber a
+      // cuál cuenta atribuirle este intento fallido. Bloquear a todos por un
+      // solo PIN equivocado dejaría a todo el equipo sin acceso rápido con
+      // solo 5 intentos — un bloqueo trivial de cualquiera, no solo de quien
+      // se equivocó. Bloquear SÍ tiene sentido cuando hay un único cajero con
+      // PIN en el negocio: ahí el intento es inequívocamente suyo.
+      if (users.length === 1) {
+        const [u] = users
+        const failedAttempts = u.failedAttempts + 1
+        await db.user.update({
+          where: { id: u.id },
+          data: {
+            failedAttempts,
+            ...(failedAttempts >= MAX_FAILED_ATTEMPTS ? { lockedAt: new Date() } : {}),
+          },
+        })
       }
 
       return NextResponse.json(

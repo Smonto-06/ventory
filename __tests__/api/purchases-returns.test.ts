@@ -132,11 +132,13 @@ describe('Compras (POST /api/purchases)', () => {
     expect(body.purchase.total).toBe(100000)
     expect(body.purchase.balance).toBe(60000)
 
-    // El abono inicial de una compra a crédito no genera movimiento de caja (regla del prototipo)
-    const movsBefore = await db.cashMovement.count({
-      where: { cashSessionId: f.cashSession.id },
+    // El abono inicial de una compra a crédito SÍ sale de la caja física en
+    // efectivo (aunque el resto de la compra quede fiado): genera su propio
+    // gasto de caja, igual que el abono posterior.
+    const initialMovement = await db.cashMovement.findFirst({
+      where: { cashSessionId: f.cashSession.id, description: 'Abono inicial a proveedor' },
     })
-    expect(movsBefore).toBe(0)
+    expect(Number(initialMovement!.amount)).toBe(40000)
 
     // Abono posterior en efectivo → gasto "Pago a proveedor", con tope al saldo
     const payRes = await payPurchase(
@@ -267,10 +269,14 @@ describe('Devoluciones y anulación', () => {
     const inv = await db.inventory.findUnique({ where: { id: f.inventory.id } })
     expect(Number(inv!.quantity)).toBe(12) // 10 − 0 (venta directa no descontó) +1 dev +1 anulación
 
+    // La venta se anuló DENTRO del mismo turno todavía abierto donde se
+    // hizo: al pasar a CANCELLED deja de contar como venta en efectivo del
+    // turno, así que esa exclusión ya le resta su parte al esperado — no
+    // hace falta (y sería un doble descuento) crear además un gasto de caja.
     const voidMov = await db.cashMovement.findFirst({
       where: { cashSessionId: f.cashSession.id, description: 'Anulación de venta' },
     })
-    expect(Number(voidMov!.amount)).toBe(50000)
+    expect(voidMov).toBeNull()
 
     // No se puede anular dos veces
     const res2 = await voidSale(makeRequest(`/api/sales/${sale.id}/void`, {}), {
@@ -310,6 +316,54 @@ describe('Abono de cliente (POST /api/customers/[id]/payments)', () => {
       { params: { id: f.customer.id } },
     )
     expect(res2.status).toBe(400)
+  })
+})
+
+// Bug real de auditoría: findOpenCashSession() resolvía "la caja abierta más
+// reciente de la SUCURSAL", no la del usuario que actúa. Con dos cajeros
+// abiertos a la vez en la misma sucursal (el modelo "caja por usuario" es
+// intencional), un abono/gasto/devolución de uno terminaba contabilizado en
+// el cajón físico del otro.
+describe('Caja por usuario: un movimiento de un cajero no debe caer en el turno de otro', () => {
+  it('el abono de cliente de un cajero cae en SU propio turno, no en el de otro cajero abierto en la misma sucursal', async () => {
+    const f = await buildFixture()
+
+    // Un segundo cajero abre turno DESPUÉS, en la MISMA sucursal — el
+    // escenario exacto del bug (findOpenCashSession ordenaba por
+    // openedAt desc y devolvía "la más reciente", sin mirar quién actúa)
+    const cajeroB = await db.user.create({
+      data: {
+        email: `cajerob-${f.business.id}@test.com`,
+        password: 'hashed',
+        name: 'Cajero B',
+        role: 'CASHIER',
+        businessId: f.business.id,
+        branchId: f.branch.id,
+      },
+    })
+    await db.cashSession.create({
+      data: { openingBalance: 50000, branchId: f.branch.id, openedById: cajeroB.id },
+    })
+
+    // Ana (f.admin, dueña de f.cashSession) recibe un abono en efectivo
+    ;(getCurrentUser as jest.Mock).mockResolvedValue(f.sessionUser)
+    const res = await payCustomer(
+      makeRequest(`/api/customers/${f.customer.id}/payments`, { amount: 30000, method: 'CASH' }),
+      { params: { id: f.customer.id } },
+    )
+    expect(res.status).toBe(201)
+
+    // El movimiento debe quedar en el turno de Ana, no en el de Cajero B
+    const enSuTurno = await db.cashMovement.findFirst({
+      where: { cashSessionId: f.cashSession.id, description: 'Abono de cliente' },
+    })
+    expect(enSuTurno).not.toBeNull()
+    expect(Number(enSuTurno!.amount)).toBe(30000)
+
+    const movsCajeroB = await db.cashMovement.count({
+      where: { cashSession: { openedById: cajeroB.id } },
+    })
+    expect(movsCajeroB).toBe(0)
   })
 })
 

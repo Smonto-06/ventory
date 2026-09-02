@@ -49,18 +49,22 @@ export async function GET(req: NextRequest) {
         cashSession: { branch: { businessId } },
         createdAt: { gte: startOfDay, lt: endOfDay },
       },
-      select: { type: true, amount: true },
+      select: { type: true, amount: true, cashSessionId: true },
     }),
 
+    // La caja "activa" es la de ESTE usuario (caja por usuario): con más de
+    // un cajero abierto a la vez en el negocio, tomar "la más reciente de
+    // cualquiera" mezclaba la apertura/ventas de un cajero con los
+    // ingresos/gastos de otro en un esperado que no correspondía a ningún
+    // cajón físico real.
     db.cashSession.findFirst({
-      where: { branch: { businessId }, status: 'OPEN' },
+      where: { branch: { businessId }, status: 'OPEN', openedById: session.user.id },
       include: {
         sales: {
           where: { status: 'COMPLETED' },
           select: { total: true, paymentMethod: true, payments: { select: { method: true, amount: true } } },
         },
       },
-      orderBy: { openedAt: 'desc' },
     }),
   ])
 
@@ -118,26 +122,55 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.quantity - a.quantity)
     .slice(0, 5)
 
-  // Utilidad: ventas − costo de lo vendido (snapshot costPrice); neta = utilidad − gastos
-  const costOfGoods = sales.reduce(
+  // Utilidad: ventas − costo de lo vendido, NETAS de lo devuelto — un
+  // artículo que volvió no se vendió de verdad, ni su costo ni su ingreso
+  // deberían contar. returnedQty ya trae el acumulado de devoluciones de
+  // cada línea; se descuenta con la misma fórmula proporcional (redondeada
+  // una vez) que usa return/route.ts para que ambos cálculos coincidan.
+  const netSalesTotal = sales.reduce(
     (sum, s) =>
-      sum + s.items.reduce((a, i) => a + Number(i.costPrice ?? 0) * Number(i.quantity), 0),
+      sum +
+      s.items.reduce((a, i) => {
+        const qty = Number(i.quantity)
+        const kept = qty - Number(i.returnedQty)
+        if (kept <= 0) return a
+        return a + (kept >= qty ? Number(i.total) : Math.round((Number(i.total) * kept) / qty))
+      }, 0),
     0,
   )
-  const incomes = movements
-    .filter((m) => m.type === 'INCOME')
-    .reduce((sum, m) => sum + Number(m.amount), 0)
+  const costOfGoods = sales.reduce(
+    (sum, s) =>
+      sum +
+      s.items.reduce((a, i) => {
+        const kept = Number(i.quantity) - Number(i.returnedQty)
+        return a + Number(i.costPrice ?? 0) * Math.max(0, kept)
+      }, 0),
+    0,
+  )
+  // Gastos operativos del día completo (todos los turnos/cajeros) — es lo
+  // que resta en la utilidad neta del negocio, sin importar en qué cajón.
   const expenses = movements
     .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
     .reduce((sum, m) => sum + Number(m.amount), 0)
-  const profit = profitReport(totalSales, costOfGoods, expenses)
+  const profit = profitReport(netSalesTotal, costOfGoods, expenses)
 
   const openingBalance = activeCashSession ? Number(activeCashSession.openingBalance) : 0
   // Solo el efectivo entra al cajón: el esperado debe coincidir con el que
-  // muestran la pantalla de cierre y /api/cash-registers/current
+  // muestran la pantalla de cierre y /api/cash-registers/current. Ingresos y
+  // gastos aquí sí se acotan a ESTE turno (no todo el día): son los que
+  // realmente pasaron por este cajón físico.
   const shiftCashSales = activeCashSession
     ? activeCashSession.sales.reduce((sum, s) => sum + cashPortion({ ...s, total: Number(s.total) }), 0)
     : 0
+  const sessionMovements = activeCashSession
+    ? movements.filter((m) => m.cashSessionId === activeCashSession.id)
+    : []
+  const sessionIncomes = sessionMovements
+    .filter((m) => m.type === 'INCOME')
+    .reduce((sum, m) => sum + Number(m.amount), 0)
+  const sessionExpenses = sessionMovements
+    .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
+    .reduce((sum, m) => sum + Number(m.amount), 0)
 
   return NextResponse.json({
     date: startOfDay.toISOString().slice(0, 10),
@@ -152,7 +185,7 @@ export async function GET(req: NextRequest) {
       totalItems,
     },
     profit: {
-      sales: totalSales,
+      sales: netSalesTotal,
       costOfGoods,
       gross: profit.gross,
       marginPct: profit.marginPct,
@@ -162,11 +195,11 @@ export async function GET(req: NextRequest) {
     cashSummary: {
       openingBalance,
       totalSales,
-      incomes,
-      expenses,
+      incomes: sessionIncomes,
+      expenses: sessionExpenses,
       cashSales: shiftCashSales,
       expectedBalance: activeCashSession
-        ? expectedBalance(openingBalance, shiftCashSales, incomes, expenses)
+        ? expectedBalance(openingBalance, shiftCashSales, sessionIncomes, sessionExpenses)
         : 0,
       transactionCount,
     },
