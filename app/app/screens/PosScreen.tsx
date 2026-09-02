@@ -25,17 +25,20 @@ function CartItems() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.25 }}>{it.name}</div>
-              <button
-                onClick={() => {
-                  s.setDscId(it.productId)
-                  s.openModal('itemPrecio')
-                }}
-                title="Cambiar el precio de este artículo"
-                className="v-hover-underline"
-                style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 2, cursor: 'pointer', padding: 0, background: 'none' }}
-              >
-                {s.fmt(it.price)} c/u
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>{s.fmt(it.price)} c/u</span>
+                <button
+                  onClick={() => {
+                    s.setDscId(it.productId)
+                    s.openModal('itemPrecio')
+                  }}
+                  title="Cambiar el precio de este artículo"
+                  className="v-hover-primary"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 21, height: 21, borderRadius: 6, background: '#EEF0FE', color: '#6366F1', cursor: 'pointer', flex: 'none', padding: 0 }}
+                >
+                  <Icono n="lapiz" tam={11} grosor={2.1} />
+                </button>
+              </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 'none' }}>
               <button onClick={() => s.changeQty(it.productId, -1)} style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--bg)', color: 'var(--text)', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
