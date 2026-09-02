@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { profitReport, expectedBalance, cashPortion } from '@/lib/pos'
+import { profitReport, expectedBalance, cashPortion, diaColombiano, diaColombianoDeFecha } from '@/lib/pos'
 import { isAdmin } from '@/lib/api-helpers'
 import type { SessionUser } from '@/lib/get-session'
 
@@ -25,9 +25,13 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const dateParam = searchParams.get('date')
 
-  const targetDate = dateParam ? new Date(`${dateParam}T00:00:00`) : new Date()
-  const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate())
-  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000)
+  // El día calendario es el de COLOMBIA (UTC-5), no el del runtime del
+  // servidor (Vercel corre en UTC): usar getFullYear/getMonth/getDate
+  // locales corría el corte del día 5 horas, y una venta después de las
+  // 7 p.m. Colombia aparecía en el reporte del día SIGUIENTE.
+  const { desde: startOfDay, hasta: endOfDay } = dateParam
+    ? diaColombianoDeFecha(dateParam)
+    : diaColombiano(new Date())
 
   const [sales, movements, activeCashSession] = await Promise.all([
     // Las ventas anuladas se excluyen de totales y reportes
@@ -75,10 +79,11 @@ export async function GET(req: NextRequest) {
     0,
   )
 
-  // Ventas por hora (0-23)
+  // Ventas por hora (0-23), en hora Colombia (UTC-5) — getHours() usaría la
+  // hora local del servidor (UTC en Vercel), desfasando el gráfico 5 horas.
   const hourMap = new Map<number, { total: number; count: number }>()
   for (const sale of sales) {
-    const hour = sale.createdAt.getHours()
+    const hour = (sale.createdAt.getUTCHours() + 24 - 5) % 24
     const existing = hourMap.get(hour) ?? { total: 0, count: 0 }
     hourMap.set(hour, { total: existing.total + Number(sale.total), count: existing.count + 1 })
   }

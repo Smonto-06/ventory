@@ -5,7 +5,9 @@
 // distintas al entrar al sistema.
 
 import { db } from '@/lib/db'
-import { cashPortion, profitReport } from '@/lib/pos'
+import { cashPortion, profitReport, diaColombiano } from '@/lib/pos'
+
+export { diaColombiano }
 
 export interface ResumenDiario {
   businessId: string
@@ -22,16 +24,6 @@ export interface ResumenDiario {
   devoluciones: { total: number; cantidad: number }
   topProductos: Array<{ nombre: string; cantidad: number; total: number }>
   agotados: Array<{ nombre: string; stock: number; minimo: number; unidad: string | null }>
-}
-
-/** Inicio y fin del día en Colombia (UTC-5), expresados en UTC */
-export function diaColombiano(referencia: Date): { desde: Date; hasta: Date; etiqueta: Date } {
-  const OFFSET_MIN = 5 * 60
-  const local = new Date(referencia.getTime() - OFFSET_MIN * 60_000)
-  const inicioLocal = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
-  const desde = new Date(inicioLocal + OFFSET_MIN * 60_000)
-  const hasta = new Date(desde.getTime() + 86_400_000)
-  return { desde, hasta, etiqueta: new Date(inicioLocal) }
 }
 
 export async function construirResumen(businessId: string, referencia: Date): Promise<ResumenDiario | null> {

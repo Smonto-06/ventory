@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { profitReport } from '@/lib/pos'
+import { profitReport, diaColombianoDeFecha } from '@/lib/pos'
 import { isAdmin } from '@/lib/api-helpers'
 import type { SessionUser } from '@/lib/get-session'
 
@@ -83,8 +83,11 @@ export async function GET(req: NextRequest) {
   if (!fromParam || !toParam) {
     return NextResponse.json({ error: 'Parámetros from y to requeridos (YYYY-MM-DD)' }, { status: 400 })
   }
-  const from = new Date(`${fromParam}T00:00:00`)
-  const toIncl = new Date(`${toParam}T00:00:00`)
+  // Días calendario en Colombia (UTC-5), no en la hora local del runtime
+  // (Vercel corre en UTC) — mismo corte de 5 horas que ya se corrigió en
+  // /api/reports/daily.
+  const from = diaColombianoDeFecha(fromParam).desde
+  const toIncl = diaColombianoDeFecha(toParam).desde
   if (isNaN(from.getTime()) || isNaN(toIncl.getTime()) || toIncl < from) {
     return NextResponse.json({ error: 'Rango de fechas inválido' }, { status: 400 })
   }
@@ -118,8 +121,10 @@ export async function GET(req: NextRequest) {
     byDayMap.set(d.toISOString().slice(0, 10), { total: 0, count: 0 })
   }
   for (const v of sales) {
-    const local = new Date(v.createdAt.getTime())
-    const key = new Date(local.getFullYear(), local.getMonth(), local.getDate()).toISOString().slice(0, 10)
+    // Mismo desfase de 5 horas que diaColombiano(): el día calendario es el
+    // de Colombia, no el UTC del runtime.
+    const local = new Date(v.createdAt.getTime() - 5 * 60 * 60_000)
+    const key = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())).toISOString().slice(0, 10)
     const e = byDayMap.get(key)
     if (e) {
       e.total += Number(v.total)

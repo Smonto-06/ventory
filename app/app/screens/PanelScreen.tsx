@@ -201,6 +201,8 @@ export default function PanelScreen() {
     }
   }
   const mSum = Object.values(mAgg).reduce((a, b) => a + b, 0)
+  // Sin ventas hoy no hay nada que desglosar — antes se rellenaba con
+  // 60/30/10 fijo, mostrando un gráfico inventado como si fueran datos reales.
   const donut: Array<[string, number, string]> =
     mSum > 0
       ? [
@@ -208,11 +210,7 @@ export default function PanelScreen() {
           ['Tarjeta', mAgg.Tarjeta, '#6366F1'],
           ['Transferencia', mAgg.Transferencia + mAgg['Crédito'], '#A7F3D0'],
         ]
-      : [
-          ['Efectivo', 60, '#10B981'],
-          ['Tarjeta', 30, '#6366F1'],
-          ['Transferencia', 10, '#A7F3D0'],
-        ]
+      : [['Sin ventas hoy', 1, '#E2E5EC']]
   const dSum = donut.reduce((a, d) => a + d[1], 0) || 1
   let acc = 0
   const stops: string[] = []
@@ -263,13 +261,12 @@ export default function PanelScreen() {
       tAgg.set(it.productId, { ...e, qty: e.qty + it.quantity })
     }
   }
-  let topList = Array.from(tAgg.entries())
+  // Sin ventas hoy no hay "más vendidos" que mostrar — antes se rellenaba
+  // con productos del catálogo y cantidades inventadas (45, 32, 28…).
+  const topList = Array.from(tAgg.entries())
     .map(([id, d]) => ({ id, ...d }))
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 5)
-  if (!topList.length) {
-    topList = s.products.slice(0, 5).map((p, i) => ({ id: p.id, name: p.name, qty: [45, 32, 28, 22, 18][i] ?? 10, imageUrl: p.imageUrl }))
-  }
 
   const lastSales = todaySales.slice(0, 5)
   const activeProds = s.products.length
@@ -396,8 +393,8 @@ export default function PanelScreen() {
               {legend.map((l) => (
                 <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ width: 9, height: 9, borderRadius: 3, background: l.color, flex: 'none' }} />
-                  <span style={{ flex: 1, fontSize: 14, color: 'var(--text)', fontWeight: 500 }}>{l.label}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{l.pct}%</span>
+                  <span style={{ flex: 1, fontSize: 14, color: mSum > 0 ? 'var(--text)' : 'var(--muted)', fontWeight: 500 }}>{l.label}</span>
+                  {mSum > 0 && <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{l.pct}%</span>}
                 </div>
               ))}
             </div>
@@ -464,19 +461,23 @@ export default function PanelScreen() {
               Ver todos
             </button>
           </div>
-          {topList.map((p, i) => {
-            const t = tileFor({ id: p.id, name: p.name, imageUrl: p.imageUrl })
-            return (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: '1px solid #EEF2F7' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#94A3B8', width: 16 }}>{i + 1}</span>
-                <div style={{ width: 34, height: 34, borderRadius: 9, flex: 'none', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, color: t.tileFg, ...t.tileStyle }}>
-                  {t.tileText}
+          {topList.length ? (
+            topList.map((p, i) => {
+              const t = tileFor({ id: p.id, name: p.name, imageUrl: p.imageUrl })
+              return (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: '1px solid #EEF2F7' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#94A3B8', width: 16 }}>{i + 1}</span>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, flex: 'none', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, color: t.tileFg, ...t.tileStyle }}>
+                    {t.tileText}
+                  </div>
+                  <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>{p.qty}</span>
                 </div>
-                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>{p.qty}</span>
-              </div>
-            )
-          })}
+              )
+            })
+          ) : (
+            <div style={{ padding: '18px 0', color: 'var(--muted)', fontSize: 14 }}>Aún no hay ventas hoy.</div>
+          )}
         </div>
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
