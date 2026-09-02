@@ -126,6 +126,13 @@ export async function POST(
           closingBalance,
           expectedBalance: calc.expectedBalance,
           difference: calc.difference,
+          // Congelados junto con expectedBalance/difference: si una venta de
+          // este turno se anula después del cierre, el historial no debe
+          // "esconderla" recalculando este total en vivo mientras el resto
+          // del resumen se queda con el valor de cuando se cerró.
+          salesTotal,
+          incomesTotal: incomes,
+          expensesTotal: expenses,
           closingNotes,
           closedAt: new Date(),
           closedById: user.id,
