@@ -51,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (parsed.data.method === 'CASH') {
       const branchId = await resolveBranchId(user.businessId, parsed.data.branchId)
       if (!branchId) return badRequest('Sucursal no encontrada')
-      const cashSession = await findOpenCashSession(db, branchId)
+      const cashSession = await findOpenCashSession(db, branchId, user.id)
       if (!cashSession) {
         return badRequest('No hay caja abierta. Abre un turno antes de recibir abonos en efectivo.')
       }

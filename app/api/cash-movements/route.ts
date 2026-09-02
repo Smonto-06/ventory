@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   if (!cashSessionId) {
     const branchId = await resolveBranchId(user.businessId, searchParams.get('branchId'))
     if (!branchId) return badRequest('Sucursal no encontrada')
-    const open = await findOpenCashSession(db, branchId)
+    const open = await findOpenCashSession(db, branchId, user.id)
     if (!open) return NextResponse.json({ movements: [], descriptions: CASH_MOVEMENT_DESCRIPTIONS })
     cashSessionId = open.id
   }
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     const branchId = await resolveBranchId(user.businessId, parsed.data.branchId)
     if (!branchId) return badRequest('Sucursal no encontrada')
 
-    const cashSession = await findOpenCashSession(db, branchId)
+    const cashSession = await findOpenCashSession(db, branchId, user.id)
     if (!cashSession) {
       return badRequest('No hay caja abierta. Abre un turno antes de registrar movimientos.')
     }

@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     let cashSessionId: string | null = null
     if (parsed.data.method === 'CASH') {
-      const cashSession = await findOpenCashSession(db, purchase.branchId)
+      const cashSession = await findOpenCashSession(db, purchase.branchId, user.id)
       if (!cashSession) {
         return badRequest('No hay caja abierta. Abre un turno antes de abonar en efectivo.')
       }
