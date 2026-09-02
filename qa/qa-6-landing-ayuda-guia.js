@@ -33,7 +33,7 @@ async function anchoDesbordado(page) {
 
   const texto = await page.textContent('body')
   check('landing', 'la página pública abre sin iniciar sesión', page.url() === BASE + '/', page.url())
-  check('landing', 'muestra el precio del plan', /49\.900/.test(texto))
+  check('landing', 'muestra el precio del plan', /59\.900/.test(texto))
   check('landing', 'muestra el correo de soporte', texto.includes('ventorypos@gmail.com'))
   check('landing', 'ofrece la prueba gratis', /prueba gratis/i.test(texto))
   for (const href of ['/register', '/login', '/ayuda', '/terminos', '/privacidad']) {

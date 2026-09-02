@@ -1,15 +1,16 @@
 'use client'
 
 // Punto de venta — réplica 1:1 del prototipo (sección sPos).
-// En pantallas angostas (<880px) el carrito se vuelve un panel deslizante con
-// barra inferior fija (total + Cobrar siempre visibles), estilo app móvil.
+// En modo táctil (pantalla angosta <880px, o sin mouse aunque sea ancha —
+// ej. un todo-en-uno con Windows) el carrito se vuelve un panel deslizante
+// con barra inferior fija (total + Cobrar siempre visibles), estilo app móvil.
 
 import { useState } from 'react'
 import { useApp } from '../store'
 import { tileFor, VLogo, fmtQty } from '../ui'
 import { Icono } from '@/components/Icono'
 import { BotonPantallaCompleta } from '../Pantalla'
-import { useWindowWidth } from '../Shell'
+import { useModoTactil } from '../Shell'
 
 function CartItems() {
   const s = useApp()
@@ -243,8 +244,7 @@ function CartFooter({ onAction }: { onAction?: () => void }) {
 
 export default function PosScreen() {
   const s = useApp()
-  const w = useWindowWidth()
-  const narrow = w < 880
+  const narrow = useModoTactil()
   const [query, setQuery] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
 

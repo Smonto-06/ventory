@@ -56,6 +56,29 @@ export function useWindowWidth() {
   return w
 }
 
+// El diseño táctil (botones grandes, panel deslizante) se activa por ancho
+// de pantalla Y por si el dispositivo no tiene mouse — un computador con
+// Windows sin mouse ni teclado (pantalla táctil, ej. un todo-en-uno) puede
+// ser tan ancho como cualquier monitor de escritorio, pero necesita el
+// mismo diseño que un celular.
+function useSinMouse() {
+  const [sinMouse, setSinMouse] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: none), (pointer: coarse)')
+    const check = () => setSinMouse(mq.matches)
+    check()
+    mq.addEventListener('change', check)
+    return () => mq.removeEventListener('change', check)
+  }, [])
+  return sinMouse
+}
+
+export function useModoTactil() {
+  const w = useWindowWidth()
+  const sinMouse = useSinMouse()
+  return w < 880 || sinMouse
+}
+
 function NavIcon({ id }: { id: string }) {
   switch (id) {
     case 'panel':
@@ -496,8 +519,7 @@ function OfflineBanner() {
 
 export default function Shell() {
   const s = useApp()
-  const w = useWindowWidth()
-  const narrow = w < 880
+  const narrow = useModoTactil()
 
   const screens: Record<Screen, React.ReactNode> = {
     panel: <PanelScreen />,
