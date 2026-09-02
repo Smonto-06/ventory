@@ -177,7 +177,7 @@ const { check, summary, newBrowser, registerAndLogin, loginOnly, BASE } = requir
   await page.locator('main button', { hasText: `QA Precio ${t}` }).first().click()
   await page.waitForTimeout(700)
   try {
-    await page.locator('button', { hasText: '4.000 c/u' }).click({ timeout: 8000 })
+    await page.locator('button[title="Cambiar el precio de este artículo"]').click({ timeout: 8000 })
     await page.waitForTimeout(500)
     const modal = page.locator('div', { hasText: 'Precio del artículo' }).last()
     await modal.locator('input').fill('4700')
