@@ -39,7 +39,7 @@ import {
   ShiftStat,
 } from './api'
 import { cartSubtotal, saleTotal, resolvePayment, expectedBalance } from '@/lib/pos'
-import { queueOp, syncPendingOps, pendingOps, registerServiceWorker, nuevoTempId, type PendingOp } from './offline'
+import { queueOp, syncPendingOps, pendingOps, registerServiceWorker, nuevoTempId, esTempId, type PendingOp } from './offline'
 
 export type Screen =
   | 'panel'
@@ -514,8 +514,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // El stock mostrado es el de la sucursal activa (donde se abre la caja)
     const branch = typeof window !== 'undefined' ? window.localStorage.getItem('ventory-branch') : null
     const r = await api.productsIn(branch ?? undefined)
-    patch({ products: r.products })
-  }, [patch])
+    setData((prev) => {
+      // Los productos creados sin conexión (id "offline-*") solo existen acá
+      // hasta que el servidor confirma su creación y la cola los remapea — un
+      // reemplazo total de la lista los hacía desaparecer de golpe de la
+      // búsqueda de cobro mientras la operación seguía pendiente (p. ej. el
+      // refresco automático de 30 s corriendo justo cuando la señal titila).
+      const sinSincronizar = prev.products.filter((p) => esTempId(p.id))
+      return { ...prev, products: sinSincronizar.length ? [...r.products, ...sinSincronizar] : r.products }
+    })
+  }, [])
 
   const refreshCustomers = useCallback(async () => {
     const r = await api.customers()
