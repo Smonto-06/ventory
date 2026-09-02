@@ -13,6 +13,8 @@ export const dynamic = 'force-dynamic'
 
 interface PeriodStats {
   totalSales: number
+  /** ventas netas de lo devuelto — es la que entra a la utilidad, no al total mostrado */
+  netSales: number
   transactionCount: number
   totalItems: number
   costOfGoods: number
@@ -23,7 +25,7 @@ async function periodStats(businessId: string, from: Date, to: Date): Promise<Pe
   const [sales, movements] = await Promise.all([
     db.sale.findMany({
       where: { branch: { businessId }, status: 'COMPLETED', createdAt: { gte: from, lt: to } },
-      include: { items: { select: { quantity: true, costPrice: true } } },
+      include: { items: { select: { total: true, quantity: true, costPrice: true, returnedQty: true } } },
     }),
     db.cashMovement.findMany({
       where: {
@@ -34,14 +36,35 @@ async function periodStats(businessId: string, from: Date, to: Date): Promise<Pe
       select: { amount: true },
     }),
   ])
+  // Utilidad NETA de lo devuelto: un artículo que volvió no se vendió de
+  // verdad, ni su costo ni su ingreso deberían contar (misma fórmula
+  // proporcional redondeada una vez que usa return/route.ts).
+  const netSales = sales.reduce(
+    (s, v) =>
+      s +
+      v.items.reduce((a, i) => {
+        const qty = Number(i.quantity)
+        const kept = qty - Number(i.returnedQty)
+        if (kept <= 0) return a
+        return a + (kept >= qty ? Number(i.total) : Math.round((Number(i.total) * kept) / qty))
+      }, 0),
+    0,
+  )
+  const costOfGoods = sales.reduce(
+    (s, v) =>
+      s +
+      v.items.reduce((a, i) => {
+        const kept = Number(i.quantity) - Number(i.returnedQty)
+        return a + Number(i.costPrice ?? 0) * Math.max(0, kept)
+      }, 0),
+    0,
+  )
   return {
     totalSales: sales.reduce((s, v) => s + Number(v.total), 0),
+    netSales,
     transactionCount: sales.length,
     totalItems: sales.reduce((s, v) => s + v.items.reduce((a, i) => a + Number(i.quantity), 0), 0),
-    costOfGoods: sales.reduce(
-      (s, v) => s + v.items.reduce((a, i) => a + Number(i.costPrice ?? 0) * Number(i.quantity), 0),
-      0,
-    ),
+    costOfGoods,
     expenses: movements.reduce((s, m) => s + Number(m.amount), 0),
   }
 }
@@ -130,8 +153,8 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10)
 
-  const profit = profitReport(current.totalSales, current.costOfGoods, current.expenses)
-  const prevProfit = profitReport(previous.totalSales, previous.costOfGoods, previous.expenses)
+  const profit = profitReport(current.netSales, current.costOfGoods, current.expenses)
+  const prevProfit = profitReport(previous.netSales, previous.costOfGoods, previous.expenses)
 
   const pct = (now: number, before: number) =>
     before === 0 ? null : Math.round(((now - before) / before) * 1000) / 10
