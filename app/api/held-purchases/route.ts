@@ -6,11 +6,16 @@ import { unauthorized, forbidden, badRequest, serverError, isAdmin, serialize } 
 
 export const dynamic = 'force-dynamic'
 
-// Compras en espera: los ítems en curso se serializan tal cual para reanudarlos después
+const MAX_ESPERAS = 50
+
+// Compras en espera: los ítems en curso se serializan tal cual para
+// reanudarlos después. Límite de tamaño en el payload — ver held-sales.
 const CreateHeldPurchaseSchema = z.object({
   supplierName: z.string().trim().optional(),
   total: z.number().nonnegative().default(0),
-  payload: z.record(z.string(), z.unknown()),
+  payload: z.record(z.string(), z.unknown()).refine((p) => JSON.stringify(p).length <= 200_000, {
+    message: 'La compra en espera es demasiado grande',
+  }),
 })
 
 export async function GET(req: NextRequest) {
@@ -41,6 +46,11 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return badRequest(parsed.error.issues[0].message)
 
   try {
+    const enEspera = await db.heldPurchase.count({ where: { businessId: user.businessId } })
+    if (enEspera >= MAX_ESPERAS) {
+      return badRequest(`Hay demasiadas compras en espera (${MAX_ESPERAS}). Retoma o descarta alguna antes de poner otra.`)
+    }
+
     const heldPurchase = await db.heldPurchase.create({
       data: {
         supplierName: parsed.data.supplierName || null,
