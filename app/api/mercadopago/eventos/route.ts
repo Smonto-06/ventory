@@ -21,6 +21,14 @@ function limiteExcedido(ip: string): boolean {
   const v = consultasPorIp.get(ip)
   if (!v || ahora - v.desde > 60_000) {
     consultasPorIp.set(ip, { desde: ahora, conteo: 1 })
+    // Purga entradas vencidas de paso: sin esto el Map crece para siempre
+    // mientras la instancia serverless siga viva (una fuga de memoria lenta
+    // pero real con tráfico sostenido de IPs distintas).
+    if (consultasPorIp.size > 1000) {
+      consultasPorIp.forEach((e, k) => {
+        if (ahora - e.desde > 60_000) consultasPorIp.delete(k)
+      })
+    }
     return false
   }
   v.conteo++
@@ -88,6 +96,13 @@ export async function POST(req: NextRequest) {
       finalizedAt: mp.date_approved,
     })
   } else if (estado === 'DECLINED' || estado === 'VOIDED') {
+    // Igual que en Wompi: una referencia se puede reintentar con varios
+    // pagos (id) distintos en Mercado Pago. Si ya está APPROVED por un pago
+    // B pero esta notificación es de un intento A anterior, no es una
+    // reversión de B.
+    if (pago.status === 'APPROVED' && pago.wompiId !== String(mp.id)) {
+      return NextResponse.json({ ok: true, ignorado: 'notificación de un pago ya superado' })
+    }
     // Si el pago YA estaba APPROVED, "VOIDED" acá cubre justo el caso de un
     // reembolso o contracargo (estadoDesdeMp mapea refunded/charged_back a
     // VOIDED) — también suspende el negocio si sigue vigente por este pago.

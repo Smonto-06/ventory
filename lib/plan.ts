@@ -95,6 +95,16 @@ export async function aplicarPagoAprobado(
 ): Promise<boolean> {
   const DIA = 86400000
   return db.$transaction(async (tx) => {
+    const pagoInicial = await tx.planPayment.findUniqueOrThrow({ where: { id: paymentId }, select: { businessId: true } })
+    // Lock consultivo por negocio: aplicar un pago aprobado y revertir uno
+    // (revertirPagoAprobado, más abajo) leen y escriben el mismo Business
+    // sin bloquear la fila — dos webhooks casi simultáneos para el mismo
+    // negocio (una aprobación y un contracargo de un pago distinto) podían
+    // entrelazarse bajo READ COMMITTED y dejar el negocio en un estado que
+    // no corresponde a ninguno de los dos eventos por separado. Serializa
+    // cualquier cambio de estado de pago del mismo negocio.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${pagoInicial.businessId}))`
+
     const cambiado = await tx.planPayment.updateMany({
       where: { id: paymentId, status: { not: 'APPROVED' } },
       data: {
@@ -105,9 +115,8 @@ export async function aplicarPagoAprobado(
       },
     })
     if (cambiado.count === 0) return false // ya se había aplicado
-    const pago = await tx.planPayment.findUniqueOrThrow({ where: { id: paymentId }, select: { businessId: true } })
     const negocio = await tx.business.findUniqueOrThrow({
-      where: { id: pago.businessId },
+      where: { id: pagoInicial.businessId },
       select: { status: true, trialEndsAt: true, paidUntil: true, activatedAt: true },
     })
     // SUSPENDED es una decisión manual del super admin (app/api/admin/businesses/[id]/route.ts)
@@ -127,7 +136,7 @@ export async function aplicarPagoAprobado(
       negocio.status === 'TRIAL' ? negocio.trialEndsAt?.getTime() ?? 0 : 0,
     )
     await tx.business.update({
-      where: { id: pago.businessId },
+      where: { id: pagoInicial.businessId },
       data: {
         status: 'ACTIVE',
         paidUntil: new Date(base + 30 * DIA),
@@ -156,8 +165,13 @@ export async function revertirPagoAprobado(
   datos: { wompiId?: string; paymentMethod?: string },
 ): Promise<boolean> {
   return db.$transaction(async (tx) => {
-    const pago = await tx.planPayment.findUnique({ where: { id: paymentId }, select: { status: true, businessId: true } })
+    const pago = await tx.planPayment.findUnique({
+      where: { id: paymentId },
+      select: { status: true, businessId: true, paidAt: true },
+    })
     if (!pago) return false
+    // Mismo lock que aplicarPagoAprobado — ver su comentario.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${pago.businessId}))`
     const eraAprobado = pago.status === 'APPROVED'
 
     const cambiado = await tx.planPayment.updateMany({
@@ -167,12 +181,31 @@ export async function revertirPagoAprobado(
     if (cambiado.count === 0) return false
 
     if (eraAprobado) {
-      // ¿Sigue vigente el negocio por OTRO pago más reciente? (p. ej. ya
-      // pagó de nuevo el mes siguiente antes de que este contracargo viejo
-      // llegara) — de ser así, no corresponde suspender por una disputa
-      // sobre un cobro ya superado.
+      // Si el super admin activó el negocio a mano SIN vencimiento
+      // (paidUntil null en ACTIVE — CLAUDE.md), su acceso no depende de
+      // ningún PlanPayment puntual: un contracargo tardío sobre un pago
+      // viejo (de una mensualidad ya superada hace tiempo) no puede
+      // deshacer esa decisión manual.
+      const negocio = await tx.business.findUnique({
+        where: { id: pago.businessId },
+        select: { paidUntil: true },
+      })
+      if (negocio && negocio.paidUntil === null) return true
+
+      // ¿Sigue vigente el negocio por OTRO pago MÁS NUEVO que este? (p. ej.
+      // ya pagó de nuevo el mes siguiente antes de que este contracargo
+      // viejo llegara) — de ser así, no corresponde suspender por una
+      // disputa sobre un cobro ya superado. No basta con "existe algún otro
+      // pago aprobado": si el contracargo es sobre el pago MÁS RECIENTE (el
+      // que de verdad sostiene paidUntil) y el negocio tiene otro aprobado
+      // más VIEJO, ese viejo no cubre nada — ya se contó dentro de un
+      // paidUntil que este mismo pago revertido extendió.
       const masReciente = await tx.planPayment.findFirst({
-        where: { businessId: pago.businessId, status: 'APPROVED' },
+        where: {
+          businessId: pago.businessId,
+          status: 'APPROVED',
+          ...(pago.paidAt ? { paidAt: { gt: pago.paidAt } } : {}),
+        },
         orderBy: { paidAt: 'desc' },
       })
       if (!masReciente) {

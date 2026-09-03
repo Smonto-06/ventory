@@ -64,6 +64,16 @@ export async function POST(req: NextRequest) {
       finalizedAt: tx.finalized_at,
     })
   } else if (['DECLINED', 'VOIDED', 'ERROR'].includes(tx.status)) {
+    // Una referencia se puede reintentar con VARIAS transacciones (id)
+    // distintas. Si el pago ya está APPROVED por una transacción B, pero
+    // este evento de rechazo llega tarde y es de una transacción A anterior
+    // (un intento fallido previo al que sí aprobó), no representa una
+    // reversión de B — sería tratar un evento viejo y ya superado como si
+    // revocara el pago vigente. Solo cuenta como reversión si es la MISMA
+    // transacción que quedó registrada como aprobada.
+    if (pago.status === 'APPROVED' && pago.wompiId !== tx.id) {
+      return NextResponse.json({ ok: true, ignorado: 'evento de una transacción ya superada' })
+    }
     // Si el pago YA estaba APPROVED (reembolso/contracargo, no un simple
     // rechazo de intento), esto también suspende el negocio — ver el
     // comentario de revertirPagoAprobado.
