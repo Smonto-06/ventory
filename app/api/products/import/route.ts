@@ -88,19 +88,28 @@ export async function POST(request: Request) {
     const bySku = new Set(existing.filter((p) => p.sku).map((p) => p.sku!.trim().toUpperCase()))
     const byBarcode = new Set(existing.filter((p) => p.barcode).map((p) => p.barcode!.trim()))
 
-    // Categorías: resolver por nombre, creando las que falten. Solo activas:
-    // reutilizar el id de una archivada por nombre asignaría productos
-    // nuevos a una categoría que el negocio ya no usa, sin reactivarla.
-    const categories = await db.category.findMany({ where: { businessId, isActive: true } })
-    const catByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c.id]))
+    // Categorías: resolver por nombre, creando las que falten. El nombre
+    // tiene constraint único por negocio (@@unique) que también cubre las
+    // archivadas: si el lookup solo mira activas pero una fila trae el
+    // nombre exacto de una archivada, category.create() choca con esa
+    // constraint y tumba TODA la importación con un 500 genérico. Las
+    // archivadas que coincidan por nombre se reactivan en vez de crearlas
+    // de nuevo.
+    const categories = await db.category.findMany({ where: { businessId } })
+    const catByName = new Map(categories.filter((c) => c.isActive).map((c) => [c.name.trim().toLowerCase(), c.id]))
+    const archivedByName = new Map(categories.filter((c) => !c.isActive).map((c) => [c.name.trim().toLowerCase(), c.id]))
     const newCatNames = new Set<string>()
     for (const r of rows) {
       const cn = r.category?.trim()
       if (cn && !catByName.has(cn.toLowerCase())) newCatNames.add(cn)
     }
     for (const cn of Array.from(newCatNames)) {
-      const cat = await db.category.create({ data: { name: cn, businessId } })
-      catByName.set(cn.trim().toLowerCase(), cat.id)
+      const key = cn.trim().toLowerCase()
+      const archivedId = archivedByName.get(key)
+      const cat = archivedId
+        ? await db.category.update({ where: { id: archivedId }, data: { isActive: true } })
+        : await db.category.create({ data: { name: cn, businessId } })
+      catByName.set(key, cat.id)
     }
 
     let created = 0
