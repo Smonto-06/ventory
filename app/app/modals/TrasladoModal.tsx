@@ -4,7 +4,7 @@
 
 import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
-import { Modal, ModalTitle, saveBtnStyle } from '../ui'
+import { Modal, ModalTitle, saveBtnStyle, parseQty } from '../ui'
 import CampoNumerico from './CampoNumerico'
 
 const lblStyle: CSSProperties = {
@@ -33,6 +33,7 @@ export default function TrasladoModal() {
   const [prodId, setProdId] = useState('')
   const [qty, setQty] = useState(0)
   const [dir, setDir] = useState<'out' | 'in'>('out')
+  const porPeso = s.products.find((p) => p.id === prodId)?.unitOfMeasure === 'kg'
 
   const ok = !!prodId && qty > 0
 
@@ -57,11 +58,12 @@ export default function TrasladoModal() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
-          <label style={lblStyle}>Cantidad</label>
+          <label style={lblStyle}>{porPeso ? 'Cantidad (kg)' : 'Cantidad'}</label>
           <CampoNumerico
             value={qty || ''}
-            onChange={(raw) => setQty(parseInt(raw.replace(/\D/g, '')) || 0)}
-            titulo="Cantidad a trasladar"
+            onChange={(raw) => setQty(porPeso ? parseQty(raw) : parseInt(raw.replace(/\D/g, '')) || 0)}
+            decimales={porPeso}
+            titulo={porPeso ? 'Cantidad a trasladar (kg)' : 'Cantidad a trasladar'}
             style={{
               width: '100%',
               height: 38,

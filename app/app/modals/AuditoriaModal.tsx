@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { useApp } from '../store'
-import { api } from '../api'
+import { api, ApiError } from '../api'
 import { Modal, ModalTitle } from '../ui'
 
 interface LogRow {
@@ -37,6 +37,12 @@ const ACTION_ES: Record<string, string> = {
   'TRANSFER:Inventory': 'Trasladó inventario',
   'CREATE:User': 'Creó un usuario',
   'UPDATE:User': 'Editó un usuario',
+  'DELETE:User': 'Eliminó un usuario',
+  'CREATE:Branch': 'Creó una sucursal',
+  'UPDATE:Branch': 'Editó una sucursal',
+  'CREATE:Quote': 'Registró una cotización',
+  'UPDATE:Quote': 'Canceló una cotización',
+  'DELETE:Customer': 'Eliminó un cliente',
 }
 
 function label(l: LogRow): string {
@@ -59,12 +65,20 @@ function detail(l: LogRow): string {
 export default function AuditoriaModal() {
   const s = useApp()
   const [logs, setLogs] = useState<LogRow[] | null>(null)
+  // El endpoint solo lo ve ADMIN (no SUPERVISOR, aunque sí ve el botón que
+  // abre este modal en Ajustes) — sin distinguir el 403, un Encargado veía
+  // "Aún no hay actividad registrada" y nunca se enteraba de que el sistema
+  // le negó el acceso, no de que el negocio no tuviera historial.
+  const [sinPermiso, setSinPermiso] = useState(false)
 
   useEffect(() => {
     api
       .auditLogs()
       .then((r) => setLogs(r.logs as LogRow[]))
-      .catch(() => setLogs([]))
+      .catch((e) => {
+        if (e instanceof ApiError && e.status === 403) setSinPermiso(true)
+        setLogs([])
+      })
   }, [])
 
   return (
@@ -75,7 +89,12 @@ export default function AuditoriaModal() {
       </div>
       <div style={{ maxHeight: '55vh', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
         {logs === null && <div style={{ padding: 30, textAlign: 'center', color: 'var(--muted)' }}>Cargando…</div>}
-        {logs?.length === 0 && <div style={{ padding: 30, textAlign: 'center', color: 'var(--muted)' }}>Aún no hay actividad registrada.</div>}
+        {logs?.length === 0 && sinPermiso && (
+          <div style={{ padding: 30, textAlign: 'center', color: 'var(--muted)' }}>
+            Solo el administrador del negocio puede ver el registro de actividad.
+          </div>
+        )}
+        {logs?.length === 0 && !sinPermiso && <div style={{ padding: 30, textAlign: 'center', color: 'var(--muted)' }}>Aún no hay actividad registrada.</div>}
         {logs?.map((l) => (
           <div key={l.id} style={{ padding: '10px 14px', borderBottom: '1px solid #EEF2F7' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>

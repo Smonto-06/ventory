@@ -122,6 +122,10 @@ model Business {
   notifyLowStock     Boolean @default(true)
   /// Destino del resumen; si está vacío se usa el correo del dueño
   notifyEmail        String?
+  /// Última vez que salió el correo de resumen diario — evita reenviarlo dos
+  /// veces el mismo día si Vercel reintenta la invocación del cron (el cron
+  /// no tiene ninguna otra forma de saber si ya corrió hoy).
+  lastDailySummaryAt DateTime?
 
   // Plan comercial: los negocios nuevos entran en prueba (el registro lo fija);
   // los existentes quedan ACTIVE por el default
@@ -226,9 +230,12 @@ model User {
   // Recuperación de contraseña (token de un solo uso, con vencimiento)
   resetToken        String?   @unique
   resetTokenExpires DateTime?
-  // Verificación de correo al registrarse (null = pendiente de verificar)
-  emailVerified     DateTime?
-  verifyToken       String?   @unique
+  // Verificación de correo al registrarse (null = pendiente de verificar).
+  // A diferencia de resetToken, antes no vencía nunca: un enlace de
+  // verificación sin usar quedaba vigente indefinidamente.
+  emailVerified      DateTime?
+  verifyToken        String?   @unique
+  verifyTokenExpires DateTime?
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])
@@ -509,6 +516,14 @@ model CashSession {
   closingBalance  Decimal?          @db.Decimal(12, 2)
   expectedBalance Decimal?          @db.Decimal(12, 2)
   difference      Decimal?          @db.Decimal(12, 2)
+  /// Congelados al cerrar (igual que expectedBalance/difference): si una
+  /// venta del turno se anula DESPUÉS del cierre, el historial de turnos no
+  /// debe "esconderla" del total recalculándolo en vivo mientras el resto
+  /// del resumen (esperado, contado, diferencia) se queda con el valor de
+  /// cuando se cerró — mostraría un cierre que ya no cuadra consigo mismo.
+  salesTotal      Decimal?          @db.Decimal(12, 2)
+  incomesTotal    Decimal?          @db.Decimal(12, 2)
+  expensesTotal   Decimal?          @db.Decimal(12, 2)
   notes           String?
   closingNotes    String?
   openedAt        DateTime          @default(now())

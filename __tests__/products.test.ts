@@ -24,6 +24,9 @@ jest.mock('@/lib/db', () => ({
     inventory: {
       create: jest.fn(),
     },
+    auditLog: {
+      create: jest.fn().mockResolvedValue({}),
+    },
   },
 }))
 
@@ -267,7 +270,7 @@ describe('GET /api/categories', () => {
 describe('POST /api/categories', () => {
   it('returns 409 for duplicate name', async () => {
     ;(getServerSession as jest.Mock).mockResolvedValue(mockSession)
-    ;(db.category.findUnique as jest.Mock).mockResolvedValue({ id: 'cat-1', name: 'Bebidas' })
+    ;(db.category.findFirst as jest.Mock).mockResolvedValue({ id: 'cat-1', name: 'Bebidas' })
     const res = await postCategory(
       makePostRequest('http://localhost/api/categories', { name: 'Bebidas' })
     )
@@ -276,7 +279,7 @@ describe('POST /api/categories', () => {
 
   it('creates category successfully', async () => {
     ;(getServerSession as jest.Mock).mockResolvedValue(mockSession)
-    ;(db.category.findUnique as jest.Mock).mockResolvedValue(null)
+    ;(db.category.findFirst as jest.Mock).mockResolvedValue(null)
     ;(db.category.create as jest.Mock).mockResolvedValue({
       id: 'cat-2',
       name: 'Lacteos',

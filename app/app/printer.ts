@@ -132,9 +132,16 @@ function encode(text: string): number[] {
 const WIDTH = 32 // caracteres por línea en 58mm (fuente A); en 80mm sobra margen
 
 function rowText(left: string, right: string): string {
-  const max = WIDTH - right.length - 1
-  const l = left.length > max ? left.slice(0, Math.max(0, max - 1)) + '…' : left
-  return l + ' '.repeat(Math.max(1, WIDTH - l.length - right.length)) + right
+  // 'right' también se trunca: nombres de cliente/proveedor admiten hasta 200
+  // caracteres (muy por encima del ancho del papel) — sin este tope "max"
+  // se volvía negativo y la línea desbordaba el ancho físico del ticket.
+  const r = right.length > WIDTH - 1 ? right.slice(0, WIDTH - 1) : right
+  const max = WIDTH - r.length - 1
+  // Punto ASCII, no '…': ese carácter no está en el mapa CP858 (línea 115) y
+  // encode() lo convertía en '?', dando la falsa impresión de un error de
+  // impresora en vez de una indicación de truncamiento.
+  const l = left.length > max ? left.slice(0, Math.max(0, max - 1)) + '.' : left
+  return l + ' '.repeat(Math.max(1, WIDTH - l.length - r.length)) + r
 }
 
 export function buildEscpos(lines: TicketLine[]): Uint8Array {

@@ -419,6 +419,15 @@ export async function GET(req: NextRequest) {
     ]
   }
 
+  // Sin filtro de fecha, el tope de 100 es para la lista de "ventas
+  // recientes" (Panel, pantalla de Ventas) — cuando SÍ hay un rango acotado
+  // (p. ej. el gráfico de 7 días del Panel), un negocio con más de 100
+  // ventas en esos días veía días truncados/subestimados en el gráfico. Un
+  // rango de fechas ya acota el volumen por sí mismo, así que solo cuando
+  // viene explícito se sube el tope (con un techo razonable para no dejar la
+  // consulta sin límite alguno).
+  const take = dateFrom && dateTo ? 5000 : 100
+
   const sales = await db.sale.findMany({
     where,
     include: {
@@ -430,7 +439,7 @@ export async function GET(req: NextRequest) {
       customer: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
-    take: 100,
+    take,
   })
 
   return NextResponse.json({ sales: serialize(sales) })

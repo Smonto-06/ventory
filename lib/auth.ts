@@ -14,6 +14,18 @@ interface VentoryUser extends User {
   businessSlug: string
 }
 
+const LOCK_DURATION_MS = 15 * 60 * 1000
+const MAX_FAILED_ATTEMPTS = 5
+
+// Hash sin dueño (de una contraseña que nadie usa), con el mismo costo (12)
+// que bcrypt.hash() en el resto del código: sirve solo para que un correo
+// inexistente tome aproximadamente el mismo tiempo en responder que uno que
+// sí existe pero con contraseña incorrecta. Sin esto, un correo inexistente
+// respondía casi de inmediato (sin bcrypt.compare) mientras uno real
+// tardaba los ~50-100ms del hash — una diferencia de tiempo medible que
+// permite enumerar qué correos están registrados.
+const DUMMY_HASH = '$2b$12$yAM3N2fqGIQeIIh/IudS3eApU7UUXRp0RYCTjkkkwRBCGmYEUdSrm'
+
 export const authOptions: NextAuthOptions = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   adapter: PrismaAdapter(db) as any,
@@ -44,12 +56,45 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (!user) {
+          // Compara igual contra un hash de relleno, para no delatar por el
+          // tiempo de respuesta que este correo no existe (ver DUMMY_HASH).
+          await bcrypt.compare(credentials.password, DUMMY_HASH)
           throw new Error('Correo o contraseña incorrectos')
+        }
+
+        // Igual que en el login por PIN: sin este freno, el email+contraseña
+        // (la puerta de entrada principal) se podía probar por fuerza bruta
+        // sin ningún límite. Aquí sí es inequívoco a quién bloquear (un solo
+        // correo, no varios cajeros compartiendo el mismo intento).
+        if (user.lockedAt) {
+          const lockExpires = new Date(user.lockedAt.getTime() + LOCK_DURATION_MS)
+          if (new Date() < lockExpires) {
+            throw new Error('Demasiados intentos fallidos. Intenta de nuevo en unos minutos.')
+          }
+          await db.user.update({
+            where: { id: user.id },
+            data: { failedAttempts: 0, lockedAt: null },
+          })
         }
 
         const passwordValid = await bcrypt.compare(credentials.password, user.password)
 
         if (!passwordValid) {
+          // {increment: 1} lo traduce Prisma a UPDATE ... SET failedAttempts
+          // = failedAttempts + 1 dentro de la propia base de datos — atómico
+          // de verdad. La versión anterior leía failedAttempts en memoria y
+          // volvía a escribir ese valor+1: una ráfaga de intentos paralelos
+          // (el caso real de un script de fuerza bruta) podía leer todos el
+          // mismo valor base y pisarse entre sí, así que 20 intentos
+          // simultáneos contaban como uno solo y nunca activaban el bloqueo.
+          const actualizado = await db.user.update({
+            where: { id: user.id },
+            data: { failedAttempts: { increment: 1 } },
+            select: { failedAttempts: true },
+          })
+          if (actualizado.failedAttempts >= MAX_FAILED_ATTEMPTS) {
+            await db.user.update({ where: { id: user.id }, data: { lockedAt: new Date() } })
+          }
           throw new Error('Correo o contraseña incorrectos')
         }
 
@@ -62,6 +107,13 @@ export const authOptions: NextAuthOptions = {
 
         if (!user.emailVerified) {
           throw new Error('Confirma tu correo antes de entrar. Revisa tu bandeja (y el spam).')
+        }
+
+        if (user.failedAttempts > 0 || user.lockedAt) {
+          await db.user.update({
+            where: { id: user.id },
+            data: { failedAttempts: 0, lockedAt: null },
+          })
         }
 
         return {
@@ -97,9 +149,14 @@ export const authOptions: NextAuthOptions = {
       // un usuario desactivado a mitad de turno debe perder acceso de una,
       // no seguir vendiendo hasta que la cookie de 8h expire por su cuenta.
       // NextAuth trata null/undefined como "sin sesión" para getServerSession.
+      // De paso se refrescan role/branchId desde la BD (no solo isActive):
+      // el rol y la sucursal quedaban "congelados" en el JWT firmado al
+      // iniciar sesión, así que degradar a un ADMIN a CAJERO (o reasignarlo
+      // de sucursal) no le quitaba esos permisos hasta que la cookie de 8h
+      // expirara por su cuenta.
       const activo = await db.user.findUnique({
         where: { id: token.id as string },
-        select: { isActive: true },
+        select: { isActive: true, role: true, branchId: true },
       })
       if (!activo?.isActive) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -107,9 +164,9 @@ export const authOptions: NextAuthOptions = {
       }
 
       session.user.id = token.id as string
-      session.user.role = token.role as UserRole
+      session.user.role = activo.role
       session.user.businessId = token.businessId as string
-      session.user.branchId = token.branchId as string | undefined
+      session.user.branchId = activo.branchId ?? undefined
       session.user.businessName = token.businessName as string
       session.user.businessSlug = token.businessSlug as string
       return session

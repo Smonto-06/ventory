@@ -32,7 +32,13 @@ function csv(rows: Array<Array<string | number | null | undefined>>): string {
       .map((r) =>
         r
           .map((c) => {
-            const v = c === null || c === undefined ? '' : String(c)
+            let v = c === null || c === undefined ? '' : String(c)
+            // Inyección de fórmulas CSV (CWE-1236): un nombre de cliente/
+            // producto/proveedor que empiece con = + - @ se ejecutaría como
+            // fórmula si el ADMIN abre el CSV exportado en Excel — puede
+            // venir de un rol de menor privilegio (p. ej. un cajero creando
+            // un cliente). Se antepone un apóstrofo para forzarlo a texto.
+            if (/^[=+\-@]/.test(v)) v = `'${v}`
             return /[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
           })
           .join(';'),

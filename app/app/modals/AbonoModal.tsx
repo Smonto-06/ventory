@@ -37,14 +37,20 @@ export default function AbonoModal() {
 
   const [method, setMethod] = useState<Metodo>('CASH')
   const [amount, setAmount] = useState(0)
+  const [enviando, setEnviando] = useState(false)
 
   if (!c) return null
 
-  const ok = amount > 0
+  const ok = amount > 0 && !enviando
 
-  const save = () => {
+  const save = async () => {
     if (!ok) return
-    s.payClient(c.id, Math.min(amount, c.balance), method)
+    setEnviando(true)
+    try {
+      await s.payClient(c.id, Math.min(amount, c.balance), method)
+    } finally {
+      setEnviando(false)
+    }
   }
 
   return (
@@ -104,7 +110,7 @@ export default function AbonoModal() {
           Cancelar
         </button>
         <button onClick={save} style={saveBtnStyle(ok)}>
-          Registrar abono
+          {enviando ? 'Guardando…' : 'Registrar abono'}
         </button>
       </div>
     </Modal>

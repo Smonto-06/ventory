@@ -3,7 +3,7 @@
 // Pantalla de cobro — réplica 1:1 del prototipo (sección sCobro).
 // Cobro combinado: Efectivo/Tarjeta/Transferencia con montos; Crédito exclusivo.
 
-import { CSSProperties } from 'react'
+import { CSSProperties, useState } from 'react'
 import { useApp } from '../store'
 import { DENOMS, DENOM_LABELS } from '../ui'
 import { useWindowWidth } from '../Shell'
@@ -56,13 +56,24 @@ export default function CobroScreen() {
   const creditCustomer = s.customerName.trim()
   const showItemsCol = w >= 900 && s.cart.length > 0
 
-  const onFinalize = () => {
-    if (!canFinalize) return
+  // Sin esta bandera, un doble toque en "Finalizar venta" (típico en
+  // pantalla táctil con algo de lag de red) alcanza a mandar dos ventas
+  // idénticas antes de que la primera respuesta limpie el carrito: doble
+  // descuento de stock, doble cobro a crédito, caja descuadrada.
+  const [enviando, setEnviando] = useState(false)
+
+  const onFinalize = async () => {
+    if (!canFinalize || enviando) return
     if (p.credito) {
       // Crédito requiere elegir cliente registrado (modal del prototipo)
       s.openModal('creditoVenta')
-    } else {
-      s.finalizeSale()
+      return
+    }
+    setEnviando(true)
+    try {
+      await s.finalizeSale()
+    } finally {
+      setEnviando(false)
     }
   }
 
@@ -235,9 +246,10 @@ export default function CobroScreen() {
       <div style={{ flex: 'none', padding: '14px clamp(14px,3vw,30px) 18px', background: 'var(--bg)', position: 'sticky', bottom: 0 }}>
         <button
           onClick={onFinalize}
-          style={{ width: '100%', height: 58, borderRadius: 15, background: canFinalize ? '#6366F1' : '#9CCFC7', color: '#fff', fontWeight: 800, fontSize: 17.5, cursor: canFinalize ? 'pointer' : 'not-allowed', boxShadow: '0 12px 26px -12px rgba(16,152,135,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+          disabled={enviando}
+          style={{ width: '100%', height: 58, borderRadius: 15, background: canFinalize && !enviando ? '#6366F1' : '#9CCFC7', color: '#fff', fontWeight: 800, fontSize: 17.5, cursor: canFinalize && !enviando ? 'pointer' : 'not-allowed', boxShadow: '0 12px 26px -12px rgba(16,152,135,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
         >
-          ✓ Finalizar venta <span style={{ fontVariantNumeric: 'tabular-nums' }}>· {s.fmt(total)}</span>
+          {enviando ? 'Guardando…' : <>✓ Finalizar venta <span style={{ fontVariantNumeric: 'tabular-nums' }}>· {s.fmt(total)}</span></>}
         </button>
       </div>
     </div>

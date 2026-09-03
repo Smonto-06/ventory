@@ -17,7 +17,7 @@
 //  - Eventos: Wompi firma cada webhook con sha256(propiedades + timestamp +
 //    secreto de eventos); un evento sin firma válida se rechaza con 403.
 
-import { createHash } from 'crypto'
+import { createHash, timingSafeEqual } from 'crypto'
 
 /** Plan único: $59.900 COP al mes. Wompi trabaja en centavos. */
 export const PLAN_PRECIO_COP = 59_900
@@ -110,7 +110,28 @@ export function eventoValido(evento: EventoWompi): boolean {
   if (!firma?.checksum || !Array.isArray(firma.properties) || evento.timestamp === undefined) return false
   const concatenado = firma.properties.map((p) => propiedad(evento.data, p)).join('')
   const esperado = sha256(`${concatenado}${evento.timestamp}${env('WOMPI_EVENTS_SECRET')}`)
-  return esperado === firma.checksum.toLowerCase()
+  const recibido = firma.checksum.toLowerCase()
+  // Comparación en tiempo constante: sha256 siempre produce 64 hex chars,
+  // pero por si el checksum recibido viniera con otra longitud, comparar
+  // largo primero evita que timingSafeEqual lance por buffers desiguales.
+  if (recibido.length !== esperado.length) return false
+  return timingSafeEqual(Buffer.from(esperado), Buffer.from(recibido))
+}
+
+async function listarTransacciones(
+  reference: string,
+): Promise<Array<{ id: string; status: string; payment_method_type?: string; finalized_at?: string | null; created_at?: string }> | null> {
+  try {
+    const res = await fetch(`${wompiApiBase()}/transactions?reference=${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${env('WOMPI_PRIVATE_KEY')}` },
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    const body = (await res.json()) as { data?: Array<{ id: string; status: string; payment_method_type?: string; finalized_at?: string | null; created_at?: string }> }
+    return body.data ?? []
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -120,17 +141,27 @@ export function eventoValido(evento: EventoWompi): boolean {
 export async function consultarTransaccion(
   reference: string,
 ): Promise<{ id: string; status: string; payment_method_type?: string; finalized_at?: string | null } | null> {
-  try {
-    const res = await fetch(`${wompiApiBase()}/transactions?reference=${encodeURIComponent(reference)}`, {
-      headers: { Authorization: `Bearer ${env('WOMPI_PRIVATE_KEY')}` },
-      cache: 'no-store',
-    })
-    if (!res.ok) return null
-    const body = (await res.json()) as { data?: Array<{ id: string; status: string; payment_method_type?: string; finalized_at?: string | null; created_at?: string }> }
-    const lista = body.data ?? []
-    if (!lista.length) return null
-    return lista[lista.length - 1]
-  } catch {
-    return null
-  }
+  const lista = await listarTransacciones(reference)
+  if (!lista || !lista.length) return null
+  return lista[lista.length - 1]
+}
+
+/**
+ * Cruza el `reference` del webhook contra la propia API de Wompi: el HMAC
+ * del evento firma `id`/`status`/`amount_in_cents`, pero NO `reference` — un
+ * payload real y firmado se podría reenviar cambiando solo la referencia
+ * hacia el pago PENDING de otro negocio con el mismo monto, sin invalidar el
+ * checksum. Si la API confirma que esa transacción (por id) sí pertenece a
+ * esa referencia, `reference` queda efectivamente atado a datos que la propia
+ * API de Wompi entrega (HTTPS + nuestra llave privada), no solo al HMAC.
+ *
+ * true = confirmado; false = la API respondió pero esa transacción no está
+ * en la lista de esa referencia (evidencia de manipulación → rechazar);
+ * null = no se pudo confirmar (API de Wompi inalcanzable) — no es evidencia
+ * de nada, así que no bloquea por sí solo un pago que el HMAC ya validó.
+ */
+export async function referenciaCoincide(reference: string, transactionId: string): Promise<boolean | null> {
+  const lista = await listarTransacciones(reference)
+  if (lista === null) return null
+  return lista.some((t) => t.id === transactionId)
 }

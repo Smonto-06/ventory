@@ -12,6 +12,7 @@ import {
 } from '@/lib/api-helpers'
 import { MovementType } from '@prisma/client'
 import { moveStock, InsufficientStockError } from '@/lib/inventory'
+import { requireActiveBusiness } from '@/lib/plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,15 +43,21 @@ export async function POST(req: NextRequest) {
 
   const { productId, quantity, direction, notes } = parsed.data
 
+  // Prueba vencida o plan suspendido → no se puede seguir moviendo inventario
+  const planBlock = await requireActiveBusiness(user.businessId)
+  if (planBlock) return planBlock
+
   try {
     const branchId = await resolveBranchId(user.businessId, parsed.data.branchId)
     if (!branchId) return badRequest('Sucursal no encontrada')
 
+    // status: ACTIVE — no alcanzable desde el modal de traslado (ya filtra
+    // productos archivados), pero la API en sí no lo bloqueaba.
     const product = await db.product.findFirst({
-      where: { id: productId, businessId: user.businessId },
+      where: { id: productId, businessId: user.businessId, status: 'ACTIVE' },
       select: { id: true, name: true },
     })
-    if (!product) return badRequest('Producto no encontrado')
+    if (!product) return badRequest('Producto no encontrado o archivado')
 
     const result = await db.$transaction(async (tx) => {
       // Movimiento atómico; una salida nunca puede dejar el stock en negativo

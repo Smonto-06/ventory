@@ -53,22 +53,32 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return badRequest(parsed.error.issues[0].message)
 
   try {
+    // Se busca SIN filtrar isActive: el nombre tiene constraint único en BD
+    // (@@unique([businessId, name])) que sí incluye archivados — si el
+    // chequeo aquí solo miraba activos, un nombre igual a uno archivado
+    // pasaba este filtro y luego reventaba el create() con un 500 genérico.
     const dup = await db.supplier.findFirst({
       where: {
         businessId: user.businessId,
         name: { equals: parsed.data.name, mode: 'insensitive' },
-        isActive: true,
       },
     })
-    if (dup) return badRequest('Ya existe un proveedor con ese nombre')
+    if (dup?.isActive) return badRequest('Ya existe un proveedor con ese nombre')
 
-    const supplier = await db.supplier.create({
-      data: {
-        name: parsed.data.name,
-        phone: parsed.data.phone || null,
-        businessId: user.businessId,
-      },
-    })
+    // Un proveedor archivado con el mismo nombre se reactiva en vez de
+    // fallar — mismo criterio que ya usa la creación de compras.
+    const supplier = dup
+      ? await db.supplier.update({
+          where: { id: dup.id },
+          data: { isActive: true, phone: parsed.data.phone || dup.phone },
+        })
+      : await db.supplier.create({
+          data: {
+            name: parsed.data.name,
+            phone: parsed.data.phone || null,
+            businessId: user.businessId,
+          },
+        })
     return NextResponse.json({ supplier }, { status: 201 })
   } catch (error) {
     return serverError('POST /api/suppliers', error)

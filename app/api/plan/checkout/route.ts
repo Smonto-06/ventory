@@ -16,6 +16,22 @@ export async function POST(req: NextRequest) {
   const user = await getCurrentUser(req)
   if (!user) return unauthorized()
   if (!isFullAdmin(user)) return forbidden('Solo el administrador paga el plan')
+
+  // SUSPENDED es una decisión manual del super admin (no un simple vencimiento
+  // de plan/prueba): sin este chequeo, un negocio suspendido podía pagar por
+  // su cuenta y reactivarse solo, saltándose por completo la revisión del
+  // super admin que motivó la suspensión.
+  const negocioActual = await db.business.findUnique({
+    where: { id: user.businessId },
+    select: { status: true },
+  })
+  if (negocioActual?.status === 'SUSPENDED') {
+    return NextResponse.json(
+      { error: 'Tu plan está suspendido. Escríbenos a ventorypos@gmail.com para reactivarlo.', code: 'PLAN_BLOCKED' },
+      { status: 403 },
+    )
+  }
+
   const pasarela = pasarelaActiva()
   if (!pasarela) {
     return NextResponse.json(
@@ -79,7 +95,14 @@ export async function GET(req: NextRequest) {
     })
     if (!pago) return NextResponse.json({ error: 'Pago no encontrado' }, { status: 404 })
 
-    if (pago.status === 'PENDING' && pago.gateway === 'wompi') {
+    // No solo PENDING: tanto Wompi como Mercado Pago dejan reintentar un pago
+    // rechazado sin cambiar de referencia — si esta referencia quedó
+    // DECLINED/VOIDED/ERROR pero el comprador reintentó y esta vez aprobó,
+    // hay que volver a consultar la pasarela, no quedarse callado para
+    // siempre solo porque el estado local ya no es PENDING.
+    const reintentable = pago.status !== 'APPROVED'
+
+    if (reintentable && pago.gateway === 'wompi') {
       const tx = await consultarTransaccion(ref)
       if (tx?.status === 'APPROVED') {
         await aplicarPagoAprobado(pago.id, {
@@ -89,12 +112,12 @@ export async function GET(req: NextRequest) {
         })
       } else if (tx && ['DECLINED', 'VOIDED', 'ERROR'].includes(tx.status)) {
         await db.planPayment.updateMany({
-          where: { id: pago.id, status: 'PENDING' },
+          where: { id: pago.id, status: { not: 'APPROVED' } },
           data: { status: tx.status as 'DECLINED' | 'VOIDED' | 'ERROR', wompiId: tx.id, paymentMethod: tx.payment_method_type },
         })
       }
       pago = await db.planPayment.findUniqueOrThrow({ where: { id: pago.id } })
-    } else if (pago.status === 'PENDING' && pago.gateway === 'mercadopago') {
+    } else if (reintentable && pago.gateway === 'mercadopago') {
       const mp = await consultarPagoPorReferencia(ref)
       const estado = estadoDesdeMp(mp?.status)
       // el monto exacto también se exige en el respaldo
@@ -106,7 +129,7 @@ export async function GET(req: NextRequest) {
         })
       } else if (mp && (estado === 'DECLINED' || estado === 'VOIDED')) {
         await db.planPayment.updateMany({
-          where: { id: pago.id, status: 'PENDING' },
+          where: { id: pago.id, status: { not: 'APPROVED' } },
           data: { status: estado, wompiId: String(mp.id), paymentMethod: mp.payment_method_id },
         })
       }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { hashToken } from '@/lib/tokens'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const user = await db.user.findUnique({ where: { resetToken: parsed.data.token } })
+    // Compatibilidad con enlaces ya enviados antes de este cambio (guardaban
+    // el token en texto plano): se busca primero por hash y, si no aparece,
+    // por el valor crudo — sin este respaldo, cualquier restablecimiento en
+    // curso justo al desplegar (hasta 1h de vigencia) fallaría de una con
+    // "enlace inválido" aunque el token nunca hubiera expirado.
+    const hash = hashToken(parsed.data.token)
+    const user = await db.user.findFirst({
+      where: { OR: [{ resetToken: hash }, { resetToken: parsed.data.token }] },
+    })
     if (!user || !user.resetTokenExpires || user.resetTokenExpires < new Date()) {
       return NextResponse.json(
         { error: 'El enlace ya no es válido. Solicita uno nuevo.' },
