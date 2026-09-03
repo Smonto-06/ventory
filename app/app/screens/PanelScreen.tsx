@@ -191,12 +191,28 @@ export default function PanelScreen() {
   // los últimos 7 días en hora Colombia — no la del navegador.
   const [weekSales, setWeekSales] = useState<Sale[] | null>(null)
   useEffect(() => {
+    let vivo = true
     const hoy = diaColombiano(new Date())
     const hace6 = diaColombiano(new Date(Date.now() - 6 * 86400000))
-    api
-      .sales(`?dateFrom=${hace6.desde.toISOString()}&dateTo=${hoy.hasta.toISOString()}`)
-      .then((r) => setWeekSales(r.sales))
-      .catch(() => setWeekSales(null))
+    const pedir = (intentosRestantes: number) => {
+      api
+        .sales(`?dateFrom=${hace6.desde.toISOString()}&dateTo=${hoy.hasta.toISOString()}`)
+        .then((r) => {
+          if (vivo) setWeekSales(r.sales)
+        })
+        .catch(() => {
+          // Un fallo transitorio (blip de red) no debe dejar el Panel
+          // truncado el resto de la sesión: se reintenta un par de veces
+          // con una espera corta antes de resignarse a la lista compartida
+          // (con su tope de 100) como respaldo.
+          if (!vivo) return
+          if (intentosRestantes > 0) setTimeout(() => pedir(intentosRestantes - 1), 4000)
+        })
+    }
+    pedir(2)
+    return () => {
+      vivo = false
+    }
   }, [])
 
   // Mientras carga (o si falla), se usa la lista compartida como respaldo

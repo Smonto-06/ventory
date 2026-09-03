@@ -144,6 +144,10 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
         c.sales ? `${c.sales} venta${c.sales === 1 ? '' : 's'}` : '',
         c.cashSessions ? `${c.cashSessions} turno${c.cashSessions === 1 ? '' : 's'} de caja` : '',
         c.purchases ? `${c.purchases} compra${c.purchases === 1 ? '' : 's'}` : '',
+        // Sin esto, un usuario cuya ÚNICA actividad es auditLogs (p. ej. solo
+        // creó otro usuario o cambió un ajuste) bloqueaba el borrado con un
+        // "ya tiene historial" sin ninguna pista de a qué se refería.
+        c.auditLogs ? `${c.auditLogs} acción${c.auditLogs === 1 ? '' : 'es'} registrada${c.auditLogs === 1 ? '' : 's'}` : '',
       ].filter(Boolean)
       return NextResponse.json(
         {
