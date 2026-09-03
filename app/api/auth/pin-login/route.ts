@@ -68,13 +68,6 @@ export async function POST(request: Request) {
             where: { id: user.id },
             data: { failedAttempts: 0, lockedAt: null },
           })
-          // Se actualiza también el objeto en memoria (mismo `user` que
-          // queda en `users` para el conteo de más abajo): sin esto, un PIN
-          // equivocado justo después de vencer el bloqueo volvía a leer el
-          // contador viejo (5 o más) y relanzaba el bloqueo de una, en vez
-          // de dar las 5 oportunidades nuevas prometidas.
-          user.failedAttempts = 0
-          user.lockedAt = null
         }
       }
 
@@ -95,14 +88,17 @@ export async function POST(request: Request) {
       // PIN en el negocio: ahí el intento es inequívocamente suyo.
       if (users.length === 1) {
         const [u] = users
-        const failedAttempts = u.failedAttempts + 1
-        await db.user.update({
+        // {increment: 1}, no leer-y-sumar en memoria: mismo arreglo que en
+        // el login normal (lib/auth.ts) — una ráfaga de intentos paralelos
+        // podía pisarse entre sí y nunca activar el bloqueo.
+        const actualizado = await db.user.update({
           where: { id: u.id },
-          data: {
-            failedAttempts,
-            ...(failedAttempts >= MAX_FAILED_ATTEMPTS ? { lockedAt: new Date() } : {}),
-          },
+          data: { failedAttempts: { increment: 1 } },
+          select: { failedAttempts: true },
         })
+        if (actualizado.failedAttempts >= MAX_FAILED_ATTEMPTS) {
+          await db.user.update({ where: { id: u.id }, data: { lockedAt: new Date() } })
+        }
       }
 
       return NextResponse.json(

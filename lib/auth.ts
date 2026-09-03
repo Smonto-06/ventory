@@ -66,7 +66,6 @@ export const authOptions: NextAuthOptions = {
         // (la puerta de entrada principal) se podía probar por fuerza bruta
         // sin ningún límite. Aquí sí es inequívoco a quién bloquear (un solo
         // correo, no varios cajeros compartiendo el mismo intento).
-        let intentosPrevios = user.failedAttempts
         if (user.lockedAt) {
           const lockExpires = new Date(user.lockedAt.getTime() + LOCK_DURATION_MS)
           if (new Date() < lockExpires) {
@@ -76,25 +75,26 @@ export const authOptions: NextAuthOptions = {
             where: { id: user.id },
             data: { failedAttempts: 0, lockedAt: null },
           })
-          // El bloqueo ya venció y se limpió en BD, pero `user` sigue con el
-          // valor viejo (5 o más) leído antes del reset — sin esto, el
-          // primer intento fallido tras vencer el bloqueo volvía a calcular
-          // 6 y relanzaba el bloqueo de una, en vez de dar las 5
-          // oportunidades nuevas prometidas.
-          intentosPrevios = 0
         }
 
         const passwordValid = await bcrypt.compare(credentials.password, user.password)
 
         if (!passwordValid) {
-          const failedAttempts = intentosPrevios + 1
-          await db.user.update({
+          // {increment: 1} lo traduce Prisma a UPDATE ... SET failedAttempts
+          // = failedAttempts + 1 dentro de la propia base de datos — atómico
+          // de verdad. La versión anterior leía failedAttempts en memoria y
+          // volvía a escribir ese valor+1: una ráfaga de intentos paralelos
+          // (el caso real de un script de fuerza bruta) podía leer todos el
+          // mismo valor base y pisarse entre sí, así que 20 intentos
+          // simultáneos contaban como uno solo y nunca activaban el bloqueo.
+          const actualizado = await db.user.update({
             where: { id: user.id },
-            data: {
-              failedAttempts,
-              ...(failedAttempts >= MAX_FAILED_ATTEMPTS ? { lockedAt: new Date() } : {}),
-            },
+            data: { failedAttempts: { increment: 1 } },
+            select: { failedAttempts: true },
           })
+          if (actualizado.failedAttempts >= MAX_FAILED_ATTEMPTS) {
+            await db.user.update({ where: { id: user.id }, data: { lockedAt: new Date() } })
+          }
           throw new Error('Correo o contraseña incorrectos')
         }
 
