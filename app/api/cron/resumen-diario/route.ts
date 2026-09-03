@@ -73,9 +73,31 @@ export async function GET(req: NextRequest) {
       if (!n.notifyLowStock) resumen.agotados = []
       // Un día sin ventas y sin nada por reponer no merece correo
       if (resumen.ventas.transacciones === 0 && resumen.agotados.length === 0) continue
-      await sendDailySummaryEmail(destino, resumen)
-      await db.business.update({ where: { id: n.id }, data: { lastDailySummaryAt: ahora } })
-      enviados++
+
+      // Reclama el envío ANTES de mandarlo (condicionado al mismo chequeo de
+      // arriba, pero atómico): si dos invocaciones del cron corren
+      // solapadas, la lectura de lastDailySummaryAt de ambas puede quedar
+      // desactualizada frente a la otra — el updateMany condicionado
+      // garantiza que solo una gane la carrera para este negocio.
+      const reclamado = await db.business.updateMany({
+        where: { id: n.id, OR: [{ lastDailySummaryAt: null }, { lastDailySummaryAt: { lt: inicioDeHoy } }] },
+        data: { lastDailySummaryAt: ahora },
+      })
+      if (reclamado.count === 0) {
+        yaEnviados++
+        continue
+      }
+
+      try {
+        await sendDailySummaryEmail(destino, resumen)
+        enviados++
+      } catch (error) {
+        // El envío falló DESPUÉS de reclamarlo: se libera el reclamo para
+        // que un reintento real (invocación posterior del mismo día) pueda
+        // volver a intentarlo, en vez de darlo por enviado para siempre hoy.
+        await db.business.update({ where: { id: n.id }, data: { lastDailySummaryAt: n.lastDailySummaryAt } })
+        throw error
+      }
     } catch (error) {
       console.error(`resumen diario · negocio ${n.id}:`, error)
       fallos.push(n.id)

@@ -71,7 +71,13 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
       select: { type: true, amount: true, cashSessionId: true },
     }),
     db.cashSession.findMany({
-      where: { branch: { businessId }, openedAt: enElDia },
+      // openedAt: enElDia trae los turnos (abiertos o cerrados) de HOY, pero
+      // por sí solo se le escapa el caso más común de "se quedó la caja
+      // abierta": un turno que un cajero abrió AYER (o antes) y nunca
+      // cerró — sigue OPEN cuando corre el cron, pero openedAt ya no cae en
+      // el día de hoy. El OR con status:'OPEN' lo incluye sin importar
+      // cuándo se abrió.
+      where: { branch: { businessId }, OR: [{ openedAt: enElDia }, { status: 'OPEN' }] },
       select: {
         id: true,
         status: true,
