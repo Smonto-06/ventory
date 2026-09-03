@@ -484,6 +484,7 @@ function PlanBanner() {
 function OfflineBanner() {
   const s = useApp()
   const [online, setOnline] = useState(true)
+  const [reintentando, setReintentando] = useState(false)
 
   useEffect(() => {
     const upd = () => setOnline(navigator.onLine)
@@ -508,11 +509,48 @@ function OfflineBanner() {
         fontSize: 13,
         padding: '9px 16px',
         textAlign: 'center',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
       }}
     >
-      {online
-        ? `${s.pendingCount} operaci${s.pendingCount === 1 ? 'ón' : 'ones'} sin conexión pendiente${s.pendingCount === 1 ? '' : 's'} de sincronizar…`
-        : `Sin conexión — puedes seguir vendiendo, comprando y creando productos${s.pendingCount ? ` (${s.pendingCount} pendiente${s.pendingCount === 1 ? '' : 's'})` : ''}, se enviará al volver el internet`}
+      <span>
+        {online
+          ? `${s.pendingCount} operaci${s.pendingCount === 1 ? 'ón' : 'ones'} sin conexión pendiente${s.pendingCount === 1 ? '' : 's'} de sincronizar…`
+          : `Sin conexión — puedes seguir vendiendo, comprando y creando productos${s.pendingCount ? ` (${s.pendingCount} pendiente${s.pendingCount === 1 ? '' : 's'})` : ''}, se enviará al volver el internet`}
+      </span>
+      {online && s.pendingCount > 0 && (
+        // El reintento automático (evento 'online' + cada 2 min) cubre la
+        // mayoría de los casos, pero un fallo transitorio puede quedar
+        // esperando hasta el próximo ciclo — este botón deja al usuario
+        // forzarlo de una en vez de tener que recargar la pestaña.
+        <button
+          disabled={reintentando}
+          onClick={async () => {
+            setReintentando(true)
+            try {
+              await s.reintentarSync()
+            } finally {
+              setReintentando(false)
+            }
+          }}
+          style={{
+            background: 'transparent',
+            border: '1.5px solid #4338CA',
+            borderRadius: 7,
+            color: '#4338CA',
+            fontWeight: 700,
+            fontSize: 12,
+            padding: '3px 10px',
+            cursor: reintentando ? 'default' : 'pointer',
+            opacity: reintentando ? 0.6 : 1,
+            flex: 'none',
+          }}
+        >
+          {reintentando ? 'Reintentando…' : 'Reintentar ahora'}
+        </button>
+      )}
     </div>
   )
 }
