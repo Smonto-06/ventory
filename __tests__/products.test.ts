@@ -7,8 +7,9 @@ jest.mock('@/lib/auth', () => ({
   authOptions: {},
 }))
 
-jest.mock('@/lib/db', () => ({
-  db: {
+jest.mock('@/lib/db', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db: any = {
     product: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
@@ -21,14 +22,24 @@ jest.mock('@/lib/db', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
     },
+    supplier: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
     inventory: {
       create: jest.fn(),
     },
     auditLog: {
       create: jest.fn().mockResolvedValue({}),
     },
-  },
-}))
+  }
+  // POST /api/products crea el producto (y resuelve su proveedor) dentro de
+  // una transacción — el mock solo necesita ejecutar el callback con el
+  // mismo objeto, ya que ningún test aquí depende de aislamiento real.
+  db.$transaction = jest.fn((fn: (tx: typeof db) => unknown) => fn(db))
+  return { db }
+})
 
 import { getServerSession } from 'next-auth'
 import { db } from '@/lib/db'

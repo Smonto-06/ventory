@@ -186,13 +186,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // El campo "proveedor" del formulario es texto libre (legado); se enlaza
-    // con la tabla real Supplier para que la pantalla de Proveedores pueda
-    // listar sus productos — sin esto, supplierId quedaba siempre vacío.
-    const supplierId = supplier?.trim()
-      ? await resolveOrCreateSupplier(db, session.user.businessId, supplier.trim())
-      : null
-
     // ── Producto con variantes ──
     // El padre no lleva inventario ni se vende; cada variante es un producto
     // completo (stock, SKU, precio propios), así que el resto del sistema
@@ -213,6 +206,18 @@ export async function POST(request: Request) {
       }
 
       const padre = await db.$transaction(async (tx) => {
+        // El campo "proveedor" del formulario es texto libre (legado); se
+        // enlaza con la tabla real Supplier para que la pantalla de
+        // Proveedores pueda listar sus productos. Se resuelve AQUÍ (no antes
+        // de validar variantes, ni con `db` fuera de la transacción): crear o
+        // reactivar el proveedor y luego fallar la creación del producto
+        // (SKU duplicado, etc.) dejaba un proveedor nuevo huérfano en el
+        // catálogo sin ningún producto — al estar en la misma transacción,
+        // un rollback del producto también revierte el proveedor.
+        const supplierId = supplier?.trim()
+          ? await resolveOrCreateSupplier(tx, session.user.businessId, supplier.trim())
+          : null
+
         const p = await tx.product.create({
           data: {
             name,
@@ -282,35 +287,44 @@ export async function POST(request: Request) {
       )
     }
 
-    const product = await db.product.create({
-      data: {
-        name,
-        description,
-        barcode,
-        sku,
-        price,
-        cost,
-        taxRate: taxRate ?? 0.16,
-        unitOfMeasure,
-        supplier,
-        supplierId,
-        imageUrl,
-        businessId: session.user.businessId,
-        categoryId: categoryId ?? null,
-        ...(branchId && {
-          inventory: {
-            create: {
-              branchId,
-              quantity: initialStock ?? 0,
-              minStock: minStock ?? 0,
+    const product = await db.$transaction(async (tx) => {
+      // Ver comentario en la rama de variantes: se resuelve dentro de la
+      // misma transacción para que un SKU duplicado (P2002) revierta también
+      // al proveedor recién creado/reactivado, no solo al producto.
+      const supplierId = supplier?.trim()
+        ? await resolveOrCreateSupplier(tx, session.user.businessId, supplier.trim())
+        : null
+
+      return tx.product.create({
+        data: {
+          name,
+          description,
+          barcode,
+          sku,
+          price,
+          cost,
+          taxRate: taxRate ?? 0.16,
+          unitOfMeasure,
+          supplier,
+          supplierId,
+          imageUrl,
+          businessId: session.user.businessId,
+          categoryId: categoryId ?? null,
+          ...(branchId && {
+            inventory: {
+              create: {
+                branchId,
+                quantity: initialStock ?? 0,
+                minStock: minStock ?? 0,
+              },
             },
-          },
-        }),
-      },
-      include: {
-        category: { select: { id: true, name: true } },
-        inventory: { select: { quantity: true, minStock: true, branchId: true } },
-      },
+          }),
+        },
+        include: {
+          category: { select: { id: true, name: true } },
+          inventory: { select: { quantity: true, minStock: true, branchId: true } },
+        },
+      })
     })
 
     return NextResponse.json(

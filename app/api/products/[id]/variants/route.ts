@@ -113,6 +113,15 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const convirtiendo = !padre.hasVariants
 
     const creadas = await db.$transaction(async (tx) => {
+      // Lock consultivo por producto: una venta de este mismo producto
+      // (todavía suelto en ese momento) toma el mismo lock antes de mover su
+      // stock (ver POST /api/sales). Sin esto, una venta que ya pasó su
+      // chequeo de "no es agrupador" podía terminar de mover stock justo
+      // después de que esta conversión borrara la fila de inventario del
+      // padre — `moveStock` la recrea en 0 y la deja en negativo, huérfana,
+      // colgada de un producto que ya no se vende.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${padre.id}))`
+
       // El stock heredado se lee y se bloquea DENTRO de la transacción (no
       // antes de abrirla): si una venta concurrente del producto suelto
       // alcanza a descontar stock mientras se arma este formulario, la

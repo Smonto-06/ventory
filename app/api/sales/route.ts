@@ -26,6 +26,14 @@ class QuoteNoConvertible extends Error {
   }
 }
 
+/** El producto se convirtió en agrupador de variantes justo mientras se procesaba esta venta */
+class ProductNoVendibleError extends Error {
+  constructor(public productName: string) {
+    super(`"${productName}" ya no se puede vender directamente: ahora tiene variantes`)
+    this.name = 'ProductNoVendibleError'
+  }
+}
+
 /** El turno se cerró justo mientras se procesaba esta venta */
 class CashSessionClosedError extends Error {
   constructor() {
@@ -320,6 +328,24 @@ export async function POST(req: NextRequest) {
           },
         })
 
+        // Lock consultivo por producto: convertir este producto en agrupador
+        // de variantes (POST /api/products/[id]/variants) toma el mismo lock
+        // antes de borrar su fila de inventario. Sin esto, esta venta podía
+        // mover stock justo después de esa conversión — `moveStock` recrea la
+        // fila de inventario ya borrada y la deja huérfana y en negativo,
+        // colgada de un producto que ya no se vende. Se revalida DESPUÉS del
+        // lock (no solo con el `products.findMany` de arriba, antes de abrir
+        // la transacción) porque la conversión pudo ganar la carrera mientras
+        // se esperaba.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${item.productId}))`
+        const vigente = await tx.product.findFirst({
+          where: { id: item.productId, status: 'ACTIVE', hasVariants: false },
+          select: { id: true },
+        })
+        if (!vigente) {
+          throw new ProductNoVendibleError(product.name)
+        }
+
         // Descuento ATÓMICO: la BD resta sobre el valor real del momento.
         // Si otra caja consumió el stock justo ahora, la venta completa se
         // revierte en vez de dejar el inventario descuadrado.
@@ -412,6 +438,9 @@ export async function POST(req: NextRequest) {
         { error: 'La caja se cerró mientras se registraba la venta. Abre un turno y vuelve a intentar.' },
         { status: 409 },
       )
+    }
+    if (error instanceof ProductNoVendibleError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
     }
     console.error('[POST /api/sales]', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })

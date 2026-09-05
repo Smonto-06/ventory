@@ -134,6 +134,8 @@ describe('POST /api/sales', () => {
         // Lock consultivo por turno + relectura de su estado (ver comentario en la ruta)
         $executeRaw: jest.fn().mockResolvedValue(undefined),
         cashSession: { findUnique: jest.fn().mockResolvedValue({ status: 'OPEN' }) } as unknown as typeof db.cashSession,
+        // Lock consultivo por producto + relectura de hasVariants/status (ver comentario en la ruta)
+        product: { findFirst: jest.fn().mockResolvedValue({ id: 'prod-1' }) } as unknown as typeof db.product,
         sale: {
           count: jest.fn().mockResolvedValue(0),
           create: jest.fn().mockResolvedValue({ id: 'sale-1', folio: 'F-000001' }),

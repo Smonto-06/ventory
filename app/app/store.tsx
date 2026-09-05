@@ -542,9 +542,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const idsPendientes = new Set(
       queued.filter((q) => q.tipo === 'producto' && q.tempId).map((q) => q.tempId),
     )
+    // Una venta o compra encolada (sin conexión, o un 5xx transitorio) ya
+    // restó/sumó su stock LOCALMENTE al confirmarse — para que el cajero no
+    // pueda vender de más las mismas unidades mientras se reintenta el envío
+    // (ver finalizeSale/saveNuevaCompra). El servidor, al no haber recibido
+    // todavía esa operación, sigue devolviendo el stock de ANTES. Sin
+    // reaplicar aquí esos deltas, este refresco (cada 30s, o al volver el
+    // foco/la conexión) pisaba el descuento/ingreso local con el valor viejo
+    // del servidor y dejaba vender otra vez lo mismo hasta que la cola por
+    // fin se sincronizara.
+    const deltas = new Map<string, number>()
+    for (const q of queued) {
+      if (q.tipo !== 'venta' && q.tipo !== 'compra') continue
+      const items = (q.payload as { items?: unknown }).items
+      if (!Array.isArray(items)) continue
+      const signo = q.tipo === 'venta' ? -1 : 1
+      for (const it of items as Array<{ productId?: unknown; quantity?: unknown }>) {
+        if (typeof it?.productId !== 'string') continue
+        const qty = Number(it.quantity) || 0
+        deltas.set(it.productId, (deltas.get(it.productId) ?? 0) + signo * qty)
+      }
+    }
+    const productos = deltas.size
+      ? r.products.map((p) => (deltas.has(p.id) ? { ...p, stock: p.stock + (deltas.get(p.id) ?? 0) } : p))
+      : r.products
     setData((prev) => {
       const sinSincronizar = prev.products.filter((p) => idsPendientes.has(p.id))
-      return { ...prev, products: sinSincronizar.length ? [...r.products, ...sinSincronizar] : r.products }
+      return { ...prev, products: sinSincronizar.length ? [...productos, ...sinSincronizar] : productos }
     })
   }, [])
 
