@@ -12,7 +12,7 @@ import {
   resolveBranchId,
   serialize,
 } from '@/lib/api-helpers'
-import { CashMovementType, MovementType, PurchaseMethod } from '@prisma/client'
+import { CashMovementType, MovementType, Prisma, PurchaseMethod } from '@prisma/client'
 import { requireActiveBusiness } from '@/lib/plan'
 import { moveStock } from '@/lib/inventory'
 
@@ -45,7 +45,16 @@ const CreatePurchaseSchema = z.object({
   initialPayment: z.number().nonnegative().default(0),
   items: z.array(ItemSchema).min(1, 'La compra debe tener al menos un producto'),
   notes: z.string().optional(),
+  // Generado por el cliente al intentar la compra (no en cada reintento): ver
+  // Purchase.clientOpId en el schema.
+  clientOpId: z.string().max(100).optional(),
 })
+
+const PURCHASE_INCLUDE = {
+  supplier: { select: { id: true, name: true } },
+  items: { include: { product: { select: { id: true, name: true, sku: true, unitOfMeasure: true } } } },
+  payments: true,
+} satisfies Prisma.PurchaseInclude
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser(req)
@@ -86,9 +95,25 @@ export async function POST(req: NextRequest) {
   const parsed = CreatePurchaseSchema.safeParse(body)
   if (!parsed.success) return badRequest(parsed.error.issues[0].message)
 
-  const { supplierId, supplierName, method, initialPayment, items, notes } = parsed.data
+  const { supplierId, supplierName, method, initialPayment, items, notes, clientOpId } = parsed.data
   if (!supplierId && !supplierName) {
     return badRequest('Indica el proveedor de la compra')
+  }
+
+  // Un 5xx puede llegar DESPUÉS de que la compra ya comitió — la cola offline
+  // la reintenta creyendo que nunca se registró. Ver mismo mecanismo y mismo
+  // motivo en POST /api/sales.
+  if (clientOpId) {
+    const existing = await db.purchase.findFirst({
+      where: { clientOpId, businessId: user.businessId },
+      include: PURCHASE_INCLUDE,
+    })
+    if (existing) {
+      return NextResponse.json(
+        { purchase: { ...serialize(existing), balance: Number(existing.total) - Number(existing.paidAmount) } },
+        { status: 200 },
+      )
+    }
   }
 
   // Prueba vencida o plan suspendido → no se pueden registrar compras
@@ -176,6 +201,7 @@ export async function POST(req: NextRequest) {
           branchId,
           supplierId: supplier.id,
           createdById: user.id,
+          clientOpId: clientOpId ?? undefined,
         },
       })
 
@@ -251,11 +277,7 @@ export async function POST(req: NextRequest) {
 
       return tx.purchase.findUnique({
         where: { id: newPurchase.id },
-        include: {
-          supplier: { select: { id: true, name: true } },
-          items: { include: { product: { select: { id: true, name: true, sku: true, unitOfMeasure: true } } } },
-          payments: true,
-        },
+        include: PURCHASE_INCLUDE,
       })
     })
 
@@ -281,6 +303,23 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     )
   } catch (error) {
+    // Ver mismo mecanismo en POST /api/sales: dos intentos con el mismo
+    // clientOpId casi simultáneos — el que pierde el unique constraint
+    // devuelve la compra que ya ganó la carrera, en vez de fallar.
+    if (
+      clientOpId &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      (error.meta?.target as string[] | undefined)?.includes('clientOpId')
+    ) {
+      const existing = await db.purchase.findFirst({ where: { clientOpId }, include: PURCHASE_INCLUDE })
+      if (existing) {
+        return NextResponse.json(
+          { purchase: { ...serialize(existing), balance: Number(existing.total) - Number(existing.paidAmount) } },
+          { status: 200 },
+        )
+      }
+    }
     if (error instanceof Error && error.message === 'SUPPLIER_NOT_FOUND') {
       return badRequest('Proveedor no encontrado')
     }

@@ -43,18 +43,32 @@ export async function POST(request: Request) {
       // en Vercel, donde cada instancia serverless tiene la suya — dos
       // peticiones atendidas por instancias distintas no se verían la una a
       // la otra.
-      const ultimoEnvio = user.resetTokenExpires ? user.resetTokenExpires.getTime() - RESET_TTL_MS : 0
-      if (Date.now() - ultimoEnvio < 60_000) {
-        return NextResponse.json({ ok: true })
-      }
+      //
+      // El "reclamo" de la ventana tiene que ser la MISMA operación que lee
+      // el estado vigente: un read (findUnique de arriba) seguido de un
+      // write aparte deja una ráfaga de peticiones simultáneas leer el mismo
+      // resetTokenExpires viejo, pasar todas el chequeo, y mandar varios
+      // correos con tokens distintos (solo el último queda válido) — se
+      // salta el límite de uno por minuto en vez de frenarlo. El updateMany
+      // condicionado abajo es la única fuente de verdad: solo la petición
+      // que de verdad gana la carrera consigue actualizar la fila.
       const token = crypto.randomBytes(32).toString('hex')
-      await db.user.update({
-        where: { id: user.id },
+      const reclamado = await db.user.updateMany({
+        where: {
+          id: user.id,
+          OR: [
+            { resetTokenExpires: null },
+            { resetTokenExpires: { lte: new Date(Date.now() + RESET_TTL_MS - 60_000) } },
+          ],
+        },
         data: {
           resetToken: hashToken(token),
           resetTokenExpires: new Date(Date.now() + RESET_TTL_MS),
         },
       })
+      if (reclamado.count === 0) {
+        return NextResponse.json({ ok: true })
+      }
       const baseUrl = process.env.NEXTAUTH_URL ?? ''
       await sendPasswordResetEmail(email, user.name ?? '', `${baseUrl}/reset?token=${token}`)
     }

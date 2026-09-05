@@ -8,6 +8,14 @@ import { resolveOrCreateSupplier } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
 
+/** Otra petición concurrente ya creó un producto con ese código de barras */
+class BarcodeDuplicateError extends Error {
+  constructor(public productName: string) {
+    super(`El código de barras ya está en uso por "${productName}"`)
+    this.name = 'BarcodeDuplicateError'
+  }
+}
+
 // Los campos de texto opcionales aceptan null (el formulario envía null cuando
 // están vacíos): SKU, código de barras, proveedor, categoría y foto son opcionales.
 const createProductSchema = z.object({
@@ -47,7 +55,16 @@ const createProductSchema = z.object({
     )
     .max(120)
     .optional(),
+  // Generado por el cliente al crear un producto sin conexión (no en cada
+  // reintento): ver Product.clientOpId en el schema. Solo aplica a productos
+  // simples — variantes/edición no se pueden crear sin conexión.
+  clientOpId: z.string().max(100).nullish(),
 })
+
+const PRODUCT_INCLUDE = {
+  category: { select: { id: true, name: true } },
+  inventory: { select: { quantity: true, minStock: true, branchId: true } },
+} satisfies Prisma.ProductInclude
 
 export async function GET(request: Request) {
   try {
@@ -127,6 +144,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Declarado fuera del try: el catch de abajo lo necesita para el atajo de
+  // idempotencia (dos intentos con el mismo clientOpId chocando en la BD), y
+  // una const declarada dentro del try no es visible en su catch.
+  let clientOpId: string | null | undefined
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
@@ -144,6 +165,33 @@ export async function POST(request: Request) {
     }
 
     const { name, description, barcode, sku, price, cost, taxRate, unitOfMeasure, supplier, imageUrl, categoryId, branchId, initialStock, minStock, variantOptions, variantes } = parsed.data
+    clientOpId = parsed.data.clientOpId
+
+    // Un 5xx puede llegar DESPUÉS de que el producto ya comitió — la cola
+    // offline lo reintenta creyendo que nunca se creó. Sin este atajo, el
+    // reintento además fallaría más abajo con "código de barras ya en uso"
+    // contra SU PROPIO producto recién creado. Ver mismo mecanismo en
+    // POST /api/sales.
+    if (clientOpId) {
+      const existente = await db.product.findFirst({
+        where: { businessId: session.user.businessId, clientOpId },
+        include: PRODUCT_INCLUDE,
+      })
+      if (existente) {
+        return NextResponse.json(
+          {
+            product: {
+              ...existente,
+              price: Number(existente.price),
+              cost: existente.cost ? Number(existente.cost) : null,
+              taxRate: Number(existente.taxRate),
+              stock: existente.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0),
+            },
+          },
+          { status: 200 },
+        )
+      }
+    }
 
     if (cost !== undefined && cost > price) {
       return NextResponse.json({ error: 'El precio de venta debe ser mayor o igual al costo' }, { status: 400 })
@@ -288,6 +336,23 @@ export async function POST(request: Request) {
     }
 
     const product = await db.$transaction(async (tx) => {
+      // Lock consultivo por negocio+barcode: el chequeo de arriba (antes de
+      // abrir la transacción) es solo un atajo — dos peticiones con el mismo
+      // código de barras podían pasarlo ambas antes de que cualquiera
+      // insertara (no hay constraint único de barcode en la BD, a diferencia
+      // del SKU). Se revalida AQUÍ, bajo el lock, justo antes de crear.
+      if (barcode?.trim()) {
+        const key = `barcode:${session.user.businessId}:${barcode.trim().toLowerCase()}`
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
+        const dup = await tx.product.findFirst({
+          where: { businessId: session.user.businessId, barcode: barcode.trim(), status: 'ACTIVE' },
+          select: { id: true, name: true },
+        })
+        if (dup) {
+          throw new BarcodeDuplicateError(dup.name)
+        }
+      }
+
       // Ver comentario en la rama de variantes: se resuelve dentro de la
       // misma transacción para que un SKU duplicado (P2002) revierta también
       // al proveedor recién creado/reactivado, no solo al producto.
@@ -310,6 +375,7 @@ export async function POST(request: Request) {
           imageUrl,
           businessId: session.user.businessId,
           categoryId: categoryId ?? null,
+          clientOpId: clientOpId ?? undefined,
           ...(branchId && {
             inventory: {
               create: {
@@ -320,10 +386,7 @@ export async function POST(request: Request) {
             },
           }),
         },
-        include: {
-          category: { select: { id: true, name: true } },
-          inventory: { select: { quantity: true, minStock: true, branchId: true } },
-        },
+        include: PRODUCT_INCLUDE,
       })
     })
 
@@ -340,11 +403,39 @@ export async function POST(request: Request) {
       { status: 201 }
     )
   } catch (error) {
+    // Ver mismo mecanismo en POST /api/sales: dos intentos con el mismo
+    // clientOpId casi simultáneos — el que pierde el unique constraint
+    // devuelve el producto que ya ganó la carrera, en vez de fallar.
+    if (
+      clientOpId &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      (error.meta?.target as string[] | undefined)?.includes('clientOpId')
+    ) {
+      const existente = await db.product.findFirst({ where: { clientOpId }, include: PRODUCT_INCLUDE })
+      if (existente) {
+        return NextResponse.json(
+          {
+            product: {
+              ...existente,
+              price: Number(existente.price),
+              cost: existente.cost ? Number(existente.cost) : null,
+              taxRate: Number(existente.taxRate),
+              stock: existente.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0),
+            },
+          },
+          { status: 200 },
+        )
+      }
+    }
     // SKU sí tiene constraint único en BD (@@unique([businessId, sku])): sin
     // este catch, un duplicado exacto caía al 500 genérico en vez de un
     // mensaje claro.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return NextResponse.json({ error: 'Ya existe un producto con ese SKU' }, { status: 400 })
+    }
+    if (error instanceof BarcodeDuplicateError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
     }
     console.error('POST /api/products error:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })

@@ -56,6 +56,19 @@ function debeEncolar(e: unknown): boolean {
   return e instanceof ApiError && e.status >= 500
 }
 
+/**
+ * Id único por INTENTO de operación (venta/compra/producto), generado UNA
+ * sola vez antes del primer envío — no en cada reintento. Un 5xx puede
+ * llegar DESPUÉS de que el servidor ya comitió (timeout, despliegue a mitad
+ * de respuesta): sin esto, encolar y reenviar el mismo payload creaba una
+ * segunda venta/compra/producto y duplicaba su efecto en inventario. El
+ * servidor deduplica por este id (Sale/Purchase/Product.clientOpId).
+ */
+function nuevoOpId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  return `op-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export type Screen =
   | 'panel'
   | 'pos'
@@ -1079,6 +1092,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notes: [note, !matchCustomerId() && customerName.trim() ? `Cliente: ${customerName.trim()}` : '']
         .filter(Boolean)
         .join(' · ') || undefined,
+      clientOpId: nuevoOpId(),
     }
     try {
       const r = await api.createSale(payload)
@@ -1125,6 +1139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         customerId,
         quoteId: quoteId ?? undefined,
         notes: note || undefined,
+        clientOpId: nuevoOpId(),
       }
       try {
         const r = await api.createSale(payload)
@@ -1416,12 +1431,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // el stock inicial entra en la sucursal donde se está trabajando,
       // no siempre en la primera de la lista
       const sucursal = data.branches.find((b) => b.id === branchId) ?? data.branches[0]
+      // Generado UNA vez, antes del primer intento: si falla y hay que
+      // encolarlo (más abajo), el reintento debe llevar el MISMO id — no uno
+      // nuevo — para que el servidor lo reconozca como el mismo intento.
+      const opId = editId ? undefined : nuevoOpId()
       try {
         if (editId) {
           await api.updateProduct(editId, payload)
           toast('Cambios guardados')
         } else {
-          await api.createProduct({ ...payload, branchId: sucursal?.id })
+          await api.createProduct({ ...payload, branchId: sucursal?.id, clientOpId: opId })
           toast(payload.variantes ? 'Producto con variantes creado' : 'Producto creado')
         }
         // Ya se creó/actualizó en el servidor: un refresco fallido después no
@@ -1444,7 +1463,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const tempId = nuevoTempId()
           await queueOp({
             tipo: 'producto',
-            payload: { ...payload, branchId: sucursal?.id },
+            payload: { ...payload, branchId: sucursal?.id, clientOpId: opId },
             resumen: String(payload.name ?? ''),
             tempId,
           })
@@ -1709,6 +1728,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         totalCost: i.total || i.qty * i.unit,
         newPrice: i.price || undefined,
       })),
+      clientOpId: nuevoOpId(),
     }
     try {
       const r = await api.createPurchase(payload)

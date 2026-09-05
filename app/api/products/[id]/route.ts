@@ -141,27 +141,32 @@ export async function PATCH(request: Request, { params }: Params) {
 
     // Igual que en la creación: el campo "proveedor" es texto libre y se
     // enlaza con la tabla real Supplier para que la pantalla de Proveedores
-    // refleje el cambio.
-    const supplierId =
-      rest.supplier === undefined
-        ? undefined
-        : rest.supplier?.trim()
-          ? await resolveOrCreateSupplier(db, session.user.businessId, rest.supplier.trim())
-          : null
+    // refleje el cambio. Resuelto DENTRO de la misma transacción que
+    // actualiza el producto: si la actualización falla después (SKU
+    // duplicado, etc.), un proveedor nuevo o reactivado no debe quedar
+    // huérfano sin ningún producto asociado.
+    const product = await db.$transaction(async (tx) => {
+      const supplierId =
+        rest.supplier === undefined
+          ? undefined
+          : rest.supplier?.trim()
+            ? await resolveOrCreateSupplier(tx, session.user.businessId, rest.supplier.trim())
+            : null
 
-    const product = await db.product.update({
-      where: { id: params.id },
-      data: {
-        ...rest,
-        ...(price !== undefined && { price }),
-        ...(cost !== undefined && { cost }),
-        ...(categoryId !== undefined && { categoryId }),
-        ...(supplierId !== undefined && { supplierId }),
-      },
-      include: {
-        category: { select: { id: true, name: true } },
-        inventory: { select: { quantity: true, minStock: true, branchId: true } },
-      },
+      return tx.product.update({
+        where: { id: params.id },
+        data: {
+          ...rest,
+          ...(price !== undefined && { price }),
+          ...(cost !== undefined && { cost }),
+          ...(categoryId !== undefined && { categoryId }),
+          ...(supplierId !== undefined && { supplierId }),
+        },
+        include: {
+          category: { select: { id: true, name: true } },
+          inventory: { select: { quantity: true, minStock: true, branchId: true } },
+        },
+      })
     })
 
     // Precio, costo, nombre o archivado sin rastro alguno era un hueco real

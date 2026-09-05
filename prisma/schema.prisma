@@ -299,6 +299,9 @@ model Product {
   supplier      String? // legado: nombre libre — usar supplierId
   imageUrl      String?
   status        ProductStatus @default(ACTIVE)
+  /// Ver comentario en Sale.clientOpId — misma protección para la cola offline
+  /// (solo se usa al crear productos simples sin conexión).
+  clientOpId    String?       @unique
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])
@@ -400,6 +403,12 @@ model Sale {
   notes          String?
   voidedAt       DateTime?
   voidReason     String?
+  /// Id generado por el cliente al intentar la operación (no por reintento):
+  /// un 5xx puede llegar DESPUÉS de que la venta ya comitió (timeout,
+  /// despliegue a mitad de respuesta) — sin esto, la cola offline reintenta
+  /// creyendo que nunca se registró y duplica la venta (y el descuento de
+  /// inventario). POST /api/sales deduplica por este id.
+  clientOpId String? @unique
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
@@ -651,6 +660,8 @@ model Purchase {
   // Abono acumulado. Saldo pendiente = total − paidAmount
   paidAmount Decimal        @default(0) @db.Decimal(12, 2)
   notes      String?
+  /// Ver comentario en Sale.clientOpId — misma protección para la cola offline.
+  clientOpId String?        @unique
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])

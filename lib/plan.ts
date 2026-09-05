@@ -210,7 +210,8 @@ export async function revertirPagoAprobado(
         where: { id: pago.businessId },
         select: { paidUntil: true },
       })
-      if (negocio && negocio.paidUntil === null) return true
+      if (!negocio) return true
+      if (negocio.paidUntil === null) return true
 
       // ¿Sigue vigente el negocio por OTRO pago MÁS NUEVO que este? (p. ej.
       // ya pagó de nuevo el mes siguiente antes de que este contracargo
@@ -232,6 +233,19 @@ export async function revertirPagoAprobado(
         await tx.business.updateMany({
           where: { id: pago.businessId, status: 'ACTIVE' },
           data: { status: 'SUSPENDED' },
+        })
+      } else if (negocio.paidUntil) {
+        // El negocio sigue activo por el pago más nuevo, pero este que se
+        // revierte SÍ había sumado sus propios 30 días a paidUntil al
+        // aprobarse (aplicarPagoAprobado, +30 días sobre lo que hubiera en
+        // ese momento) — sin restarlos, un contracargo sobre un pago viejo
+        // deja el negocio con más días de los que en realidad pagó (p. ej.
+        // dos meses aprobados = 60 días; revertir el primero debería dejar
+        // solo los 30 del segundo, no los 60).
+        const DIA = 86400000
+        await tx.business.updateMany({
+          where: { id: pago.businessId, status: 'ACTIVE' },
+          data: { paidUntil: new Date(negocio.paidUntil.getTime() - 30 * DIA) },
         })
       }
     }

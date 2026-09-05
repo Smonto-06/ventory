@@ -77,7 +77,18 @@ const CreateSaleSchema = z.object({
   // Cotización de la que sale esta venta: al cobrarla queda marcada como
   // convertida y ligada a la venta, dentro de la misma transacción.
   quoteId: z.string().optional(),
+  // Generado por el cliente al intentar la venta (no en cada reintento): ver
+  // Sale.clientOpId en el schema.
+  clientOpId: z.string().max(100).optional(),
 })
+
+const SALE_INCLUDE = {
+  items: { include: { product: { select: { id: true, name: true, sku: true, unitOfMeasure: true } } } },
+  payments: true,
+  cashier: { select: { id: true, name: true } },
+  branch: { select: { id: true, name: true } },
+  customer: { select: { id: true, name: true } },
+} satisfies Prisma.SaleInclude
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -97,11 +108,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
-  const { cashSessionId, items, paymentMethod, payments, notes, customerId, quoteId } = parsed.data
+  const { cashSessionId, items, paymentMethod, payments, notes, customerId, quoteId, clientOpId } = parsed.data
   const discount = parsed.data.discountAmount ?? parsed.data.discount
   const discountIsPct = parsed.data.discountAmount !== undefined ? false : parsed.data.discountIsPct
   const businessId = session.user.businessId
   const cashierId = session.user.id
+
+  // Un 5xx puede llegar DESPUÉS de que la venta ya comitió (timeout,
+  // despliegue a mitad de respuesta) — la cola offline la reintenta creyendo
+  // que nunca se registró. Si ya existe una venta con este clientOpId, se
+  // devuelve tal cual (sin repetir folio, descuento de inventario, etc.) en
+  // vez de crear una segunda. Debe ir ANTES de cualquier validación que lea
+  // estado que la venta original ya modificó (stock, cotización, saldo del
+  // cliente) — si no, un reintento del ya-exitoso podía fallar esas
+  // validaciones con el estado ya actualizado y nunca llegar a este atajo.
+  if (clientOpId) {
+    const existing = await db.sale.findFirst({
+      where: { clientOpId, branch: { businessId } },
+      include: SALE_INCLUDE,
+    })
+    if (existing) {
+      return NextResponse.json({ sale: serialize(existing) }, { status: 200 })
+    }
+  }
 
   // Prueba vencida o plan suspendido → no se puede vender
   const planBlock = await requireActiveBusiness(businessId)
@@ -299,6 +328,7 @@ export async function POST(req: NextRequest) {
           cashierId,
           cashSessionId,
           customerId: customerId || undefined,
+          clientOpId: clientOpId ?? undefined,
         },
       })
 
@@ -391,13 +421,7 @@ export async function POST(req: NextRequest) {
 
       return tx.sale.findUnique({
         where: { id: newSale.id },
-        include: {
-          items: { include: { product: { select: { id: true, name: true, sku: true, unitOfMeasure: true } } } },
-          payments: true,
-          cashier: { select: { id: true, name: true } },
-          branch: { select: { id: true, name: true } },
-          customer: { select: { id: true, name: true } },
-        },
+        include: SALE_INCLUDE,
       })
     })
 
@@ -415,6 +439,21 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ sale: serialize(sale) }, { status: 201 })
   } catch (error) {
+    // Dos intentos con el MISMO clientOpId llegaron casi simultáneos (dos
+    // pestañas, un reintento que se cruzó con el original): el que pierde la
+    // carrera del unique constraint no debe fallar la venta — ya existe,
+    // ganada por el otro, y es exactamente lo que este reintento quería.
+    if (
+      clientOpId &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      (error.meta?.target as string[] | undefined)?.includes('clientOpId')
+    ) {
+      const existing = await db.sale.findFirst({ where: { clientOpId }, include: SALE_INCLUDE })
+      if (existing) {
+        return NextResponse.json({ sale: serialize(existing) }, { status: 200 })
+      }
+    }
     // Carrera perdida contra otra venta del mismo producto: nada quedó a medias
     if (error instanceof InsufficientStockError) {
       return NextResponse.json(
