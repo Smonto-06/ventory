@@ -165,13 +165,21 @@ export async function revertirPagoAprobado(
   datos: { wompiId?: string; paymentMethod?: string },
 ): Promise<boolean> {
   return db.$transaction(async (tx) => {
+    const pagoInicial = await tx.planPayment.findUnique({ where: { id: paymentId }, select: { businessId: true } })
+    if (!pagoInicial) return false
+    // Mismo lock que aplicarPagoAprobado — ver su comentario. Se toma ANTES
+    // de leer el estado del pago (no después, como antes): si se lee primero,
+    // una aprobación concurrente puede comprometerse mientras esta reversión
+    // espera el lock, y `eraAprobado` quedaría calculado con el estado de
+    // ANTES de esa aprobación — la reversión seguiría de largo pensando que
+    // el pago nunca se aprobó, sin suspender el negocio, mientras el pago
+    // queda marcado como rechazado a pesar de la aprobación real.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${pagoInicial.businessId}))`
     const pago = await tx.planPayment.findUnique({
       where: { id: paymentId },
       select: { status: true, businessId: true, paidAt: true },
     })
     if (!pago) return false
-    // Mismo lock que aplicarPagoAprobado — ver su comentario.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${pago.businessId}))`
     const eraAprobado = pago.status === 'APPROVED'
 
     const cambiado = await tx.planPayment.updateMany({

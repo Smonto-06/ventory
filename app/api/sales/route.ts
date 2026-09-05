@@ -26,6 +26,14 @@ class QuoteNoConvertible extends Error {
   }
 }
 
+/** El turno se cerró justo mientras se procesaba esta venta */
+class CashSessionClosedError extends Error {
+  constructor() {
+    super('La caja se cerró mientras se registraba la venta')
+    this.name = 'CashSessionClosedError'
+  }
+}
+
 const ItemSchema = z.object({
   productId: z.string().min(1),
   // Decimal para productos vendidos por peso (p. ej. 0.75 kg)
@@ -241,6 +249,20 @@ export async function POST(req: NextRequest) {
     }
 
     const sale = await db.$transaction(async (tx) => {
+      // Lock consultivo por turno: serializa esta venta contra un cierre de
+      // caja concurrente (POST /api/cash-registers/[id]/close toma el mismo
+      // lock antes de congelar sus totales). Sin esto, una venta que ya pasó
+      // el chequeo OPEN de arriba podía terminar de comitear justo después de
+      // que el cierre leyera "sus" ventas, quedando fuera de los totales
+      // congelados del turno para siempre. Revalida el estado DESPUÉS de
+      // tomar el lock: si el cierre ganó la carrera, esta venta se aborta
+      // entera en vez de registrarse contra un turno ya cerrado.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSessionId}))`
+      const vigente = await tx.cashSession.findUnique({ where: { id: cashSessionId }, select: { status: true } })
+      if (vigente?.status !== CashSessionStatus.OPEN) {
+        throw new CashSessionClosedError()
+      }
+
       // Consecutivo F-XXXXXX realmente atómico: UPDATE … RETURNING toma el
       // lock de la sucursal, así dos cajas vendiendo al mismo tiempo obtienen
       // números distintos en vez de chocar y perder una de las ventas.
@@ -382,6 +404,12 @@ export async function POST(req: NextRequest) {
     if (error instanceof QuoteNoConvertible) {
       return NextResponse.json(
         { error: 'Esa cotización ya no está disponible: puede estar anulada o ya convertida', code: 'QUOTE_UNAVAILABLE' },
+        { status: 409 },
+      )
+    }
+    if (error instanceof CashSessionClosedError) {
+      return NextResponse.json(
+        { error: 'La caja se cerró mientras se registraba la venta. Abre un turno y vuelve a intentar.' },
         { status: 409 },
       )
     }

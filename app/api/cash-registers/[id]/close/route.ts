@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
-import { calculateShiftClose, requiresObservation } from '@/lib/cash-session'
+import { calculateShiftClose, requiresObservation, type ShiftCloseCalculation } from '@/lib/cash-session'
 import { cashPortion } from '@/lib/pos'
 import { serialize } from '@/lib/api-helpers'
 
@@ -13,6 +13,14 @@ class AlreadyClosedError extends Error {
   constructor() {
     super('Sesión de caja no encontrada o ya está cerrada')
     this.name = 'AlreadyClosedError'
+  }
+}
+
+/** La diferencia supera el umbral y hace falta una nota antes de cerrar */
+class ObservationRequiredError extends Error {
+  constructor(public calc: ShiftCloseCalculation) {
+    super('Observaciones obligatorias al cierre')
+    this.name = 'ObservationRequiredError'
   }
 }
 
@@ -34,15 +42,13 @@ export async function POST(
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
+  // Solo para el chequeo de existencia/permiso y datos que no cambian
+  // (branchId, openedAt, openingBalance) — las VENTAS y MOVIMIENTOS del turno
+  // se releen más abajo, ya con el lock tomado, para no congelar totales
+  // calculados con una foto vieja (ver comentario junto al lock).
   const session = await db.cashSession.findFirst({
     where: { id: params.id, status: 'OPEN' },
     include: {
-      // Solo ventas no anuladas del turno cuentan para el saldo esperado
-      sales: {
-        where: { status: 'COMPLETED' },
-        select: { total: true, paymentMethod: true, payments: { select: { method: true, amount: true } } },
-      },
-      movements: { select: { type: true, amount: true } },
       openedBy: { select: { id: true, businessId: true } },
     },
   })
@@ -78,42 +84,63 @@ export async function POST(
 
   const { closingBalance, closingNotes, openNext, nextOpeningAmount } = parsed.data
 
-  // Esperado del cajón = apertura + ventas EN EFECTIVO + ingresos − gastos.
-  // Tarjeta/transferencia/crédito no ponen billetes en la caja: sumarlas
-  // produciría un faltante ficticio contra el conteo físico.
-  const salesTotal = session.sales.reduce((sum, s) => sum + Number(s.total), 0)
-  const cashSalesTotal = session.sales.reduce(
-    (sum, s) => sum + cashPortion({ ...s, total: Number(s.total) }),
-    0,
-  )
-  const incomes = session.movements
-    .filter((m) => m.type === 'INCOME')
-    .reduce((sum, m) => sum + Number(m.amount), 0)
-  const expenses = session.movements
-    .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
-    .reduce((sum, m) => sum + Number(m.amount), 0)
-
-  const calc = calculateShiftClose(
-    Number(session.openingBalance),
-    cashSalesTotal,
-    incomes,
-    expenses,
-    closingBalance,
-  )
-
-  if (requiresObservation(calc.difference) && !closingNotes) {
-    return NextResponse.json(
-      {
-        error: `Diferencia de ${calc.difference.toFixed(0)} COP supera el umbral. Observaciones obligatorias al cierre.`,
-        expectedBalance: calc.expectedBalance,
-        difference: calc.difference,
-      },
-      { status: 422 },
-    )
-  }
-
   const closeSession = async () => {
     return db.$transaction(async (tx) => {
+      // Lock consultivo por turno: el mismo que toma la creación de una venta
+      // (POST /api/sales) antes de comitear. Sin esto, una venta que ya había
+      // pasado el chequeo OPEN podía comitear justo después de que este
+      // cierre leyera "sus" ventas para congelar salesTotal/expectedBalance,
+      // quedando fuera del total para siempre (el historial de turnos
+      // prefiere los campos congelados sobre recalcular en vivo). Al tomar
+      // el lock primero, quien llegue segundo ve el estado ya actualizado
+      // por quien llegó primero.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.id}))`
+
+      const vigente = await tx.cashSession.findUnique({ where: { id: params.id }, select: { status: true } })
+      if (vigente?.status !== 'OPEN') {
+        throw new AlreadyClosedError()
+      }
+
+      // Releídas AQUÍ (con el lock ya tomado), no las de la consulta de
+      // arriba: esa es la foto que se congela de verdad.
+      const [sales, movements] = await Promise.all([
+        tx.sale.findMany({
+          where: { cashSessionId: params.id, status: 'COMPLETED' },
+          select: { total: true, paymentMethod: true, payments: { select: { method: true, amount: true } } },
+        }),
+        tx.cashMovement.findMany({
+          where: { cashSessionId: params.id },
+          select: { type: true, amount: true },
+        }),
+      ])
+
+      // Esperado del cajón = apertura + ventas EN EFECTIVO + ingresos − gastos.
+      // Tarjeta/transferencia/crédito no ponen billetes en la caja: sumarlas
+      // produciría un faltante ficticio contra el conteo físico.
+      const salesTotal = sales.reduce((sum, s) => sum + Number(s.total), 0)
+      const cashSalesTotal = sales.reduce(
+        (sum, s) => sum + cashPortion({ ...s, total: Number(s.total) }),
+        0,
+      )
+      const incomes = movements
+        .filter((m) => m.type === 'INCOME')
+        .reduce((sum, m) => sum + Number(m.amount), 0)
+      const expenses = movements
+        .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
+        .reduce((sum, m) => sum + Number(m.amount), 0)
+
+      const calc = calculateShiftClose(
+        Number(session.openingBalance),
+        cashSalesTotal,
+        incomes,
+        expenses,
+        closingBalance,
+      )
+
+      if (requiresObservation(calc.difference) && !closingNotes) {
+        throw new ObservationRequiredError(calc)
+      }
+
       // Reclama el cierre PRIMERO, condicionado al estado vigente: si dos
       // cierres de la misma sesión llegan casi simultáneos (doble clic,
       // reintento de red), el segundo no encuentra fila OPEN que actualizar
@@ -164,7 +191,7 @@ export async function POST(
         })
       }
 
-      return { closed, next }
+      return { closed, next, sales, salesTotal, cashSalesTotal, calc }
     })
   }
 
@@ -175,8 +202,20 @@ export async function POST(
     if (error instanceof AlreadyClosedError) {
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
+    if (error instanceof ObservationRequiredError) {
+      return NextResponse.json(
+        {
+          error: `Diferencia de ${error.calc.difference.toFixed(0)} COP supera el umbral. Observaciones obligatorias al cierre.`,
+          expectedBalance: error.calc.expectedBalance,
+          difference: error.calc.difference,
+        },
+        { status: 422 },
+      )
+    }
     throw error
   }
+
+  const { calc, salesTotal, cashSalesTotal, sales } = result
 
   db.auditLog
     .create({
@@ -196,7 +235,7 @@ export async function POST(
 
   // Desglose del turno para el recibo de cierre: transacciones y ventas por método
   const byMethod: Record<string, number> = {}
-  for (const sale of session.sales) {
+  for (const sale of sales) {
     if (sale.payments.length > 0) {
       for (const p of sale.payments) {
         byMethod[p.method] = (byMethod[p.method] ?? 0) + Number(p.amount)
@@ -206,7 +245,7 @@ export async function POST(
     }
   }
 
-  const creditSales = session.sales.filter((s) => s.paymentMethod === 'CREDIT')
+  const creditSales = sales.filter((s) => s.paymentMethod === 'CREDIT')
   const creditTotal = creditSales.reduce((sum, s) => sum + Number(s.total), 0)
 
   // Actividad del negocio ocurrida durante el turno (informativa para el recibo):
@@ -252,7 +291,7 @@ export async function POST(
       status: calc.difference > 0 ? 'sobrante' : calc.difference < 0 ? 'faltante' : 'exacto',
     },
     report: {
-      salesCount: session.sales.length,
+      salesCount: sales.length,
       byMethod,
       creditSales: { count: creditSales.length, total: creditTotal },
       customerPayments: { count: abonos._count._all, total: Number(abonos._sum.amount ?? 0) },

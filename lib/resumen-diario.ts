@@ -139,17 +139,38 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
   // retiró al cerrar).
   const abiertas = sesiones.filter((s) => s.status === 'OPEN')
   const apertura = abiertas.reduce((a, s) => a + Number(s.openingBalance), 0)
-  const idsAbiertas = new Set(abiertas.map((s) => s.id))
-  const movimientosTurno = movimientos.filter((m) => m.cashSessionId && idsAbiertas.has(m.cashSessionId))
+  const idsAbiertas = abiertas.map((s) => s.id)
+
+  // El saldo esperado de un turno abierto es TODO lo que ha entrado desde que
+  // se abrió, no solo lo de hoy: un turno abierto desde ayer (ver comentario
+  // de `sesiones` arriba) tiene ventas y movimientos de ANTES de medianoche
+  // que siguen físicamente en el cajón. `ventas`/`movimientos` de arriba están
+  // acotados a `enElDia` para las métricas del día — para el esperado de caja
+  // se pide aparte, por sesión completa, sin ese filtro de fecha.
+  const [ventasTurno, movimientosTurno] = idsAbiertas.length
+    ? await Promise.all([
+        db.sale.findMany({
+          where: { cashSessionId: { in: idsAbiertas }, status: 'COMPLETED' },
+          select: {
+            total: true,
+            paymentMethod: true,
+            cashSessionId: true,
+            payments: { select: { method: true, amount: true } },
+          },
+        }),
+        db.cashMovement.findMany({
+          where: { cashSessionId: { in: idsAbiertas } },
+          select: { type: true, amount: true, cashSessionId: true },
+        }),
+      ])
+    : [[], []]
   const ingresosTurno = movimientosTurno
     .filter((m) => m.type === 'INCOME')
     .reduce((a, m) => a + Number(m.amount), 0)
   const gastosTurno = movimientosTurno
     .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
     .reduce((a, m) => a + Number(m.amount), 0)
-  const efectivoTurno = ventas
-    .filter((v) => v.cashSessionId && idsAbiertas.has(v.cashSessionId))
-    .reduce((a, v) => a + cashPortion({ ...v, total: Number(v.total) }), 0)
+  const efectivoTurno = ventasTurno.reduce((a, v) => a + cashPortion({ ...v, total: Number(v.total) }), 0)
 
   const productos = new Map<string, { cantidad: number; total: number }>()
   for (const v of ventas) {

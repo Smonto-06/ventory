@@ -131,6 +131,9 @@ describe('POST /api/sales', () => {
         ...db,
         // Consecutivo atómico de folio (UPDATE … RETURNING)
         $queryRaw: jest.fn().mockResolvedValue([{ saleSeq: 1 }]),
+        // Lock consultivo por turno + relectura de su estado (ver comentario en la ruta)
+        $executeRaw: jest.fn().mockResolvedValue(undefined),
+        cashSession: { findUnique: jest.fn().mockResolvedValue({ status: 'OPEN' }) } as unknown as typeof db.cashSession,
         sale: {
           count: jest.fn().mockResolvedValue(0),
           create: jest.fn().mockResolvedValue({ id: 'sale-1', folio: 'F-000001' }),
