@@ -177,9 +177,21 @@ export async function revertirPagoAprobado(
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${pagoInicial.businessId}))`
     const pago = await tx.planPayment.findUnique({
       where: { id: paymentId },
-      select: { status: true, businessId: true, paidAt: true },
+      select: { status: true, businessId: true, paidAt: true, wompiId: true },
     })
     if (!pago) return false
+
+    // Releído bajo el lock (no solo antes, en el caller — ver su comentario
+    // sobre reintentos con varias transacciones): si mientras se esperaba el
+    // lock una aprobación de OTRA transacción para esta misma referencia
+    // acaba de comitear, este evento de rechazo es de un intento ya superado
+    // y no debe pisar el pago vigente ni suspender el negocio. El chequeo del
+    // caller antes de llamar esta función es solo un atajo para el caso
+    // común (evita la transacción entera); este de aquí es el que de verdad
+    // previene la carrera.
+    if (pago.status === 'APPROVED' && pago.wompiId !== datos.wompiId) {
+      return false
+    }
     const eraAprobado = pago.status === 'APPROVED'
 
     const cambiado = await tx.planPayment.updateMany({

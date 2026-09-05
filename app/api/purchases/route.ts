@@ -18,6 +18,14 @@ import { moveStock } from '@/lib/inventory'
 
 export const dynamic = 'force-dynamic'
 
+/** El turno se cerró justo mientras se registraba el gasto de esta compra */
+class CashSessionClosedError extends Error {
+  constructor() {
+    super('La caja se cerró mientras se registraba la compra')
+    this.name = 'CashSessionClosedError'
+  }
+}
+
 const ItemSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().positive(),
@@ -125,6 +133,18 @@ export async function POST(req: NextRequest) {
     }
 
     const purchase = await db.$transaction(async (tx) => {
+      // Lock consultivo por turno — mismo que toma el cierre de caja antes de
+      // congelar sus totales (ver comentario en cash-registers/[id]/close):
+      // sin esto, el gasto de caja de esta compra podía comitear justo
+      // después de que un cierre concurrente leyera "sus" movimientos.
+      if (cashSessionId) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSessionId}))`
+        const vigente = await tx.cashSession.findUnique({ where: { id: cashSessionId }, select: { status: true } })
+        if (vigente?.status !== 'OPEN') {
+          throw new CashSessionClosedError()
+        }
+      }
+
       // Proveedor: existente o creado al vuelo (como en el prototipo)
       let supplier = supplierId
         ? await tx.supplier.findFirst({ where: { id: supplierId, businessId: user.businessId } })
@@ -263,6 +283,9 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message === 'SUPPLIER_NOT_FOUND') {
       return badRequest('Proveedor no encontrado')
+    }
+    if (error instanceof CashSessionClosedError) {
+      return badRequest('La caja se cerró mientras se registraba la compra. Vuelve a intentar con el turno actual.')
     }
     return serverError('POST /api/purchases', error)
   }

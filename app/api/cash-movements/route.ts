@@ -17,6 +17,14 @@ import { CASH_MOVEMENT_DESCRIPTIONS } from '@/lib/pos'
 
 export const dynamic = 'force-dynamic'
 
+/** El turno se cerró justo mientras se registraba este movimiento */
+class CashSessionClosedError extends Error {
+  constructor() {
+    super('La caja se cerró mientras se registraba el movimiento')
+    this.name = 'CashSessionClosedError'
+  }
+}
+
 const CreateMovementSchema = z.object({
   type: z.enum(['INCOME', 'EXPENSE']),
   description: z.string().trim().min(1, 'Selecciona la descripción del movimiento'),
@@ -77,16 +85,28 @@ export async function POST(req: NextRequest) {
       return badRequest('No hay caja abierta. Abre un turno antes de registrar movimientos.')
     }
 
-    const movement = await db.cashMovement.create({
-      data: {
-        type: parsed.data.type as CashMovementType,
-        amount: Math.round(parsed.data.amount),
-        description: parsed.data.description,
-        comment: parsed.data.comment || null,
-        cashSessionId: cashSession.id,
-        createdById: user.id,
-      },
-      include: { createdBy: { select: { id: true, name: true } } },
+    const movement = await db.$transaction(async (tx) => {
+      // Lock consultivo por turno — mismo que toma el cierre de caja antes de
+      // congelar sus totales (POST /api/cash-registers/[id]/close): sin esto,
+      // este movimiento podía pasar el chequeo OPEN de arriba y comitear
+      // justo después de que el cierre leyera "sus" movimientos, quedando
+      // fuera de incomesTotal/expensesTotal congelados para siempre.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSession.id}))`
+      const vigente = await tx.cashSession.findUnique({ where: { id: cashSession.id }, select: { status: true } })
+      if (vigente?.status !== 'OPEN') {
+        throw new CashSessionClosedError()
+      }
+      return tx.cashMovement.create({
+        data: {
+          type: parsed.data.type as CashMovementType,
+          amount: Math.round(parsed.data.amount),
+          description: parsed.data.description,
+          comment: parsed.data.comment || null,
+          cashSessionId: cashSession.id,
+          createdById: user.id,
+        },
+        include: { createdBy: { select: { id: true, name: true } } },
+      })
     })
 
     db.auditLog
@@ -103,6 +123,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ movement: serialize(movement) }, { status: 201 })
   } catch (error) {
+    if (error instanceof CashSessionClosedError) {
+      return badRequest('La caja se cerró mientras se registraba el movimiento. Vuelve a intentar con el turno actual.')
+    }
     return serverError('POST /api/cash-movements', error)
   }
 }

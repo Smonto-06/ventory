@@ -23,6 +23,14 @@ class BalanceChangedError extends Error {
   }
 }
 
+/** El turno se cerró justo mientras se registraba el gasto de este abono */
+class CashSessionClosedError extends Error {
+  constructor() {
+    super('La caja se cerró mientras se registraba el abono')
+    this.name = 'CashSessionClosedError'
+  }
+}
+
 const PaymentSchema = z.object({
   amount: z.number().positive('El abono debe ser mayor a 0'),
   method: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
@@ -68,6 +76,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const result = await db.$transaction(async (tx) => {
       let cashMovementId: string | null = null
       if (parsed.data.method === 'CASH' && cashSessionId) {
+        // Lock consultivo por turno — ver mismo comentario en
+        // customers/[id]/payments/route.ts.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSessionId}))`
+        const vigente = await tx.cashSession.findUnique({ where: { id: cashSessionId }, select: { status: true } })
+        if (vigente?.status !== 'OPEN') {
+          throw new CashSessionClosedError()
+        }
         const movement = await tx.cashMovement.create({
           data: {
             type: CashMovementType.EXPENSE,
@@ -143,6 +158,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   } catch (error) {
     if (error instanceof BalanceChangedError) {
       return badRequest(error.message)
+    }
+    if (error instanceof CashSessionClosedError) {
+      return badRequest('La caja se cerró mientras se registraba el abono. Vuelve a intentar con el turno actual.')
     }
     return serverError('POST /api/purchases/[id]/payments', error)
   }

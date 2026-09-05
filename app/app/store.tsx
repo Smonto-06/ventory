@@ -1009,7 +1009,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReceived(0)
       setModal(null)
       setScreen('receipt')
-      await Promise.all([refreshProducts(), refreshSales(), refreshCash(), refreshCustomers()])
+      // La venta YA se confirmó en el servidor en este punto: si el refresco
+      // posterior falla (un 5xx puntual, un blip de red), NO debe propagarse
+      // al catch de quien llama — ese catch decide si hay que ENCOLAR la
+      // venta para reenviarla, y reenviar una venta que ya se registró la
+      // duplica (y descuenta el stock dos veces). El refresco automático de
+      // 30s corrige la vista sola si este falla.
+      try {
+        await Promise.all([refreshProducts(), refreshSales(), refreshCash(), refreshCustomers()])
+      } catch {
+        // ignorado a propósito — ver comentario de arriba
+      }
     },
     [refreshProducts, refreshSales, refreshCash, refreshCustomers],
   )
@@ -1390,7 +1400,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           await api.createProduct({ ...payload, branchId: sucursal?.id })
           toast(payload.variantes ? 'Producto con variantes creado' : 'Producto creado')
         }
-        await refreshProducts()
+        // Ya se creó/actualizó en el servidor: un refresco fallido después no
+        // debe caer en el catch de abajo, que encolaría el producto para
+        // reenviarlo y lo duplicaría (ver mismo comentario en afterSale).
+        try {
+          await refreshProducts()
+        } catch {
+          // ignorado a propósito
+        }
         return true
       } catch (e) {
         if (debeEncolar(e)) {
@@ -1675,7 +1692,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLastPurchase(r.purchase)
       setScreen('compraRecibo')
       toast(`Compra registrada · ${fmt(valor)}`)
-      await Promise.all([refreshPurchases(), refreshProducts(), refreshSuppliers(), refreshCash()])
+      // Ya se registró en el servidor: un refresco fallido después no debe
+      // caer en el catch de abajo, que encolaría la compra para reenviarla y
+      // la duplicaría (mismo motivo que en afterSale/saveProduct).
+      try {
+        await Promise.all([refreshPurchases(), refreshProducts(), refreshSuppliers(), refreshCash()])
+      } catch {
+        // ignorado a propósito
+      }
     } catch (e) {
       // Sin conexión: la compra se encola y la mercancía entra al sincronizar.
       // El stock local se sube de una para poder seguir vendiendo lo recibido.

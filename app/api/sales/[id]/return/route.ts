@@ -23,6 +23,14 @@ class OverReturnedError extends Error {
   }
 }
 
+/** El turno se cerró justo mientras se registraba el gasto de esta devolución */
+class CashSessionClosedError extends Error {
+  constructor() {
+    super('La caja se cerró mientras se registraba la devolución')
+    this.name = 'CashSessionClosedError'
+  }
+}
+
 const ReturnSchema = z.object({
   items: z
     .array(
@@ -125,6 +133,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const saleReturn = await db.$transaction(async (tx) => {
+      // Lock consultivo por turno — mismo que toma el cierre de caja antes de
+      // congelar sus totales (ver comentario en cash-registers/[id]/close).
+      if (cashSessionId) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSessionId}))`
+        const vigente = await tx.cashSession.findUnique({ where: { id: cashSessionId }, select: { status: true } })
+        if (vigente?.status !== 'OPEN') {
+          throw new CashSessionClosedError()
+        }
+      }
+
       // Regresa stock por artículo
       for (const r of toReturn) {
         const move = await moveStock(tx, r.productId, sale.branchId, r.quantity)
@@ -216,6 +234,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   } catch (error) {
     if (error instanceof OverReturnedError) {
       return badRequest(error.message)
+    }
+    if (error instanceof CashSessionClosedError) {
+      return badRequest('La caja se cerró mientras se registraba la devolución. Vuelve a intentar con el turno actual.')
     }
     return serverError('POST /api/sales/[id]/return', error)
   }
