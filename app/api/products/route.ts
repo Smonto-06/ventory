@@ -144,15 +144,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  // Declarado fuera del try: el catch de abajo lo necesita para el atajo de
+  // Declarados fuera del try: el catch de abajo los necesita para el atajo de
   // idempotencia (dos intentos con el mismo clientOpId chocando en la BD), y
   // una const declarada dentro del try no es visible en su catch.
   let clientOpId: string | null | undefined
+  let businessId: string | undefined
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
+    businessId = session.user.businessId
 
     if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERVISOR') {
       return NextResponse.json({ error: 'Permisos insuficientes' }, { status: 403 })
@@ -408,11 +410,12 @@ export async function POST(request: Request) {
     // devuelve el producto que ya ganó la carrera, en vez de fallar.
     if (
       clientOpId &&
+      businessId &&
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002' &&
       (error.meta?.target as string[] | undefined)?.includes('clientOpId')
     ) {
-      const existente = await db.product.findFirst({ where: { clientOpId }, include: PRODUCT_INCLUDE })
+      const existente = await db.product.findFirst({ where: { clientOpId, businessId }, include: PRODUCT_INCLUDE })
       if (existente) {
         return NextResponse.json(
           {

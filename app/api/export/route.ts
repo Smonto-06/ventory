@@ -38,7 +38,10 @@ function csv(rows: Array<Array<string | number | null | undefined>>): string {
             // fórmula si el ADMIN abre el CSV exportado en Excel — puede
             // venir de un rol de menor privilegio (p. ej. un cajero creando
             // un cliente). Se antepone un apóstrofo para forzarlo a texto.
-            if (/^[=+\-@]/.test(v)) v = `'${v}`
+            // Solo aplica a texto (typeof c === 'string'): un número
+            // NEGATIVO legítimo (p. ej. stock con allowNegativeStock) no
+            // debe volverse texto solo por empezar con "-".
+            if (typeof c === 'string' && /^[=+\-@]/.test(v)) v = `'${v}`
             return /[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
           })
           .join(';'),

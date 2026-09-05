@@ -130,6 +130,13 @@ model Business {
   // Plan comercial: los negocios nuevos entran en prueba (el registro lo fija);
   // los existentes quedan ACTIVE por el default
   status      BusinessStatus @default(ACTIVE)
+  /// SUSPENDED puede venir de dos fuentes muy distintas: una decisión manual
+  /// del super admin, o revertirPagoAprobado suspendiendo solo por un
+  /// contracargo/reembolso. true = fue automática (un pago nuevo aprobado SÍ
+  /// puede reactivar el negocio, ver aplicarPagoAprobado); false = manual, o
+  /// ya reactivado — un pago nunca puede levantar una suspensión manual del
+  /// super admin por su cuenta.
+  suspendedByChargeback Boolean @default(false)
   trialEndsAt DateTime?
   activatedAt DateTime?
   adminNotes  String?

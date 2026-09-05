@@ -449,7 +449,7 @@ export async function POST(req: NextRequest) {
       error.code === 'P2002' &&
       (error.meta?.target as string[] | undefined)?.includes('clientOpId')
     ) {
-      const existing = await db.sale.findFirst({ where: { clientOpId }, include: SALE_INCLUDE })
+      const existing = await db.sale.findFirst({ where: { clientOpId, branch: { businessId } }, include: SALE_INCLUDE })
       if (existing) {
         return NextResponse.json({ sale: serialize(existing) }, { status: 200 })
       }

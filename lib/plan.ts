@@ -117,7 +117,7 @@ export async function aplicarPagoAprobado(
     if (cambiado.count === 0) return false // ya se había aplicado
     const negocio = await tx.business.findUniqueOrThrow({
       where: { id: pagoInicial.businessId },
-      select: { status: true, trialEndsAt: true, paidUntil: true, activatedAt: true },
+      select: { status: true, trialEndsAt: true, paidUntil: true, activatedAt: true, suspendedByChargeback: true },
     })
     // SUSPENDED es una decisión manual del super admin (app/api/admin/businesses/[id]/route.ts)
     // o automática por un contracargo/reembolso (ver revertirPagoAprobado
@@ -125,8 +125,12 @@ export async function aplicarPagoAprobado(
     // como APPROVED (el cobro sí ocurrió), pero un pago que llega tarde
     // (reintento de un rechazo previo, con el guard de arriba ampliado a
     // "no está ya APPROVED") no puede reactivar por su cuenta un negocio
-    // suspendido.
-    if (negocio.status === 'SUSPENDED') return true
+    // suspendido MANUALMENTE. Una suspensión AUTOMÁTICA por contracargo sí
+    // se levanta con un pago nuevo que sí llegó a aprobarse — de lo
+    // contrario un pago B que ya estaba en curso cuando un contracargo de un
+    // pago A distinto suspendió el negocio dejaría cobrado un mes que nunca
+    // se pudo usar.
+    if (negocio.status === 'SUSPENDED' && !negocio.suspendedByChargeback) return true
 
     const ahora = Date.now()
     // Base: lo que aún tenga vigente (mensualidad o días de prueba restantes)
@@ -141,6 +145,7 @@ export async function aplicarPagoAprobado(
         status: 'ACTIVE',
         paidUntil: new Date(base + 30 * DIA),
         activatedAt: negocio.activatedAt ?? new Date(),
+        suspendedByChargeback: false,
       },
     })
     return true
@@ -232,7 +237,10 @@ export async function revertirPagoAprobado(
       if (!masReciente) {
         await tx.business.updateMany({
           where: { id: pago.businessId, status: 'ACTIVE' },
-          data: { status: 'SUSPENDED' },
+          // Marcada como automática (no manual): un pago nuevo que sí se
+          // apruebe después puede reactivar el negocio por su cuenta —
+          // ver el guard en aplicarPagoAprobado.
+          data: { status: 'SUSPENDED', suspendedByChargeback: true },
         })
       } else if (negocio.paidUntil) {
         // El negocio sigue activo por el pago más nuevo, pero este que se

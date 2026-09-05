@@ -312,7 +312,7 @@ export async function POST(req: NextRequest) {
       error.code === 'P2002' &&
       (error.meta?.target as string[] | undefined)?.includes('clientOpId')
     ) {
-      const existing = await db.purchase.findFirst({ where: { clientOpId }, include: PURCHASE_INCLUDE })
+      const existing = await db.purchase.findFirst({ where: { clientOpId, businessId: user.businessId }, include: PURCHASE_INCLUDE })
       if (existing) {
         return NextResponse.json(
           { purchase: { ...serialize(existing), balance: Number(existing.total) - Number(existing.paidAmount) } },

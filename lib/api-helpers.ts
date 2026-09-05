@@ -79,6 +79,15 @@ export async function resolveOrCreateSupplier(
   name: string,
 ): Promise<string> {
   const trimmed = name.trim()
+  // Lock consultivo por negocio+nombre: dos creaciones de producto con el
+  // MISMO proveedor nuevo (texto libre) podían ver ambas "no existe" antes de
+  // que cualquiera insertara — la que perdía el unique constraint
+  // (businessId, name) reventaba toda su transacción con un mensaje
+  // engañoso de "SKU duplicado". Solo sirve de verdad cuando `client` ya es
+  // una transacción (el lock es de transacción, `pg_advisory_xact_lock`): la
+  // única llamada que todavía pasa el `db` de nivel superior (import CSV) no
+  // corre en paralelo consigo misma, así que no le hace falta.
+  await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`supplier:${businessId}:${trimmed.toLowerCase()}`}))`
   let supplier = await client.supplier.findFirst({
     where: { businessId, name: { equals: trimmed, mode: 'insensitive' } },
   })
