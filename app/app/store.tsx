@@ -260,6 +260,8 @@ export interface AppStore extends AppData {
 
   // caja
   turnoAbierto: boolean
+  /** Fecha/hora de apertura del turno activo (null si no hay caja abierta) */
+  sessionOpenedAt: string | null
   apertura: number
   esperado: number
   ingresos: number
@@ -812,6 +814,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ? expectedBalance(apertura, ventasEfectivo, ingresos, gastos)
     : 0
   const turnoAbierto = !!data.cash.session
+  const sessionOpenedAt = data.cash.session?.openedAt ?? null
 
   // ─── Carrito ───────────────────────────────────────────────────────────────
 
@@ -2125,6 +2128,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       confirm,
       askConfirm,
       turnoAbierto,
+      sessionOpenedAt,
       apertura,
       esperado,
       ingresos,
@@ -2260,7 +2264,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
-      turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre, branchId,
+      turnoAbierto, sessionOpenedAt, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre, branchId,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
       pay, amounts, received, lastSale, lastPurchase, pesoProduct, varianteProduct, quoteId, quoteDet, quoteFaltantes, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, productosFiltroInicial, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,

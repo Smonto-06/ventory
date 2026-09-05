@@ -61,6 +61,9 @@ export default function CotizacionesScreen() {
   const fecha = (iso: string) =>
     new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
 
+  const fechaHora = (iso: string) =>
+    new Date(iso).toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+
   return (
     <div style={{ padding: 'clamp(16px,3vw,28px)', display: 'flex', flexDirection: 'column', gap: 16, animation: 'vfade .3s ease' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -172,7 +175,14 @@ export default function CotizacionesScreen() {
                     {s.fmt(c.total)}
                   </div>
                   <div style={{ padding: '13px 10px', fontSize: 13, color: c.status === 'EXPIRED' ? '#B4740A' : 'var(--muted)' }}>
-                    {c.status === 'CONVERTED' ? c.sale?.folio ?? '—' : fecha(c.validUntil)}
+                    {c.status === 'CONVERTED' ? (
+                      <>
+                        <div>{c.sale?.folio ?? '—'}</div>
+                        {c.convertedAt && <div style={{ fontSize: 11.5, marginTop: 2 }}>{fechaHora(c.convertedAt)}</div>}
+                      </>
+                    ) : (
+                      fecha(c.validUntil)
+                    )}
                   </div>
                   <div style={{ padding: '13px 10px', display: 'flex', gap: 13, justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
                     <button

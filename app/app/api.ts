@@ -148,9 +148,10 @@ export interface Sale {
   changeGiven: number
   notes: string | null
   createdAt: string
+  voidedAt: string | null
   items: SaleItem[]
   payments: Array<{ id: string; method: string; amount: number }>
-  returns?: Array<{ id: string; type: string; totalRefund: number }>
+  returns?: Array<{ id: string; type: string; totalRefund: number; createdAt: string }>
   cashier: { id: string; name: string | null }
   branch?: { id: string; name: string } | null
   customer: { id: string; name: string } | null

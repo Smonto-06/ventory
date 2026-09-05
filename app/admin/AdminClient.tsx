@@ -78,8 +78,10 @@ function planChip(plan: PlanInfo) {
 const fdate = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
-const fdatetime = (d: string) =>
-  new Date(d).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })
+const fdatetime = (d: string | null) =>
+  d
+    ? new Date(d).toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+    : '—'
 
 function actividadTexto(e: ActivityEntry, nombreNegocio: string) {
   switch (e.action) {
@@ -290,7 +292,7 @@ export default function AdminClient() {
                       </div>
                       {r.pagos.cantidad > 0 && (
                         <div style={{ color: '#0B6E63', fontSize: 12.5, marginTop: 2, fontWeight: 600 }}>
-                          {r.pagos.cantidad} pago{r.pagos.cantidad === 1 ? '' : 's'} en línea · ${r.pagos.total.toLocaleString('es-CO')} · último {fdate(r.pagos.ultimo?.fecha ?? null)}
+                          {r.pagos.cantidad} pago{r.pagos.cantidad === 1 ? '' : 's'} en línea · ${r.pagos.total.toLocaleString('es-CO')} · último {fdatetime(r.pagos.ultimo?.fecha ?? null)}
                           {r.pagos.ultimo?.metodo ? ` (${r.pagos.ultimo.metodo})` : ''}
                         </div>
                       )}

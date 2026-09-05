@@ -100,7 +100,7 @@ export default function AuditoriaModal() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <span style={{ fontSize: 13.5, fontWeight: 700 }}>{label(l)}</span>
               <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                {new Date(l.createdAt).toLocaleString('es-CO', { day: 'numeric', month: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
+                {new Date(l.createdAt).toLocaleString('es-CO', { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
               </span>
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
