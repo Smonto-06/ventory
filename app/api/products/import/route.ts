@@ -148,7 +148,14 @@ export async function POST(request: Request) {
     }
     const supplierIdByName = new Map<string, string>()
     for (const sn of Array.from(supplierNames)) {
-      const id = await resolveOrCreateSupplier(db, businessId, sn)
+      // En su propia transacción: el lock consultivo de resolveOrCreateSupplier
+      // es de transacción (pg_advisory_xact_lock) — pasarle el `db` de nivel
+      // superior lo libera apenas termina esa sentencia raw suelta, antes de
+      // la lectura/creación que debía proteger, dejándolo sin efecto contra
+      // una importación paralela o una creación manual de producto (POST
+      // /api/products, que sí corre dentro de una transacción) con el mismo
+      // proveedor nuevo.
+      const id = await db.$transaction((tx) => resolveOrCreateSupplier(tx, businessId, sn))
       supplierIdByName.set(sn.toLowerCase(), id)
     }
 

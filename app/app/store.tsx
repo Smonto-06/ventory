@@ -1116,11 +1116,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }))
         toast('Sin conexión — venta guardada, se enviará al volver el internet')
         newSale()
+        // Sin esperar: si el error fue un 5xx AMBIGUO con conexión real
+        // activa (no un TypeError de red), la venta pudo haber comitido en el
+        // servidor a pesar de la respuesta — reintenta de una en vez de
+        // esperar hasta 2 minutos. Como reenvía con el mismo clientOpId, el
+        // servidor reconoce ese caso y devuelve la venta ya creada en vez de
+        // duplicarla; si de verdad no hay conexión, flush() no hace nada.
+        flush()
         return
       }
       onError(e)
     }
-  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, quoteId, buildSaleItems, matchCustomerId, afterSale, newSale, fmt, toast, onError])
+  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, quoteId, buildSaleItems, matchCustomerId, afterSale, newSale, fmt, toast, onError, flush])
 
   const finalizeCredito = useCallback(
     async (customerId: string) => {
@@ -1161,12 +1168,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setModal(null)
           toast('Sin conexión — venta a crédito guardada, se enviará al volver el internet')
           newSale()
+          // Ver mismo comentario en finalizeSale.
+          flush()
           return
         }
         onError(e)
       }
     },
-    [cart, data.cash.session, discount, discountIsPct, note, quoteId, total, buildSaleItems, afterSale, newSale, fmt, toast, onError],
+    [cart, data.cash.session, discount, discountIsPct, note, quoteId, total, buildSaleItems, afterSale, newSale, fmt, toast, onError, flush],
   )
 
   // ─── Cotizaciones ─────────────────────────────────────────────────────────
@@ -1492,13 +1501,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ],
           }))
           toast('Sin conexión — producto guardado, se enviará al volver el internet')
+          // Ver mismo comentario en finalizeSale.
+          flush()
           return true
         }
         onError(e)
         return false
       }
     },
-    [data.branches, branchId, toast, refreshProducts, onError],
+    [data.branches, branchId, toast, refreshProducts, onError, flush],
   )
 
   /** Agrega variantes a un producto existente (o lo convierte en agrupador) */
@@ -1760,11 +1771,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         clearNc()
         setScreen('compras')
         toast('Sin conexión — compra guardada, se enviará al volver el internet')
+        // Ver mismo comentario en finalizeSale.
+        flush()
         return
       }
       onError(e)
     }
-  }, [ncProv, ncItems, ncMethod, ncAbono, clearNc, toast, fmt, refreshPurchases, refreshProducts, refreshSuppliers, refreshCash, onError])
+  }, [ncProv, ncItems, ncMethod, ncAbono, clearNc, toast, fmt, refreshPurchases, refreshProducts, refreshSuppliers, refreshCash, onError, flush])
 
   const holdPurchase = useCallback(async () => {
     if (!ncItems.length) return
