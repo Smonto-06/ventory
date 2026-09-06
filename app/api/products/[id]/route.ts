@@ -8,6 +8,13 @@ import { resolveOrCreateSupplier } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
 
+class BarcodeDuplicateError extends Error {
+  constructor(public productName: string) {
+    super('Barcode duplicado')
+    this.name = 'BarcodeDuplicateError'
+  }
+}
+
 const updateProductSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).nullish(),
@@ -120,24 +127,19 @@ export async function PATCH(request: Request, { params }: Params) {
 
     // El código de barras no tiene constraint único en BD — sin este chequeo
     // se podían dejar dos productos activos con el mismo barcode (ver mismo
-    // comentario en POST /api/products).
-    if (rest.barcode?.trim()) {
-      const dupBarcode = await db.product.findFirst({
-        where: {
-          businessId: session.user.businessId,
-          barcode: rest.barcode.trim(),
-          status: 'ACTIVE',
-          NOT: { id: params.id },
-        },
-        select: { id: true, name: true },
-      })
-      if (dupBarcode) {
-        return NextResponse.json(
-          { error: `El código de barras ya está en uso por "${dupBarcode.name}"` },
-          { status: 400 },
-        )
-      }
-    }
+    // comentario en POST /api/products). El barcode EFECTIVO (no solo el que
+    // viene en este PATCH) importa al reactivar: reactivar un producto
+    // archivado suele mandar solo status:'ACTIVE' sin tocar barcode — si en
+    // ese caso no se revisa el que ya tiene guardado, dos productos activos
+    // pueden terminar con el mismo código (otro producto pudo tomarlo
+    // mientras este estaba archivado) y el escáner de cobro elegiría el
+    // equivocado. Solo hace falta revisar cuando el barcode cambia o cuando
+    // el producto pasa a estar ACTIVE (reactivación) — una edición común que
+    // no toca ninguno de los dos ya cumplía el invariante desde antes.
+    const resultingStatus = rest.status ?? existing.status
+    const effectiveBarcode = rest.barcode !== undefined ? rest.barcode?.trim() || null : existing.barcode
+    const reactivando = existing.status !== 'ACTIVE' && resultingStatus === 'ACTIVE'
+    const debeRevisarBarcode = resultingStatus === 'ACTIVE' && !!effectiveBarcode && (rest.barcode !== undefined || reactivando)
 
     // Igual que en la creación: el campo "proveedor" es texto libre y se
     // enlaza con la tabla real Supplier para que la pantalla de Proveedores
@@ -146,6 +148,27 @@ export async function PATCH(request: Request, { params }: Params) {
     // duplicado, etc.), un proveedor nuevo o reactivado no debe quedar
     // huérfano sin ningún producto asociado.
     const product = await db.$transaction(async (tx) => {
+      // Lock consultivo por negocio+barcode y revalidación bajo el lock —
+      // mismo patrón que POST /api/products, para que dos PATCH concurrentes
+      // (o un PATCH y una creación) con el mismo código no pasen ambos antes
+      // de que cualquiera escriba.
+      if (debeRevisarBarcode) {
+        const key = `barcode:${session.user.businessId}:${effectiveBarcode.toLowerCase()}`
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
+        const dupBarcode = await tx.product.findFirst({
+          where: {
+            businessId: session.user.businessId,
+            barcode: effectiveBarcode,
+            status: 'ACTIVE',
+            NOT: { id: params.id },
+          },
+          select: { id: true, name: true },
+        })
+        if (dupBarcode) {
+          throw new BarcodeDuplicateError(dupBarcode.name)
+        }
+      }
+
       const supplierId =
         rest.supplier === undefined
           ? undefined
@@ -230,6 +253,12 @@ export async function PATCH(request: Request, { params }: Params) {
       },
     })
   } catch (error) {
+    if (error instanceof BarcodeDuplicateError) {
+      return NextResponse.json(
+        { error: `El código de barras ya está en uso por "${error.productName}"` },
+        { status: 400 },
+      )
+    }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return NextResponse.json({ error: 'Ya existe un producto con ese SKU' }, { status: 400 })
     }

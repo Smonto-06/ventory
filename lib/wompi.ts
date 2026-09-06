@@ -158,7 +158,9 @@ export async function consultarTransaccion(
  * true = confirmado; false = la API respondió pero esa transacción no está
  * en la lista de esa referencia (evidencia de manipulación → rechazar);
  * null = no se pudo confirmar (API de Wompi inalcanzable) — no es evidencia
- * de nada, así que no bloquea por sí solo un pago que el HMAC ya validó.
+ * de nada, pero tampoco se puede aplicar el pago a ciegas: el caller (webhook)
+ * lo trata como fallo temporal y devuelve un error para que Wompi reintente,
+ * en vez de aceptar `reference` (que el HMAC no cubre) sin verificar.
  */
 export async function referenciaCoincide(reference: string, transactionId: string): Promise<boolean | null> {
   const lista = await listarTransacciones(reference)

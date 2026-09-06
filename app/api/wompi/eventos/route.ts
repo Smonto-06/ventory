@@ -58,6 +58,20 @@ export async function POST(req: NextRequest) {
       console.error(`Wompi: referencia ${tx.reference} no coincide con transacción ${tx.id}`)
       return NextResponse.json({ error: 'Referencia no coincide' }, { status: 422 })
     }
+    // `reference` no está cubierto por el HMAC del evento — la única defensa
+    // real contra que alguien reenvíe un evento aprobado propio (firma
+    // válida) apuntándolo a la referencia PENDING de OTRO negocio (el monto
+    // es el mismo para todos: un solo plan) es esta consulta cruzada contra
+    // la API de Wompi. Si la API no responde, no hay forma de confirmar NI
+    // descartar la manipulación — fallar abierto aquí dejaría esa ventana
+    // abierta a activar el negocio equivocado. Se responde con un error para
+    // que Wompi reintente el webhook más tarde (su política reintenta un
+    // webhook con respuesta no-2xx); el respaldo de consultarTransaccion() al
+    // volver del checkout también puede recuperarlo mientras tanto.
+    if (coincide === null) {
+      console.error(`Wompi: no se pudo verificar la referencia ${tx.reference} contra la API (reintentará)`)
+      return NextResponse.json({ error: 'No se pudo verificar la transacción' }, { status: 503 })
+    }
     await aplicarPagoAprobado(pago.id, {
       wompiId: tx.id,
       paymentMethod: tx.payment_method_type,

@@ -38,6 +38,9 @@ jest.mock('@/lib/db', () => {
   // una transacción — el mock solo necesita ejecutar el callback con el
   // mismo objeto, ya que ningún test aquí depende de aislamiento real.
   db.$transaction = jest.fn((fn: (tx: typeof db) => unknown) => fn(db))
+  // Lock consultivo del chequeo de barcode duplicado (POST y PATCH) — no hay
+  // BD real en estos tests, así que solo necesita resolver sin hacer nada.
+  db.$executeRaw = jest.fn().mockResolvedValue(undefined)
   return { db }
 })
 
