@@ -390,8 +390,10 @@ function PlanBlockedOverlay() {
   const suspended = plan?.status === 'SUSPENDED'
   const mensualidadVencida = plan?.status === 'ACTIVE'
   // El pago en línea aparece solo con las llaves de Wompi configuradas y para
-  // el administrador (la cuenta suspendida se reactiva con soporte, no pagando)
-  const puedePagar = !!s.settings?.pagoEnLinea && s.isAdmin && !suspended
+  // el administrador. Una suspensión MANUAL (del super admin) se reactiva con
+  // soporte, no pagando; una suspensión AUTOMÁTICA por contracargo sí admite
+  // pagar un reemplazo — aplicarPagoAprobado la reactiva sola al aprobarse.
+  const puedePagar = !!s.settings?.pagoEnLinea && s.isAdmin && (!suspended || !!plan?.suspendedByChargeback)
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 440, background: 'var(--surface)', borderRadius: 18, padding: 28, boxShadow: '0 30px 60px -30px rgba(15,25,23,.5)', animation: 'vpop .25s ease', textAlign: 'center' }}>

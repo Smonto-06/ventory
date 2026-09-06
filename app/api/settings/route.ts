@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
       status: true,
       trialEndsAt: true,
       paidUntil: true,
+      suspendedByChargeback: true,
     },
   })
   if (!business) return NextResponse.json({ error: 'Negocio no encontrado' }, { status: 404 })

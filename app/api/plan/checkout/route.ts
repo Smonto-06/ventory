@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
 
     const negocio = await db.business.findUniqueOrThrow({
       where: { id: user.businessId },
-      select: { status: true, trialEndsAt: true, paidUntil: true },
+      select: { status: true, trialEndsAt: true, paidUntil: true, suspendedByChargeback: true },
     })
     return NextResponse.json({
       status: pago.status,

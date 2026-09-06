@@ -14,19 +14,23 @@ export interface PlanInfo {
   paidUntil: string | null
   daysLeft: number | null
   blocked: boolean
+  /** Solo relevante con status SUSPENDED: true = contracargo/reembolso automático (se
+   *  puede pagar un reemplazo para reactivar); false = decisión manual del super admin. */
+  suspendedByChargeback: boolean
 }
 
 export function planInfo(business: {
   status: string
   trialEndsAt: Date | null
   paidUntil?: Date | null
+  suspendedByChargeback?: boolean
 }): PlanInfo {
   const status = business.status as PlanInfo['status']
   if (status === 'ACTIVE') {
     const paid = business.paidUntil ?? null
     if (!paid) {
       // Activación manual del super admin: sin fecha de vencimiento
-      return { status, trialEndsAt: null, paidUntil: null, daysLeft: null, blocked: false }
+      return { status, trialEndsAt: null, paidUntil: null, daysLeft: null, blocked: false, suspendedByChargeback: false }
     }
     const msLeft = paid.getTime() - Date.now()
     return {
@@ -35,10 +39,11 @@ export function planInfo(business: {
       paidUntil: paid.toISOString(),
       daysLeft: Math.max(0, Math.ceil(msLeft / 86400000)),
       blocked: msLeft <= 0,
+      suspendedByChargeback: false,
     }
   }
   if (status === 'SUSPENDED') {
-    return { status, trialEndsAt: null, paidUntil: null, daysLeft: null, blocked: true }
+    return { status, trialEndsAt: null, paidUntil: null, daysLeft: null, blocked: true, suspendedByChargeback: !!business.suspendedByChargeback }
   }
   // TRIAL
   const ends = business.trialEndsAt
@@ -50,6 +55,7 @@ export function planInfo(business: {
     paidUntil: null,
     daysLeft,
     blocked: msLeft <= 0,
+    suspendedByChargeback: false,
   }
 }
 
@@ -104,6 +110,20 @@ export async function aplicarPagoAprobado(
     // no corresponde a ninguno de los dos eventos por separado. Serializa
     // cualquier cambio de estado de pago del mismo negocio.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${pagoInicial.businessId}))`
+
+    // Releído bajo el lock: el estado de una transacción de Wompi/Mercado Pago
+    // es terminal una vez resuelto (de PENDING pasa a APROBADA/rechazada/
+    // anulada, y de ahí nunca vuelve) — si ESTA MISMA transacción (mismo
+    // wompiId) ya quedó registrada como DECLINED/VOIDED/ERROR (p. ej. por un
+    // contracargo que ya la revirtió), un evento "aprobado" que llega después
+    // para ese mismo id es un reenvío tardío del webhook original ya superado,
+    // no una aprobación nueva — aplicarlo reactivaría un negocio que un
+    // contracargo ya suspendió. Una transacción NUEVA (id distinto) sí puede
+    // aprobarse con normalidad; esto solo bloquea el reenvío del mismo id.
+    const actual = await tx.planPayment.findUniqueOrThrow({ where: { id: paymentId }, select: { status: true, wompiId: true } })
+    if (datos.wompiId && actual.wompiId === datos.wompiId && actual.status !== 'APPROVED' && actual.status !== 'PENDING') {
+      return false
+    }
 
     const cambiado = await tx.planPayment.updateMany({
       where: { id: paymentId, status: { not: 'APPROVED' } },

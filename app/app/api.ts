@@ -285,6 +285,9 @@ export interface PlanInfo {
   paidUntil: string | null
   daysLeft: number | null
   blocked: boolean
+  /** Solo relevante con status SUSPENDED: true = contracargo/reembolso automático (se
+   *  puede pagar un reemplazo para reactivar); false = decisión manual del super admin. */
+  suspendedByChargeback: boolean
 }
 
 // Conteo + total de una actividad del turno (para el recibo de cierre)
