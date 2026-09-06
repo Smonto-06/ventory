@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { diaColombiano } from '@/lib/pos'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,9 +13,9 @@ export async function GET() {
   }
 
   const businessId = session.user.businessId
-  const now = new Date()
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000)
+  // Día calendario en Colombia (UTC-5), no en la hora local del runtime
+  // (Vercel corre en UTC) — mismo corte de 5 horas corregido en /api/reports.
+  const { desde: startOfDay, hasta: endOfDay } = diaColombiano(new Date())
 
   const [todaySalesAgg, activeCashSession, lowStockItems, recentSales] = await Promise.all([
     db.sale.aggregate({
@@ -28,12 +29,13 @@ export async function GET() {
     }),
 
     db.cashSession.findFirst({
-      where: { branch: { businessId }, status: 'OPEN' },
+      // La caja del propio usuario, no "la más reciente de la sucursal"
+      // (con varios cajeros abiertos a la vez, esa mezclaba turnos ajenos).
+      where: { branch: { businessId }, status: 'OPEN', openedById: session.user.id },
       include: {
         branch: { select: { id: true, name: true } },
         openedBy: { select: { id: true, name: true } },
       },
-      orderBy: { openedAt: 'desc' },
     }),
 
     db.inventory.findMany({

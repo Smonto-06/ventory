@@ -17,6 +17,16 @@ const cardShell: CSSProperties = {
 
 const QUICK = [1000, 2000, 5000, 10000, 20000, 50000, 100000]
 
+const fmtApertura = (iso: string) =>
+  new Date(iso).toLocaleString('es-CO', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+
 function typeBtnStyle(active: boolean, kind: 'INCOME' | 'EXPENSE'): CSSProperties {
   const color = kind === 'INCOME' ? '#6366F1' : '#C9433B'
   return {
@@ -59,7 +69,14 @@ export default function MovimientosScreen() {
   return (
     <div style={{ padding: 'clamp(16px,3vw,28px)', display: 'flex', flexDirection: 'column', gap: 16, animation: 'vfade .3s ease' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-.4px' }}>Movimientos de caja</h1>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-.4px' }}>Movimientos de caja</h1>
+          {s.sessionOpenedAt && (
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3 }}>
+              Turno abierto desde el {fmtApertura(s.sessionOpenedAt)}
+            </div>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: '#EEF0FE', color: '#4338CA', fontWeight: 800, fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>
             Ingresos + {s.fmt(s.ingresos)}

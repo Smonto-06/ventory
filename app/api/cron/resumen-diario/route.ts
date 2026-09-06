@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { construirResumen } from '@/lib/resumen-diario'
+import { construirResumen, diaColombiano } from '@/lib/resumen-diario'
 import { mailerConfigured, sendDailySummaryEmail } from '@/lib/mailer'
 
 export const dynamic = 'force-dynamic'
@@ -31,6 +31,10 @@ export async function GET(req: NextRequest) {
   }
 
   const ahora = new Date()
+  // Inicio del día colombiano de "ahora": si Vercel reintenta la invocación
+  // del cron (timeout parcial, 5xx, reintento manual), un negocio que ya
+  // recibió su resumen HOY no debe recibirlo dos veces.
+  const { desde: inicioDeHoy } = diaColombiano(ahora)
   const negocios = await db.business.findMany({
     where: {
       notifyDailySummary: true,
@@ -41,6 +45,7 @@ export async function GET(req: NextRequest) {
       id: true,
       notifyEmail: true,
       notifyLowStock: true,
+      lastDailySummaryAt: true,
       users: {
         where: { role: 'ADMIN', isActive: true },
         select: { email: true },
@@ -51,9 +56,14 @@ export async function GET(req: NextRequest) {
   })
 
   let enviados = 0
+  let yaEnviados = 0
   const fallos: string[] = []
 
   for (const n of negocios) {
+    if (n.lastDailySummaryAt && n.lastDailySummaryAt >= inicioDeHoy) {
+      yaEnviados++
+      continue
+    }
     const destino = n.notifyEmail?.trim() || n.users[0]?.email
     if (!destino) continue
     try {
@@ -63,13 +73,36 @@ export async function GET(req: NextRequest) {
       if (!n.notifyLowStock) resumen.agotados = []
       // Un día sin ventas y sin nada por reponer no merece correo
       if (resumen.ventas.transacciones === 0 && resumen.agotados.length === 0) continue
-      await sendDailySummaryEmail(destino, resumen)
-      enviados++
+
+      // Reclama el envío ANTES de mandarlo (condicionado al mismo chequeo de
+      // arriba, pero atómico): si dos invocaciones del cron corren
+      // solapadas, la lectura de lastDailySummaryAt de ambas puede quedar
+      // desactualizada frente a la otra — el updateMany condicionado
+      // garantiza que solo una gane la carrera para este negocio.
+      const reclamado = await db.business.updateMany({
+        where: { id: n.id, OR: [{ lastDailySummaryAt: null }, { lastDailySummaryAt: { lt: inicioDeHoy } }] },
+        data: { lastDailySummaryAt: ahora },
+      })
+      if (reclamado.count === 0) {
+        yaEnviados++
+        continue
+      }
+
+      try {
+        await sendDailySummaryEmail(destino, resumen)
+        enviados++
+      } catch (error) {
+        // El envío falló DESPUÉS de reclamarlo: se libera el reclamo para
+        // que un reintento real (invocación posterior del mismo día) pueda
+        // volver a intentarlo, en vez de darlo por enviado para siempre hoy.
+        await db.business.update({ where: { id: n.id }, data: { lastDailySummaryAt: n.lastDailySummaryAt } })
+        throw error
+      }
     } catch (error) {
       console.error(`resumen diario · negocio ${n.id}:`, error)
       fallos.push(n.id)
     }
   }
 
-  return NextResponse.json({ negocios: negocios.length, enviados, fallos: fallos.length })
+  return NextResponse.json({ negocios: negocios.length, enviados, yaEnviados, fallos: fallos.length })
 }

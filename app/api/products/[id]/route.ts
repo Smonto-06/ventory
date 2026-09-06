@@ -2,9 +2,18 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
+import { resolveOrCreateSupplier } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
+
+class BarcodeDuplicateError extends Error {
+  constructor(public productName: string) {
+    super('Barcode duplicado')
+    this.name = 'BarcodeDuplicateError'
+  }
+}
 
 const updateProductSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -89,6 +98,18 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const { price, cost, categoryId, minStock, ...rest } = parsed.data
 
+    // No es alcanzable desde la UI normal (la lista de productos y los
+    // modales de edición/ajuste/traslado ya excluyen los archivados al pedir
+    // status=ACTIVE por defecto), pero la API en sí no lo impedía: una
+    // llamada directa podía seguir editando precio/nombre/costo de un
+    // producto archivado. Reactivarlo (status: 'ACTIVE') sigue permitido.
+    if (existing.status === 'ARCHIVED' && rest.status !== 'ACTIVE') {
+      return NextResponse.json(
+        { error: 'Este producto está archivado. Reactívalo antes de editarlo.' },
+        { status: 400 },
+      )
+    }
+
     const effectivePrice = price ?? Number(existing.price)
     const effectiveCost = cost ?? (existing.cost ? Number(existing.cost) : undefined)
     if (effectiveCost !== undefined && effectiveCost > effectivePrice) {
@@ -97,26 +118,94 @@ export async function PATCH(request: Request, { params }: Params) {
 
     if (categoryId !== undefined && categoryId !== null) {
       const cat = await db.category.findFirst({
-        where: { id: categoryId, businessId: session.user.businessId },
+        where: { id: categoryId, businessId: session.user.businessId, isActive: true },
       })
       if (!cat) {
         return NextResponse.json({ error: 'Categoría no encontrada' }, { status: 400 })
       }
     }
 
-    const product = await db.product.update({
-      where: { id: params.id },
-      data: {
-        ...rest,
-        ...(price !== undefined && { price }),
-        ...(cost !== undefined && { cost }),
-        ...(categoryId !== undefined && { categoryId }),
-      },
-      include: {
-        category: { select: { id: true, name: true } },
-        inventory: { select: { quantity: true, minStock: true, branchId: true } },
-      },
+    // El código de barras no tiene constraint único en BD — sin este chequeo
+    // se podían dejar dos productos activos con el mismo barcode (ver mismo
+    // comentario en POST /api/products). El barcode EFECTIVO (no solo el que
+    // viene en este PATCH) importa al reactivar: reactivar un producto
+    // archivado suele mandar solo status:'ACTIVE' sin tocar barcode — si en
+    // ese caso no se revisa el que ya tiene guardado, dos productos activos
+    // pueden terminar con el mismo código (otro producto pudo tomarlo
+    // mientras este estaba archivado) y el escáner de cobro elegiría el
+    // equivocado. Solo hace falta revisar cuando el barcode cambia o cuando
+    // el producto pasa a estar ACTIVE (reactivación) — una edición común que
+    // no toca ninguno de los dos ya cumplía el invariante desde antes.
+    const resultingStatus = rest.status ?? existing.status
+    const effectiveBarcode = rest.barcode !== undefined ? rest.barcode?.trim() || null : existing.barcode
+    const reactivando = existing.status !== 'ACTIVE' && resultingStatus === 'ACTIVE'
+    const debeRevisarBarcode = resultingStatus === 'ACTIVE' && !!effectiveBarcode && (rest.barcode !== undefined || reactivando)
+
+    // Igual que en la creación: el campo "proveedor" es texto libre y se
+    // enlaza con la tabla real Supplier para que la pantalla de Proveedores
+    // refleje el cambio. Resuelto DENTRO de la misma transacción que
+    // actualiza el producto: si la actualización falla después (SKU
+    // duplicado, etc.), un proveedor nuevo o reactivado no debe quedar
+    // huérfano sin ningún producto asociado.
+    const product = await db.$transaction(async (tx) => {
+      // Lock consultivo por negocio+barcode y revalidación bajo el lock —
+      // mismo patrón que POST /api/products, para que dos PATCH concurrentes
+      // (o un PATCH y una creación) con el mismo código no pasen ambos antes
+      // de que cualquiera escriba.
+      if (debeRevisarBarcode) {
+        const key = `barcode:${session.user.businessId}:${effectiveBarcode.toLowerCase()}`
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
+        const dupBarcode = await tx.product.findFirst({
+          where: {
+            businessId: session.user.businessId,
+            barcode: effectiveBarcode,
+            status: 'ACTIVE',
+            NOT: { id: params.id },
+          },
+          select: { id: true, name: true },
+        })
+        if (dupBarcode) {
+          throw new BarcodeDuplicateError(dupBarcode.name)
+        }
+      }
+
+      const supplierId =
+        rest.supplier === undefined
+          ? undefined
+          : rest.supplier?.trim()
+            ? await resolveOrCreateSupplier(tx, session.user.businessId, rest.supplier.trim())
+            : null
+
+      return tx.product.update({
+        where: { id: params.id },
+        data: {
+          ...rest,
+          ...(price !== undefined && { price }),
+          ...(cost !== undefined && { cost }),
+          ...(categoryId !== undefined && { categoryId }),
+          ...(supplierId !== undefined && { supplierId }),
+        },
+        include: {
+          category: { select: { id: true, name: true } },
+          inventory: { select: { quantity: true, minStock: true, branchId: true } },
+        },
+      })
     })
+
+    // Precio, costo, nombre o archivado sin rastro alguno era un hueco real
+    // en el registro de actividad — la acción más sensible de "editar
+    // producto" no dejaba huella.
+    db.auditLog
+      .create({
+        data: {
+          action: 'UPDATE',
+          entity: 'Product',
+          entityId: params.id,
+          payload: { fields: Object.keys(parsed.data) },
+          userId: session.user.id,
+        },
+      })
+      .catch(() => {})
 
     // Stock mínimo vive en el inventario por sucursal
     if (minStock !== undefined) {
@@ -164,6 +253,15 @@ export async function PATCH(request: Request, { params }: Params) {
       },
     })
   } catch (error) {
+    if (error instanceof BarcodeDuplicateError) {
+      return NextResponse.json(
+        { error: `El código de barras ya está en uso por "${error.productName}"` },
+        { status: 400 },
+      )
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return NextResponse.json({ error: 'Ya existe un producto con ese SKU' }, { status: 400 })
+    }
     console.error('PATCH /api/products/[id] error:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
@@ -202,6 +300,18 @@ export async function DELETE(request: Request, { params }: Params) {
           data: { status: 'ARCHIVED' },
         })
       }
+
+      db.auditLog
+        .create({
+          data: {
+            action: 'DELETE',
+            entity: 'Product',
+            entityId: params.id,
+            payload: { name: existing.name },
+            userId: session.user.id,
+          },
+        })
+        .catch(() => {})
 
       return NextResponse.json({ message: 'Producto archivado exitosamente' })
     }

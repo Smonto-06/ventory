@@ -6,6 +6,14 @@ import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
+/** Otra petición concurrente (doble clic) ya creó una variante con ese nombre */
+class VariantAlreadyExistsError extends Error {
+  constructor(label: string) {
+    super(`La variante "${label}" ya existe`)
+    this.name = 'VariantAlreadyExistsError'
+  }
+}
+
 // Agrega variantes a un producto que ya existe.
 //
 // Sirve para dos casos: sumar una talla nueva a un producto que ya tiene
@@ -66,6 +74,17 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
     const { variantes, variantOptions, branchId } = parsed.data
 
+    // El id de sucursal es un cuid global (no compuesto con businessId): sin
+    // este chequeo se podía crear inventario en una sucursal de OTRO negocio.
+    if (branchId) {
+      const suc = await db.branch.findFirst({
+        where: { id: branchId, businessId: session.user.businessId, isActive: true },
+      })
+      if (!suc) {
+        return NextResponse.json({ error: 'Sucursal no encontrada' }, { status: 400 })
+      }
+    }
+
     const existentes = await db.product.findMany({
       where: { parentId: padre.id, businessId: session.user.businessId },
       select: { variantLabel: true },
@@ -94,6 +113,15 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const convirtiendo = !padre.hasVariants
 
     const creadas = await db.$transaction(async (tx) => {
+      // Lock consultivo por producto: una venta de este mismo producto
+      // (todavía suelto en ese momento) toma el mismo lock antes de mover su
+      // stock (ver POST /api/sales). Sin esto, una venta que ya pasó su
+      // chequeo de "no es agrupador" podía terminar de mover stock justo
+      // después de que esta conversión borrara la fila de inventario del
+      // padre — `moveStock` la recrea en 0 y la deja en negativo, huérfana,
+      // colgada de un producto que ya no se vende.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${padre.id}))`
+
       // El stock heredado se lee y se bloquea DENTRO de la transacción (no
       // antes de abrirla): si una venta concurrente del producto suelto
       // alcanza a descontar stock mientras se arma este formulario, la
@@ -128,6 +156,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
         await tx.inventory.deleteMany({ where: { productId: padre.id } })
       } else if (variantOptions) {
         await tx.product.update({ where: { id: padre.id }, data: { variantOptions } })
+      }
+
+      // Revalidado DENTRO de la transacción (no solo antes de abrirla): un
+      // doble clic en "Guardar" puede llegar con dos peticiones casi
+      // simultáneas que vieron la misma lista de variantes existentes y
+      // ambas creerían que ninguna se repite.
+      const existentesTx = await tx.product.findMany({
+        where: { parentId: padre.id, businessId: session.user.businessId },
+        select: { variantLabel: true },
+      })
+      const yaHayTx = new Set(existentesTx.map((v) => (v.variantLabel ?? '').toLowerCase()))
+      const repetida = nuevas.find((v) => yaHayTx.has(v.label.toLowerCase()))
+      if (repetida) {
+        throw new VariantAlreadyExistsError(repetida.label)
       }
 
       const salida = []
@@ -167,6 +209,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     return NextResponse.json({ creadas: creadas.length, convertido: convirtiendo }, { status: 201 })
   } catch (error) {
+    if (error instanceof VariantAlreadyExistsError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     console.error('POST /api/products/[id]/variants error:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }

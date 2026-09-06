@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { tileFor, methodLabel } from '../ui'
 import { Icono } from '@/components/Icono'
+import { api, type Sale } from '../api'
+import { diaColombiano } from '@/lib/pos'
 
 const GUIA_KEY = 'ventory-guia-oculta'
 
@@ -181,9 +183,44 @@ function GuiaInicio() {
 export default function PanelScreen() {
   const s = useApp()
 
-  const activeSales = s.sales.filter((v) => v.status === 'COMPLETED')
-  const today = new Date()
-  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+  // s.sales es la lista compartida de "ventas recientes" (tope de 100, sin
+  // filtro de fecha, para Ventas/otras pantallas) — un negocio con más de
+  // ~15 ventas/día ya la agota antes de cubrir los últimos 7 días, así que
+  // "hoy" y el gráfico semanal podían mostrar cifras truncadas. El Panel
+  // pide aparte, con rango de fechas explícito (sin ese tope), exactamente
+  // los últimos 7 días en hora Colombia — no la del navegador.
+  const [weekSales, setWeekSales] = useState<Sale[] | null>(null)
+  useEffect(() => {
+    let vivo = true
+    const hoy = diaColombiano(new Date())
+    const hace6 = diaColombiano(new Date(Date.now() - 6 * 86400000))
+    const pedir = (intentosRestantes: number) => {
+      api
+        .sales(`?dateFrom=${hace6.desde.toISOString()}&dateTo=${hoy.hasta.toISOString()}`)
+        .then((r) => {
+          if (vivo) setWeekSales(r.sales)
+        })
+        .catch(() => {
+          // Un fallo transitorio (blip de red) no debe dejar el Panel
+          // truncado el resto de la sesión: se reintenta un par de veces
+          // con una espera corta antes de resignarse a la lista compartida
+          // (con su tope de 100) como respaldo.
+          if (!vivo) return
+          if (intentosRestantes > 0) setTimeout(() => pedir(intentosRestantes - 1), 4000)
+        })
+    }
+    pedir(2)
+    return () => {
+      vivo = false
+    }
+  }, [])
+
+  // Mientras carga (o si falla), se usa la lista compartida como respaldo
+  // aproximado — mejor una cifra que puede quedarse corta que una pantalla
+  // vacía en el primer render.
+  const activeSales = (weekSales ?? s.sales).filter((v) => v.status === 'COMPLETED')
+  const hoyRango = diaColombiano(new Date())
+  const startOfDay = hoyRango.desde.getTime()
   const todaySales = activeSales.filter((v) => new Date(v.createdAt).getTime() >= startOfDay)
   const salesTotal = todaySales.reduce((a, v) => a + v.total, 0)
 
@@ -201,6 +238,8 @@ export default function PanelScreen() {
     }
   }
   const mSum = Object.values(mAgg).reduce((a, b) => a + b, 0)
+  // Sin ventas hoy no hay nada que desglosar — antes se rellenaba con
+  // 60/30/10 fijo, mostrando un gráfico inventado como si fueran datos reales.
   const donut: Array<[string, number, string]> =
     mSum > 0
       ? [
@@ -208,11 +247,7 @@ export default function PanelScreen() {
           ['Tarjeta', mAgg.Tarjeta, '#6366F1'],
           ['Transferencia', mAgg.Transferencia + mAgg['Crédito'], '#A7F3D0'],
         ]
-      : [
-          ['Efectivo', 60, '#10B981'],
-          ['Tarjeta', 30, '#6366F1'],
-          ['Transferencia', 10, '#A7F3D0'],
-        ]
+      : [['Sin ventas hoy', 1, '#E2E5EC']]
   const dSum = donut.reduce((a, d) => a + d[1], 0) || 1
   let acc = 0
   const stops: string[] = []
@@ -226,13 +261,13 @@ export default function PanelScreen() {
   })
   const donutBg = `conic-gradient(${stops.join(',')})`
 
-  // Línea de los últimos 7 días con datos reales
+  // Línea de los últimos 7 días con datos reales, en días calendario Colombia
   const daySeries: Array<{ label: string; total: number }> = []
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i)
-    const from = d.getTime()
-    const to = from + 86400000
-    const label = i === 0 ? 'Hoy' : d.toLocaleDateString('es-CO', { weekday: 'short' })
+    const dia = diaColombiano(new Date(Date.now() - i * 86400000))
+    const from = dia.desde.getTime()
+    const to = dia.hasta.getTime()
+    const label = i === 0 ? 'Hoy' : dia.etiqueta.toLocaleDateString('es-CO', { weekday: 'short', timeZone: 'UTC' })
     daySeries.push({
       label: label.charAt(0).toUpperCase() + label.slice(1).replace('.', ''),
       total: activeSales
@@ -263,13 +298,12 @@ export default function PanelScreen() {
       tAgg.set(it.productId, { ...e, qty: e.qty + it.quantity })
     }
   }
-  let topList = Array.from(tAgg.entries())
+  // Sin ventas hoy no hay "más vendidos" que mostrar — antes se rellenaba
+  // con productos del catálogo y cantidades inventadas (45, 32, 28…).
+  const topList = Array.from(tAgg.entries())
     .map(([id, d]) => ({ id, ...d }))
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 5)
-  if (!topList.length) {
-    topList = s.products.slice(0, 5).map((p, i) => ({ id: p.id, name: p.name, qty: [45, 32, 28, 22, 18][i] ?? 10, imageUrl: p.imageUrl }))
-  }
 
   const lastSales = todaySales.slice(0, 5)
   const activeProds = s.products.length
@@ -396,8 +430,8 @@ export default function PanelScreen() {
               {legend.map((l) => (
                 <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ width: 9, height: 9, borderRadius: 3, background: l.color, flex: 'none' }} />
-                  <span style={{ flex: 1, fontSize: 14, color: 'var(--text)', fontWeight: 500 }}>{l.label}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{l.pct}%</span>
+                  <span style={{ flex: 1, fontSize: 14, color: mSum > 0 ? 'var(--text)' : 'var(--muted)', fontWeight: 500 }}>{l.label}</span>
+                  {mSum > 0 && <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{l.pct}%</span>}
                 </div>
               ))}
             </div>
@@ -464,19 +498,23 @@ export default function PanelScreen() {
               Ver todos
             </button>
           </div>
-          {topList.map((p, i) => {
-            const t = tileFor({ id: p.id, name: p.name, imageUrl: p.imageUrl })
-            return (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: '1px solid #EEF2F7' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#94A3B8', width: 16 }}>{i + 1}</span>
-                <div style={{ width: 34, height: 34, borderRadius: 9, flex: 'none', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, color: t.tileFg, ...t.tileStyle }}>
-                  {t.tileText}
+          {topList.length ? (
+            topList.map((p, i) => {
+              const t = tileFor({ id: p.id, name: p.name, imageUrl: p.imageUrl })
+              return (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: '1px solid #EEF2F7' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#94A3B8', width: 16 }}>{i + 1}</span>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, flex: 'none', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, color: t.tileFg, ...t.tileStyle }}>
+                    {t.tileText}
+                  </div>
+                  <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>{p.qty}</span>
                 </div>
-                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>{p.qty}</span>
-              </div>
-            )
-          })}
+              )
+            })
+          ) : (
+            <div style={{ padding: '18px 0', color: 'var(--muted)', fontSize: 14 }}>Aún no hay ventas hoy.</div>
+          )}
         </div>
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>

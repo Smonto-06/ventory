@@ -32,11 +32,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (!supplier) return NextResponse.json({ error: 'Proveedor no encontrado' }, { status: 404 })
 
     if (parsed.data.name) {
+      // Sin filtrar isActive: el nombre tiene constraint único en BD que
+      // también incluye archivados — si este chequeo solo miraba activos,
+      // renombrar a un nombre igual a uno archivado pasaba el filtro y
+      // reventaba el update() con un 500 genérico en vez de un mensaje claro.
       const dup = await db.supplier.findFirst({
         where: {
           businessId: user.businessId,
           name: { equals: parsed.data.name, mode: 'insensitive' },
-          isActive: true,
           NOT: { id: params.id },
         },
       })

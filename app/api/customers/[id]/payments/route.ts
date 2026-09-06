@@ -14,6 +14,22 @@ import { CashMovementType } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
+/** Otro abono concurrente ya redujo el saldo por debajo de lo que este abono necesitaba */
+class BalanceChangedError extends Error {
+  constructor() {
+    super('El saldo del cliente cambió por otra operación simultánea. Vuelve a intentar el abono.')
+    this.name = 'BalanceChangedError'
+  }
+}
+
+/** El turno se cerró justo mientras se registraba el ingreso de este abono */
+class CashSessionClosedError extends Error {
+  constructor() {
+    super('La caja se cerró mientras se registraba el abono')
+    this.name = 'CashSessionClosedError'
+  }
+}
+
 const PaymentSchema = z.object({
   amount: z.number().positive('El abono debe ser mayor a 0'),
   method: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
@@ -61,6 +77,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const result = await db.$transaction(async (tx) => {
       let cashMovementId: string | null = null
       if (parsed.data.method === 'CASH' && cashSessionId) {
+        // Lock consultivo por turno — mismo que toma el cierre de caja antes
+        // de congelar sus totales: sin esto, este ingreso podía pasar el
+        // chequeo OPEN de arriba y comitear justo después de que el cierre
+        // leyera "sus" movimientos, quedando fuera de incomesTotal
+        // congelado para siempre.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSessionId}))`
+        const vigente = await tx.cashSession.findUnique({ where: { id: cashSessionId }, select: { status: true } })
+        if (vigente?.status !== 'OPEN') {
+          throw new CashSessionClosedError()
+        }
         const movement = await tx.cashMovement.create({
           data: {
             type: CashMovementType.INCOME,
@@ -74,10 +100,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         cashMovementId = movement.id
       }
 
-      const updated = await tx.customer.update({
-        where: { id: customer.id },
+      // Decremento CONDICIONADO al saldo vigente (no al leído antes de abrir
+      // la transacción): dos abonos casi simultáneos por el saldo completo
+      // no deben poder dejarlo negativo ni duplicar el ingreso de caja.
+      const dec = await tx.customer.updateMany({
+        where: { id: customer.id, balance: { gte: amount } },
         data: { balance: { decrement: amount } },
       })
+      if (dec.count === 0) {
+        throw new BalanceChangedError()
+      }
+      const updated = await tx.customer.findUniqueOrThrow({ where: { id: customer.id } })
 
       const payment = await tx.customerPayment.create({
         data: {
@@ -122,6 +155,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       { status: 201 },
     )
   } catch (error) {
+    if (error instanceof BalanceChangedError) {
+      return badRequest(error.message)
+    }
+    if (error instanceof CashSessionClosedError) {
+      return badRequest('La caja se cerró mientras se registraba el abono. Vuelve a intentar con el turno actual.')
+    }
     return serverError('POST /api/customers/[id]/payments', error)
   }
 }

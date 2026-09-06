@@ -11,6 +11,19 @@ import { Modal, ModalTitle } from '../ui'
 export default function CreditoVentaModal() {
   const s = useApp()
   const [query, setQuery] = useState('')
+  // Evita que un doble toque sobre el mismo cliente mande la venta a
+  // crédito dos veces antes de que la primera cierre el modal.
+  const [enviando, setEnviando] = useState(false)
+
+  const elegir = async (customerId: string) => {
+    if (enviando) return
+    setEnviando(true)
+    try {
+      await s.finalizeCredito(customerId)
+    } finally {
+      setEnviando(false)
+    }
+  }
 
   const q = query.trim().toLowerCase()
   const rows = s.customers.filter(
@@ -56,7 +69,8 @@ export default function CreditoVentaModal() {
           rows.map((c) => (
             <button
               key={c.id}
-              onClick={() => s.finalizeCredito(c.id)}
+              onClick={() => elegir(c.id)}
+              disabled={enviando}
               className="v-hover-bg"
               style={{
                 width: '100%',
@@ -65,9 +79,10 @@ export default function CreditoVentaModal() {
                 gap: 12,
                 padding: '12px 14px',
                 borderBottom: '1px solid var(--bg)',
-                cursor: 'pointer',
+                cursor: enviando ? 'default' : 'pointer',
                 textAlign: 'left',
                 background: 'var(--surface)',
+                opacity: enviando ? 0.6 : 1,
               }}
             >
               <div

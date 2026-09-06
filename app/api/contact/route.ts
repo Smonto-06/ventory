@@ -7,6 +7,24 @@ import { mailerConfigured, sendContactEmail } from '@/lib/mailer'
 
 export const dynamic = 'force-dynamic'
 
+// Exige sesión (no es un relay abierto), pero sin esto una cuenta válida
+// podía mandar mensajes ilimitados al buzón de soporte. Freno simple en
+// memoria del proceso — suficiente para este endpoint de bajo volumen.
+const MAX_POR_VENTANA = 5
+const VENTANA_MS = 10 * 60 * 1000
+const envíosPorUsuario = new Map<string, number[]>()
+function limiteExcedido(userId: string): boolean {
+  const ahora = Date.now()
+  const previos = (envíosPorUsuario.get(userId) ?? []).filter((t) => ahora - t < VENTANA_MS)
+  if (previos.length >= MAX_POR_VENTANA) {
+    envíosPorUsuario.set(userId, previos)
+    return true
+  }
+  previos.push(ahora)
+  envíosPorUsuario.set(userId, previos)
+  return false
+}
+
 const ContactSchema = z.object({
   type: z.enum(['Sugerencia', 'Error', 'Queja o reclamo']),
   subject: z.string().trim().min(1, 'Escribe el asunto').max(200),
@@ -18,6 +36,10 @@ const ContactSchema = z.object({
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser(req)
   if (!user) return unauthorized()
+
+  if (limiteExcedido(user.id)) {
+    return NextResponse.json({ error: 'Ya enviaste varios mensajes seguidos. Intenta de nuevo más tarde.' }, { status: 429 })
+  }
 
   let body: unknown
   try {

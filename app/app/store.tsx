@@ -41,6 +41,34 @@ import {
 import { cartSubtotal, saleTotal, resolvePayment, expectedBalance } from '@/lib/pos'
 import { queueOp, syncPendingOps, pendingOps, registerServiceWorker, nuevoTempId, type PendingOp } from './offline'
 
+// Cuándo una venta/compra/producto se guarda en la cola offline en vez de
+// perderse: sin conexión (TypeError de fetch), o un 5xx real del servidor
+// con la conexión activa (timeout parcial, cold start de Neon, deploy en
+// curso). Antes solo se encolaba el caso offline — un 500 transitorio en
+// vivo caía directo a un toast suelto (onError) sin guardar nada, así que
+// si el usuario cerraba la pestaña antes de reintentar a mano, la
+// operación desaparecía sin haber quedado registrada en ningún lado. Un
+// 4xx (rechazo de negocio: stock, plan, caja cerrada, validación) NO se
+// encola — es un rechazo real que el usuario debe corregir, no un fallo
+// transitorio para reintentar solo.
+function debeEncolar(e: unknown): boolean {
+  if (!navigator.onLine || e instanceof TypeError) return true
+  return e instanceof ApiError && e.status >= 500
+}
+
+/**
+ * Id único por INTENTO de operación (venta/compra/producto), generado UNA
+ * sola vez antes del primer envío — no en cada reintento. Un 5xx puede
+ * llegar DESPUÉS de que el servidor ya comitió (timeout, despliegue a mitad
+ * de respuesta): sin esto, encolar y reenviar el mismo payload creaba una
+ * segunda venta/compra/producto y duplicaba su efecto en inventario. El
+ * servidor deduplica por este id (Sale/Purchase/Product.clientOpId).
+ */
+function nuevoOpId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  return `op-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export type Screen =
   | 'panel'
   | 'pos'
@@ -245,6 +273,8 @@ export interface AppStore extends AppData {
 
   // caja
   turnoAbierto: boolean
+  /** Fecha/hora de apertura del turno activo (null si no hay caja abierta) */
+  sessionOpenedAt: string | null
   apertura: number
   esperado: number
   ingresos: number
@@ -308,6 +338,8 @@ export interface AppStore extends AppData {
   finalizeCredito: (customerId: string) => Promise<void>
   /** Operaciones guardadas sin conexión (ventas, compras, productos), pendientes de enviarse */
   pendingCount: number
+  /** Reintenta enviar la cola offline ahora mismo (botón manual del banner) */
+  reintentarSync: () => Promise<void>
   lastSale: Sale | null
   setLastSale: (s: Sale) => void
   newSale: () => void
@@ -513,9 +545,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshProducts = useCallback(async () => {
     // El stock mostrado es el de la sucursal activa (donde se abre la caja)
     const branch = typeof window !== 'undefined' ? window.localStorage.getItem('ventory-branch') : null
-    const r = await api.productsIn(branch ?? undefined)
-    patch({ products: r.products })
-  }, [patch])
+    const [r, queued] = await Promise.all([api.productsIn(branch ?? undefined), pendingOps()])
+    // Solo se preservan los productos con id provisional (offline-*) que
+    // SIGUEN en la cola: antes se conservaba cualquier "offline-*" que ya
+    // estuviera en pantalla, así que uno recién sincronizado (su operación ya
+    // se borró de la cola, pero el producto viejo seguía en el estado) se
+    // quedaba como un duplicado fantasma para siempre junto al producto real
+    // — venderlo mandaba el id provisional, que el servidor ya no reconoce.
+    const idsPendientes = new Set(
+      queued.filter((q) => q.tipo === 'producto' && q.tempId).map((q) => q.tempId),
+    )
+    // Una venta o compra encolada (sin conexión, o un 5xx transitorio) ya
+    // restó/sumó su stock LOCALMENTE al confirmarse — para que el cajero no
+    // pueda vender de más las mismas unidades mientras se reintenta el envío
+    // (ver finalizeSale/saveNuevaCompra). El servidor, al no haber recibido
+    // todavía esa operación, sigue devolviendo el stock de ANTES. Sin
+    // reaplicar aquí esos deltas, este refresco (cada 30s, o al volver el
+    // foco/la conexión) pisaba el descuento/ingreso local con el valor viejo
+    // del servidor y dejaba vender otra vez lo mismo hasta que la cola por
+    // fin se sincronizara.
+    const deltas = new Map<string, number>()
+    for (const q of queued) {
+      if (q.tipo !== 'venta' && q.tipo !== 'compra') continue
+      const items = (q.payload as { items?: unknown }).items
+      if (!Array.isArray(items)) continue
+      const signo = q.tipo === 'venta' ? -1 : 1
+      for (const it of items as Array<{ productId?: unknown; quantity?: unknown }>) {
+        if (typeof it?.productId !== 'string') continue
+        const qty = Number(it.quantity) || 0
+        deltas.set(it.productId, (deltas.get(it.productId) ?? 0) + signo * qty)
+      }
+    }
+    const productos = deltas.size
+      ? r.products.map((p) => (deltas.has(p.id) ? { ...p, stock: p.stock + (deltas.get(p.id) ?? 0) } : p))
+      : r.products
+    setData((prev) => {
+      const sinSincronizar = prev.products.filter((p) => idsPendientes.has(p.id))
+      return { ...prev, products: sinSincronizar.length ? [...productos, ...sinSincronizar] : productos }
+    })
+  }, [])
 
   const refreshCustomers = useCallback(async () => {
     const r = await api.customers()
@@ -670,12 +738,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  useEffect(() => {
-    registerServiceWorker()
-    let alive = true
-    const flush = async () => {
+  const syncAliveRef = useRef(true)
+  const flush = useCallback(async () => {
       const queued = await pendingOps()
-      if (!alive) return
+      if (!syncAliveRef.current) return
       setPendingCount(queued.length)
       const productosCola = queued.filter((q) => q.tipo === 'producto' && q.tempId)
       if (productosCola.length) {
@@ -689,7 +755,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!queued.length || !navigator.onLine) return
       const r = await syncPendingOps()
       const enviadas = r.sent.venta + r.sent.compra + r.sent.producto
-      if (!alive || (enviadas === 0 && r.rejected.length === 0)) return
+      if (!syncAliveRef.current || (enviadas === 0 && r.rejected.length === 0)) return
       // Un carrito a medio armar puede tener un producto creado sin conexión:
       // se cambia al id real para que la venta no salga con el provisional.
       if (Object.keys(r.remapped).length) {
@@ -697,8 +763,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           prev.map((l) => (r.remapped[l.productId] ? { ...l, productId: r.remapped[l.productId] } : l)),
         )
       }
+      // Si el servidor rechazó de plano la creación de un producto sin
+      // conexión (SKU/barcode duplicado, etc.), su id provisional NUNCA va a
+      // existir — una línea de carrito que lo referencie quedaría apuntando
+      // a un producto fantasma y bloquearía el cobro de toda la venta sin
+      // ninguna pista de cuál línea es la responsable.
+      if (r.rejectedTempIds.length) {
+        const fantasmas = new Set(r.rejectedTempIds)
+        setCart((prev) => prev.filter((l) => !fantasmas.has(l.productId)))
+      }
       const left = await pendingOps()
-      if (!alive) return
+      if (!syncAliveRef.current) return
       setPendingCount(left.length)
       if (enviadas > 0) {
         const partes = [
@@ -718,19 +793,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ? `Una ${nombres[x.tipo]} guardada sin conexión no se pudo registrar: ${x.reason}`
             : `${r.rejected.length} operaciones guardadas sin conexión no se pudieron registrar: ${x.reason}`
         setTimeout(() => {
-          if (alive) toast(msg)
+          if (syncAliveRef.current) toast(msg)
         }, enviadas > 0 ? 2800 : 0)
       }
       await refreshAll()
-    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productoDeCola, toast, refreshAll])
+
+  useEffect(() => {
+    registerServiceWorker()
+    syncAliveRef.current = true
     flush()
     window.addEventListener('online', flush)
+    // Respaldo para cuando el navegador NUNCA dispara 'online' porque
+    // navigator.onLine ya era true (un 5xx transitorio del servidor con
+    // conexión real activa, o cualquier error que no sea un TypeError de
+    // red) — sin este intervalo, esa operación quedaba atascada hasta que
+    // el usuario recargara la pestaña por su cuenta. pendingOps() es una
+    // lectura local barata (IndexedDB): flush() no hace ninguna llamada de
+    // red cuando la cola está vacía, así que llamarlo cada rato no cuesta
+    // nada mientras no haya algo pendiente.
+    const reintentoPeriodico = window.setInterval(flush, 2 * 60 * 1000)
     return () => {
-      alive = false
+      syncAliveRef.current = false
       window.removeEventListener('online', flush)
+      window.clearInterval(reintentoPeriodico)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [flush])
 
   const setTheme = useCallback((t: 'claro' | 'oscuro') => {
     setThemeState(t)
@@ -762,6 +851,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ? expectedBalance(apertura, ventasEfectivo, ingresos, gastos)
     : 0
   const turnoAbierto = !!data.cash.session
+  const sessionOpenedAt = data.cash.session?.openedAt ?? null
 
   // ─── Carrito ───────────────────────────────────────────────────────────────
 
@@ -956,7 +1046,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReceived(0)
       setModal(null)
       setScreen('receipt')
-      await Promise.all([refreshProducts(), refreshSales(), refreshCash(), refreshCustomers()])
+      // La venta YA se confirmó en el servidor en este punto: si el refresco
+      // posterior falla (un 5xx puntual, un blip de red), NO debe propagarse
+      // al catch de quien llama — ese catch decide si hay que ENCOLAR la
+      // venta para reenviarla, y reenviar una venta que ya se registró la
+      // duplica (y descuenta el stock dos veces). El refresco automático de
+      // 30s corrige la vista sola si este falla.
+      try {
+        await Promise.all([refreshProducts(), refreshSales(), refreshCash(), refreshCustomers()])
+      } catch {
+        // ignorado a propósito — ver comentario de arriba
+      }
     },
     [refreshProducts, refreshSales, refreshCash, refreshCustomers],
   )
@@ -992,22 +1092,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notes: [note, !matchCustomerId() && customerName.trim() ? `Cliente: ${customerName.trim()}` : '']
         .filter(Boolean)
         .join(' · ') || undefined,
+      clientOpId: nuevoOpId(),
     }
     try {
       const r = await api.createSale(payload)
       await afterSale(r.sale)
     } catch (e) {
-      // Sin conexión: la venta se guarda y se envía sola al volver el internet
-      if (!navigator.onLine || (e instanceof TypeError)) {
+      // Sin conexión: la venta se guarda y se envía sola al volver el internet.
+      // El stock local se baja de una (igual que saveNuevaCompra lo sube): sin
+      // esto, el cajero podía cobrar el mismo producto varias veces por
+      // encima del stock real sin ningún aviso — el rechazo por servidor solo
+      // llegaba, tarde, al sincronizar, con la mercancía ya entregada.
+      if (debeEncolar(e)) {
         await queueOp({ tipo: 'venta', payload, resumen: fmt(total) })
         setPendingCount((n) => n + 1)
+        const salidas = new Map<string, number>()
+        for (const i of cart) salidas.set(i.productId, (salidas.get(i.productId) ?? 0) + i.qty)
+        setData((prev) => ({
+          ...prev,
+          products: prev.products.map((p) =>
+            salidas.has(p.id) ? { ...p, stock: p.stock - (salidas.get(p.id) ?? 0) } : p,
+          ),
+        }))
         toast('Sin conexión — venta guardada, se enviará al volver el internet')
         newSale()
+        // Sin esperar: si el error fue un 5xx AMBIGUO con conexión real
+        // activa (no un TypeError de red), la venta pudo haber comitido en el
+        // servidor a pesar de la respuesta — reintenta de una en vez de
+        // esperar hasta 2 minutos. Como reenvía con el mismo clientOpId, el
+        // servidor reconoce ese caso y devuelve la venta ya creada en vez de
+        // duplicarla; si de verdad no hay conexión, flush() no hace nada.
+        flush()
         return
       }
       onError(e)
     }
-  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, quoteId, buildSaleItems, matchCustomerId, afterSale, newSale, fmt, toast, onError])
+  }, [cart, data.cash.session, pay, amounts, received, total, discount, discountIsPct, note, customerName, quoteId, buildSaleItems, matchCustomerId, afterSale, newSale, fmt, toast, onError, flush])
 
   const finalizeCredito = useCallback(
     async (customerId: string) => {
@@ -1026,24 +1146,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
         customerId,
         quoteId: quoteId ?? undefined,
         notes: note || undefined,
+        clientOpId: nuevoOpId(),
       }
       try {
         const r = await api.createSale(payload)
         await afterSale(r.sale)
       } catch (e) {
-        // Sin conexión: el fiado también se guarda y se envía solo después
-        if (!navigator.onLine || (e instanceof TypeError)) {
+        // Sin conexión: el fiado también se guarda y se envía solo después.
+        // Mismo descuento local de stock que la venta de contado.
+        if (debeEncolar(e)) {
           await queueOp({ tipo: 'venta', payload, resumen: `${fmt(total)} a crédito` })
           setPendingCount((n) => n + 1)
+          const salidas = new Map<string, number>()
+          for (const i of cart) salidas.set(i.productId, (salidas.get(i.productId) ?? 0) + i.qty)
+          setData((prev) => ({
+            ...prev,
+            products: prev.products.map((p) =>
+              salidas.has(p.id) ? { ...p, stock: p.stock - (salidas.get(p.id) ?? 0) } : p,
+            ),
+          }))
           setModal(null)
           toast('Sin conexión — venta a crédito guardada, se enviará al volver el internet')
           newSale()
+          // Ver mismo comentario en finalizeSale.
+          flush()
           return
         }
         onError(e)
       }
     },
-    [cart, data.cash.session, discount, discountIsPct, note, quoteId, total, buildSaleItems, afterSale, newSale, fmt, toast, onError],
+    [cart, data.cash.session, discount, discountIsPct, note, quoteId, total, buildSaleItems, afterSale, newSale, fmt, toast, onError, flush],
   )
 
   // ─── Cotizaciones ─────────────────────────────────────────────────────────
@@ -1308,18 +1440,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // el stock inicial entra en la sucursal donde se está trabajando,
       // no siempre en la primera de la lista
       const sucursal = data.branches.find((b) => b.id === branchId) ?? data.branches[0]
+      // Generado UNA vez, antes del primer intento: si falla y hay que
+      // encolarlo (más abajo), el reintento debe llevar el MISMO id — no uno
+      // nuevo — para que el servidor lo reconozca como el mismo intento.
+      const opId = editId ? undefined : nuevoOpId()
       try {
         if (editId) {
           await api.updateProduct(editId, payload)
           toast('Cambios guardados')
         } else {
-          await api.createProduct({ ...payload, branchId: sucursal?.id })
+          await api.createProduct({ ...payload, branchId: sucursal?.id, clientOpId: opId })
           toast(payload.variantes ? 'Producto con variantes creado' : 'Producto creado')
         }
-        await refreshProducts()
+        // Ya se creó/actualizó en el servidor: un refresco fallido después no
+        // debe caer en el catch de abajo, que encolaría el producto para
+        // reenviarlo y lo duplicaría (ver mismo comentario en afterSale).
+        try {
+          await refreshProducts()
+        } catch {
+          // ignorado a propósito
+        }
         return true
       } catch (e) {
-        if (!navigator.onLine || (e instanceof TypeError)) {
+        if (debeEncolar(e)) {
           // Sin conexión solo se pueden CREAR productos simples: editar o crear
           // variantes toca registros que ya viven en el servidor.
           if (editId || payload.variantes) {
@@ -1329,7 +1472,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const tempId = nuevoTempId()
           await queueOp({
             tipo: 'producto',
-            payload: { ...payload, branchId: sucursal?.id },
+            payload: { ...payload, branchId: sucursal?.id, clientOpId: opId },
             resumen: String(payload.name ?? ''),
             tempId,
           })
@@ -1358,13 +1501,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ],
           }))
           toast('Sin conexión — producto guardado, se enviará al volver el internet')
+          // Ver mismo comentario en finalizeSale.
+          flush()
           return true
         }
         onError(e)
         return false
       }
     },
-    [data.branches, branchId, toast, refreshProducts, onError],
+    [data.branches, branchId, toast, refreshProducts, onError, flush],
   )
 
   /** Agrega variantes a un producto existente (o lo convierte en agrupador) */
@@ -1594,6 +1739,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         totalCost: i.total || i.qty * i.unit,
         newPrice: i.price || undefined,
       })),
+      clientOpId: nuevoOpId(),
     }
     try {
       const r = await api.createPurchase(payload)
@@ -1601,11 +1747,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLastPurchase(r.purchase)
       setScreen('compraRecibo')
       toast(`Compra registrada · ${fmt(valor)}`)
-      await Promise.all([refreshPurchases(), refreshProducts(), refreshSuppliers(), refreshCash()])
+      // Ya se registró en el servidor: un refresco fallido después no debe
+      // caer en el catch de abajo, que encolaría la compra para reenviarla y
+      // la duplicaría (mismo motivo que en afterSale/saveProduct).
+      try {
+        await Promise.all([refreshPurchases(), refreshProducts(), refreshSuppliers(), refreshCash()])
+      } catch {
+        // ignorado a propósito
+      }
     } catch (e) {
       // Sin conexión: la compra se encola y la mercancía entra al sincronizar.
       // El stock local se sube de una para poder seguir vendiendo lo recibido.
-      if (!navigator.onLine || (e instanceof TypeError)) {
+      if (debeEncolar(e)) {
         await queueOp({ tipo: 'compra', payload, resumen: `${fmt(valor)} a ${ncProv.trim()}` })
         setPendingCount((n) => n + 1)
         const entradas = new Map(ncItems.map((i) => [i.productId, i.qty]))
@@ -1618,11 +1771,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         clearNc()
         setScreen('compras')
         toast('Sin conexión — compra guardada, se enviará al volver el internet')
+        // Ver mismo comentario en finalizeSale.
+        flush()
         return
       }
       onError(e)
     }
-  }, [ncProv, ncItems, ncMethod, ncAbono, clearNc, toast, fmt, refreshPurchases, refreshProducts, refreshSuppliers, refreshCash, onError])
+  }, [ncProv, ncItems, ncMethod, ncAbono, clearNc, toast, fmt, refreshPurchases, refreshProducts, refreshSuppliers, refreshCash, onError, flush])
 
   const holdPurchase = useCallback(async () => {
     if (!ncItems.length) return
@@ -2054,6 +2209,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       confirm,
       askConfirm,
       turnoAbierto,
+      sessionOpenedAt,
       apertura,
       esperado,
       ingresos,
@@ -2105,6 +2261,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       finalizeSale,
       finalizeCredito,
       pendingCount,
+      reintentarSync: flush,
       lastSale,
       setLastSale,
       newSale,
@@ -2188,7 +2345,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       data, me.name, me.email, me.role, isAdmin, screen, modal, theme, toastMsg, confirm,
-      turnoAbierto, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre, branchId,
+      turnoAbierto, sessionOpenedAt, apertura, esperado, ingresos, gastos, ventasTurno, ventasEfectivo, cierrePreview, lastCierre, branchId,
       cart, discount, discountIsPct, customerName, note, subtotal, total, itemCount,
       pay, amounts, received, lastSale, lastPurchase, pesoProduct, varianteProduct, quoteId, quoteDet, quoteFaltantes, rangeReport, pendingCount, lastAbono, saleDetId, dscId, editProdId, productosFiltroInicial, editClientId,
       editProvId, editUserId, abonoId, abonoCompraId, compraDetId, perfilId,

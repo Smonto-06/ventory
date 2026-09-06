@@ -119,6 +119,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
             saleReturns: true,
             heldSales: true,
             heldPurchases: true,
+            auditLogs: true,
           },
         },
       },
@@ -126,16 +127,27 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     if (!objetivo) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
 
     const c = objetivo._count
+    // auditLogs cuenta como actividad también: un AuditLog documenta acciones
+    // sobre ENTIDADES DEL NEGOCIO (crear una sucursal, cambiar ajustes, crear
+    // otro usuario), no datos personales del usuario — borrarlos en cascada
+    // solo porque el usuario que las hizo se elimina le quita al negocio el
+    // único rastro de esas acciones. Antes se hacía tx.auditLog.deleteMany()
+    // sin más; ahora, si hay auditoría, el borrado de verdad se bloquea igual
+    // que con ventas/compras.
     const actividad =
       c.sales + c.voidedSales + c.quotes + c.cashSessions + c.cashSessionsClosed +
       c.cashMovements + c.inventoryMovements + c.purchases + c.purchasePayments +
-      c.customerPayments + c.saleReturns + c.heldSales + c.heldPurchases
+      c.customerPayments + c.saleReturns + c.heldSales + c.heldPurchases + c.auditLogs
 
     if (actividad > 0) {
       const partes = [
         c.sales ? `${c.sales} venta${c.sales === 1 ? '' : 's'}` : '',
         c.cashSessions ? `${c.cashSessions} turno${c.cashSessions === 1 ? '' : 's'} de caja` : '',
         c.purchases ? `${c.purchases} compra${c.purchases === 1 ? '' : 's'}` : '',
+        // Sin esto, un usuario cuya ÚNICA actividad es auditLogs (p. ej. solo
+        // creó otro usuario o cambió un ajuste) bloqueaba el borrado con un
+        // "ya tiene historial" sin ninguna pista de a qué se refería.
+        c.auditLogs ? `${c.auditLogs} acción${c.auditLogs === 1 ? '' : 'es'} registrada${c.auditLogs === 1 ? '' : 's'}` : '',
       ].filter(Boolean)
       return NextResponse.json(
         {
@@ -149,8 +161,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
 
     await db.$transaction(async (tx) => {
-      // Sus registros de sesión/auditoría propios no son historial del negocio
-      await tx.auditLog.deleteMany({ where: { userId: objetivo.id } })
+      // Solo quedan sus registros de sesión de NextAuth (no son historial del
+      // negocio); si tuviera auditLogs, actividad > 0 ya habría cortado arriba.
       await tx.session.deleteMany({ where: { userId: objetivo.id } })
       await tx.account.deleteMany({ where: { userId: objetivo.id } })
       await tx.user.delete({ where: { id: objetivo.id } })

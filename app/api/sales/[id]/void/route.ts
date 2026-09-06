@@ -23,6 +23,14 @@ class AlreadyVoidedError extends Error {
   }
 }
 
+/** El turno se cerró justo mientras se registraba el gasto de esta anulación */
+class CashSessionClosedError extends Error {
+  constructor() {
+    super('La caja se cerró mientras se registraba la anulación')
+    this.name = 'CashSessionClosedError'
+  }
+}
+
 const VoidSchema = z.object({ reason: z.string().optional() })
 
 /**
@@ -86,6 +94,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const voided = await db.$transaction(async (tx) => {
+      // Lock consultivo por turno — mismo que toma el cierre de caja antes de
+      // congelar sus totales (ver comentario en cash-registers/[id]/close).
+      if (cashSessionId) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSessionId}))`
+        const vigente = await tx.cashSession.findUnique({ where: { id: cashSessionId }, select: { status: true } })
+        if (vigente?.status !== 'OPEN') {
+          throw new CashSessionClosedError()
+        }
+      }
+
       // Reclama la anulación PRIMERO y de forma condicionada al estado
       // vigente: si dos anulaciones de la misma venta llegan casi
       // simultáneas (doble clic, reintento de red), la segunda no encuentra
@@ -170,6 +188,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   } catch (error) {
     if (error instanceof AlreadyVoidedError) {
       return badRequest(error.message)
+    }
+    if (error instanceof CashSessionClosedError) {
+      return badRequest('La caja se cerró mientras se registraba la anulación. Vuelve a intentar con el turno actual.')
     }
     return serverError('POST /api/sales/[id]/void', error)
   }

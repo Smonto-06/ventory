@@ -48,8 +48,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     }
 
-    const existing = await db.category.findUnique({
-      where: { businessId_name: { businessId: session.user.businessId, name: parsed.data.name } },
+    // Insensible a mayúsculas — como ya hacen proveedores y sucursales —
+    // para no dejar crear "Bebidas" y "bebidas" como categorías distintas
+    const existing = await db.category.findFirst({
+      where: { businessId: session.user.businessId, name: { equals: parsed.data.name, mode: 'insensitive' } },
     })
     if (existing) {
       return NextResponse.json({ error: 'Ya existe una categoría con ese nombre' }, { status: 409 })

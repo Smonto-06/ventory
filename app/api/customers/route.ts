@@ -65,6 +65,13 @@ export async function POST(req: NextRequest) {
 
   const { name, phone, email, document, address, notes } = parsed.data
 
+  // Documento duplicado (misma regla que ya aplica PUT /api/customers/[id])
+  const doc = document?.trim()
+  if (doc) {
+    const dup = await db.customer.findFirst({ where: { businessId, document: doc } })
+    if (dup) return NextResponse.json({ error: 'Ya existe un cliente con ese documento' }, { status: 400 })
+  }
+
   const customer = await db.customer.create({
     data: {
       name,

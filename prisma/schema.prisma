@@ -122,10 +122,21 @@ model Business {
   notifyLowStock     Boolean @default(true)
   /// Destino del resumen; si está vacío se usa el correo del dueño
   notifyEmail        String?
+  /// Última vez que salió el correo de resumen diario — evita reenviarlo dos
+  /// veces el mismo día si Vercel reintenta la invocación del cron (el cron
+  /// no tiene ninguna otra forma de saber si ya corrió hoy).
+  lastDailySummaryAt DateTime?
 
   // Plan comercial: los negocios nuevos entran en prueba (el registro lo fija);
   // los existentes quedan ACTIVE por el default
   status      BusinessStatus @default(ACTIVE)
+  /// SUSPENDED puede venir de dos fuentes muy distintas: una decisión manual
+  /// del super admin, o revertirPagoAprobado suspendiendo solo por un
+  /// contracargo/reembolso. true = fue automática (un pago nuevo aprobado SÍ
+  /// puede reactivar el negocio, ver aplicarPagoAprobado); false = manual, o
+  /// ya reactivado — un pago nunca puede levantar una suspensión manual del
+  /// super admin por su cuenta.
+  suspendedByChargeback Boolean @default(false)
   trialEndsAt DateTime?
   activatedAt DateTime?
   adminNotes  String?
@@ -226,9 +237,12 @@ model User {
   // Recuperación de contraseña (token de un solo uso, con vencimiento)
   resetToken        String?   @unique
   resetTokenExpires DateTime?
-  // Verificación de correo al registrarse (null = pendiente de verificar)
-  emailVerified     DateTime?
-  verifyToken       String?   @unique
+  // Verificación de correo al registrarse (null = pendiente de verificar).
+  // A diferencia de resetToken, antes no vencía nunca: un enlace de
+  // verificación sin usar quedaba vigente indefinidamente.
+  emailVerified      DateTime?
+  verifyToken        String?   @unique
+  verifyTokenExpires DateTime?
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])
@@ -292,6 +306,9 @@ model Product {
   supplier      String? // legado: nombre libre — usar supplierId
   imageUrl      String?
   status        ProductStatus @default(ACTIVE)
+  /// Ver comentario en Sale.clientOpId — misma protección para la cola offline
+  /// (solo se usa al crear productos simples sin conexión).
+  clientOpId    String?       @unique
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])
@@ -393,6 +410,12 @@ model Sale {
   notes          String?
   voidedAt       DateTime?
   voidReason     String?
+  /// Id generado por el cliente al intentar la operación (no por reintento):
+  /// un 5xx puede llegar DESPUÉS de que la venta ya comitió (timeout,
+  /// despliegue a mitad de respuesta) — sin esto, la cola offline reintenta
+  /// creyendo que nunca se registró y duplica la venta (y el descuento de
+  /// inventario). POST /api/sales deduplica por este id.
+  clientOpId String? @unique
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
@@ -509,6 +532,14 @@ model CashSession {
   closingBalance  Decimal?          @db.Decimal(12, 2)
   expectedBalance Decimal?          @db.Decimal(12, 2)
   difference      Decimal?          @db.Decimal(12, 2)
+  /// Congelados al cerrar (igual que expectedBalance/difference): si una
+  /// venta del turno se anula DESPUÉS del cierre, el historial de turnos no
+  /// debe "esconderla" del total recalculándolo en vivo mientras el resto
+  /// del resumen (esperado, contado, diferencia) se queda con el valor de
+  /// cuando se cerró — mostraría un cierre que ya no cuadra consigo mismo.
+  salesTotal      Decimal?          @db.Decimal(12, 2)
+  incomesTotal    Decimal?          @db.Decimal(12, 2)
+  expensesTotal   Decimal?          @db.Decimal(12, 2)
   notes           String?
   closingNotes    String?
   openedAt        DateTime          @default(now())
@@ -636,6 +667,8 @@ model Purchase {
   // Abono acumulado. Saldo pendiente = total − paidAmount
   paidAmount Decimal        @default(0) @db.Decimal(12, 2)
   notes      String?
+  /// Ver comentario en Sale.clientOpId — misma protección para la cola offline.
+  clientOpId String?        @unique
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])

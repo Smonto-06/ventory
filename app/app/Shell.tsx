@@ -390,8 +390,10 @@ function PlanBlockedOverlay() {
   const suspended = plan?.status === 'SUSPENDED'
   const mensualidadVencida = plan?.status === 'ACTIVE'
   // El pago en línea aparece solo con las llaves de Wompi configuradas y para
-  // el administrador (la cuenta suspendida se reactiva con soporte, no pagando)
-  const puedePagar = !!s.settings?.pagoEnLinea && s.isAdmin && !suspended
+  // el administrador. Una suspensión MANUAL (del super admin) se reactiva con
+  // soporte, no pagando; una suspensión AUTOMÁTICA por contracargo sí admite
+  // pagar un reemplazo — aplicarPagoAprobado la reactiva sola al aprobarse.
+  const puedePagar = !!s.settings?.pagoEnLinea && s.isAdmin && (!suspended || !!plan?.suspendedByChargeback)
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 440, background: 'var(--surface)', borderRadius: 18, padding: 28, boxShadow: '0 30px 60px -30px rgba(15,25,23,.5)', animation: 'vpop .25s ease', textAlign: 'center' }}>
@@ -484,6 +486,7 @@ function PlanBanner() {
 function OfflineBanner() {
   const s = useApp()
   const [online, setOnline] = useState(true)
+  const [reintentando, setReintentando] = useState(false)
 
   useEffect(() => {
     const upd = () => setOnline(navigator.onLine)
@@ -508,11 +511,48 @@ function OfflineBanner() {
         fontSize: 13,
         padding: '9px 16px',
         textAlign: 'center',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
       }}
     >
-      {online
-        ? `${s.pendingCount} operaci${s.pendingCount === 1 ? 'ón' : 'ones'} sin conexión pendiente${s.pendingCount === 1 ? '' : 's'} de sincronizar…`
-        : `Sin conexión — puedes seguir vendiendo, comprando y creando productos${s.pendingCount ? ` (${s.pendingCount} pendiente${s.pendingCount === 1 ? '' : 's'})` : ''}, se enviará al volver el internet`}
+      <span>
+        {online
+          ? `${s.pendingCount} operaci${s.pendingCount === 1 ? 'ón' : 'ones'} sin conexión pendiente${s.pendingCount === 1 ? '' : 's'} de sincronizar…`
+          : `Sin conexión — puedes seguir vendiendo, comprando y creando productos${s.pendingCount ? ` (${s.pendingCount} pendiente${s.pendingCount === 1 ? '' : 's'})` : ''}, se enviará al volver el internet`}
+      </span>
+      {online && s.pendingCount > 0 && (
+        // El reintento automático (evento 'online' + cada 2 min) cubre la
+        // mayoría de los casos, pero un fallo transitorio puede quedar
+        // esperando hasta el próximo ciclo — este botón deja al usuario
+        // forzarlo de una en vez de tener que recargar la pestaña.
+        <button
+          disabled={reintentando}
+          onClick={async () => {
+            setReintentando(true)
+            try {
+              await s.reintentarSync()
+            } finally {
+              setReintentando(false)
+            }
+          }}
+          style={{
+            background: 'transparent',
+            border: '1.5px solid #4338CA',
+            borderRadius: 7,
+            color: '#4338CA',
+            fontWeight: 700,
+            fontSize: 12,
+            padding: '3px 10px',
+            cursor: reintentando ? 'default' : 'pointer',
+            opacity: reintentando ? 0.6 : 1,
+            flex: 'none',
+          }}
+        >
+          {reintentando ? 'Reintentando…' : 'Reintentar ahora'}
+        </button>
+      )}
     </div>
   )
 }

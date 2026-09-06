@@ -148,9 +148,10 @@ export interface Sale {
   changeGiven: number
   notes: string | null
   createdAt: string
+  voidedAt: string | null
   items: SaleItem[]
   payments: Array<{ id: string; method: string; amount: number }>
-  returns?: Array<{ id: string; type: string; totalRefund: number }>
+  returns?: Array<{ id: string; type: string; totalRefund: number; createdAt: string }>
   cashier: { id: string; name: string | null }
   branch?: { id: string; name: string } | null
   customer: { id: string; name: string } | null
@@ -284,6 +285,9 @@ export interface PlanInfo {
   paidUntil: string | null
   daysLeft: number | null
   blocked: boolean
+  /** Solo relevante con status SUSPENDED: true = contracargo/reembolso automático (se
+   *  puede pagar un reemplazo para reactivar); false = decisión manual del super admin. */
+  suspendedByChargeback: boolean
 }
 
 // Conteo + total de una actividad del turno (para el recibo de cierre)

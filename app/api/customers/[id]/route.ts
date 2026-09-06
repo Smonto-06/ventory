@@ -95,6 +95,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
 
     await db.customer.delete({ where: { id: params.id } })
+
+    db.auditLog
+      .create({
+        data: { action: 'DELETE', entity: 'Customer', entityId: params.id, payload: { name: customer.name }, userId: user.id },
+      })
+      .catch(() => {})
+
     return NextResponse.json({ ok: true })
   } catch (error) {
     return serverError('DELETE /api/customers/[id]', error)

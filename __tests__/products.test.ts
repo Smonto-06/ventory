@@ -7,8 +7,9 @@ jest.mock('@/lib/auth', () => ({
   authOptions: {},
 }))
 
-jest.mock('@/lib/db', () => ({
-  db: {
+jest.mock('@/lib/db', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db: any = {
     product: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
@@ -21,11 +22,27 @@ jest.mock('@/lib/db', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
     },
+    supplier: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
     inventory: {
       create: jest.fn(),
     },
-  },
-}))
+    auditLog: {
+      create: jest.fn().mockResolvedValue({}),
+    },
+  }
+  // POST /api/products crea el producto (y resuelve su proveedor) dentro de
+  // una transacción — el mock solo necesita ejecutar el callback con el
+  // mismo objeto, ya que ningún test aquí depende de aislamiento real.
+  db.$transaction = jest.fn((fn: (tx: typeof db) => unknown) => fn(db))
+  // Lock consultivo del chequeo de barcode duplicado (POST y PATCH) — no hay
+  // BD real en estos tests, así que solo necesita resolver sin hacer nada.
+  db.$executeRaw = jest.fn().mockResolvedValue(undefined)
+  return { db }
+})
 
 import { getServerSession } from 'next-auth'
 import { db } from '@/lib/db'
@@ -267,7 +284,7 @@ describe('GET /api/categories', () => {
 describe('POST /api/categories', () => {
   it('returns 409 for duplicate name', async () => {
     ;(getServerSession as jest.Mock).mockResolvedValue(mockSession)
-    ;(db.category.findUnique as jest.Mock).mockResolvedValue({ id: 'cat-1', name: 'Bebidas' })
+    ;(db.category.findFirst as jest.Mock).mockResolvedValue({ id: 'cat-1', name: 'Bebidas' })
     const res = await postCategory(
       makePostRequest('http://localhost/api/categories', { name: 'Bebidas' })
     )
@@ -276,7 +293,7 @@ describe('POST /api/categories', () => {
 
   it('creates category successfully', async () => {
     ;(getServerSession as jest.Mock).mockResolvedValue(mockSession)
-    ;(db.category.findUnique as jest.Mock).mockResolvedValue(null)
+    ;(db.category.findFirst as jest.Mock).mockResolvedValue(null)
     ;(db.category.create as jest.Mock).mockResolvedValue({
       id: 'cat-2',
       name: 'Lacteos',

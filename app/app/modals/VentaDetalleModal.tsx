@@ -23,6 +23,9 @@ export default function VentaDetalleModal() {
   const anulada = sale.status === 'CANCELLED'
   const label = methodLabel(sale.paymentMethod, sale.payments)
   const [mBg, mFg] = methodTint(label)
+  const devoluciones = [...(sale.returns ?? [])].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  )
 
   return (
     <Modal onClose={s.closeModal} maxWidth={460}>
@@ -58,6 +61,10 @@ export default function VentaDetalleModal() {
         </span>
       </div>
 
+      {anulada && sale.voidedAt && (
+        <div style={{ fontSize: 12.5, color: '#C9433B', marginTop: 6 }}>Anulada el {fmtDate(sale.voidedAt)}</div>
+      )}
+
       <div style={{ borderTop: '1px dashed #E2E5EC', borderBottom: '1px dashed #E2E5EC', padding: '6px 0', marginTop: 14 }}>
         {sale.items.map((it) => (
           <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', fontSize: 14 }}>
@@ -73,6 +80,18 @@ export default function VentaDetalleModal() {
           </div>
         ))}
       </div>
+
+      {devoluciones.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--muted)' }}>Devoluciones</div>
+          {devoluciones.map((r) => (
+            <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
+              <span>{fmtDate(r.createdAt)}</span>
+              <span style={{ color: '#C9433B', fontWeight: 700 }}>− {s.fmt(r.totalRefund)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 12 }}>
         <span style={{ fontSize: 15, fontWeight: 800 }}>Total</span>

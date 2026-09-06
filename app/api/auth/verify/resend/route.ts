@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { db } from '@/lib/db'
 import { mailerConfigured, sendVerificationEmail } from '@/lib/mailer'
+import { hashToken } from '@/lib/tokens'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,8 +14,8 @@ export const dynamic = 'force-dynamic'
 // por minuto por correo, para que nadie use esto para llenarle la bandeja
 // a otra persona.
 
-// Último reenvío por correo (memoria del proceso: suficiente como freno)
-const ultimoReenvio = new Map<string, number>()
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000
+
 export async function POST(req: Request) {
   let body: unknown
   try {
@@ -30,20 +31,33 @@ export async function POST(req: Request) {
     message: 'Si la cuenta existe y está pendiente de verificar, el correo va en camino.',
   })
 
-  if (Date.now() - (ultimoReenvio.get(email) ?? 0) < 60_000) return generico
-  ultimoReenvio.set(email, Date.now())
-
   const user = await db.user.findUnique({ where: { email } })
   if (!user || user.emailVerified || !mailerConfigured()) return generico
 
-  // El MISMO enlace del correo original: si el primero llega tarde (Gmail a
-  // veces demora minutos), su enlace sigue sirviendo. Invalidarlo aquí creaba
-  // una trampa: el usuario reenviaba por la demora y el correo que por fin
-  // llegaba traía un enlace ya muerto. Solo se genera token si no hay.
-  const verifyToken = user.verifyToken ?? randomBytes(32).toString('hex')
-  if (!user.verifyToken) {
-    await db.user.update({ where: { id: user.id }, data: { verifyToken } })
-  }
+  // Máximo un reenvío por minuto por correo. El "reclamo" de la ventana tiene
+  // que ser la MISMA operación que lee el estado vigente: leer
+  // verifyTokenExpires y escribir aparte (en vez de un updateMany
+  // condicionado atómico) dejaba a una ráfaga simultánea leer el mismo valor
+  // viejo, pasar todas el chequeo, y mandar varios correos — se salta el
+  // límite en vez de frenarlo (además, un Map en memoria del proceso no
+  // sirve en Vercel: cada instancia serverless tiene la suya).
+  const verifyToken = randomBytes(32).toString('hex')
+  const reclamado = await db.user.updateMany({
+    where: {
+      id: user.id,
+      OR: [
+        { verifyTokenExpires: null },
+        { verifyTokenExpires: { lte: new Date(Date.now() + VERIFY_TTL_MS - 60_000) } },
+      ],
+    },
+    // En BD solo se guarda el hash del token (lib/tokens.ts), así que si ya
+    // había uno no se puede recuperar el texto plano original para reenviar
+    // el MISMO enlace — se genera uno nuevo y se invalida el anterior (un
+    // enlace viejo sin usar deja de servir, que es lo esperado: solo el
+    // último correo enviado debe ser el válido).
+    data: { verifyToken: hashToken(verifyToken), verifyTokenExpires: new Date(Date.now() + VERIFY_TTL_MS) },
+  })
+  if (reclamado.count === 0) return generico
 
   const base = process.env.NEXTAUTH_URL ?? ''
   try {

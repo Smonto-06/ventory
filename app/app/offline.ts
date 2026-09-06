@@ -100,11 +100,16 @@ export async function pendingOps(): Promise<PendingOp[]> {
 
 async function removeOp(id: number): Promise<void> {
   const db = await openDb()
-  await new Promise<void>((resolve) => {
+  // A diferencia de queueOp/pendingOps, esto tragaba el error del delete
+  // (tx.onerror también resolvía) — si el borrado fallaba (cuota de
+  // IndexedDB, corrupción puntual del navegador), el llamador igual
+  // contaba la operación como "enviada y limpiada" cuando en realidad
+  // seguía en la cola, lista para reenviarse duplicada en el próximo ciclo.
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite')
     tx.objectStore(STORE).delete(id)
     tx.oncomplete = () => resolve()
-    tx.onerror = () => resolve()
+    tx.onerror = () => reject(tx.error)
   })
   db.close()
 }
@@ -160,17 +165,57 @@ export interface SyncResult {
   rejected: Array<{ tipo: TipoOperacion; resumen: string; reason: string }>
   /** Id provisional → id real de los productos creados sin conexión */
   remapped: Record<string, string>
+  /**
+   * Id(es) provisional(es) de un producto creado sin conexión cuya creación
+   * el servidor rechazó de forma definitiva (SKU/barcode duplicado, etc.):
+   * a diferencia de `remapped`, este id NUNCA va a existir en el servidor —
+   * cualquier línea de carrito que lo referencie quedaría apuntando a un
+   * producto fantasma si no se limpia explícitamente.
+   */
+  rejectedTempIds: string[]
 }
+
+const SYNC_LOCK = 'ventory-sync-pendientes'
+// Respaldo cuando el navegador no soporta la Web Locks API (Safari viejo):
+// sin exclusión real entre pestañas, pero sí evita que dos llamadas
+// concurrentes DENTRO de la misma pestaña (p. ej. varios eventos 'online'
+// seguidos en una conexión inestable) lean la cola dos veces antes de que la
+// primera termine de borrar lo que ya envió.
+let syncingLocal = false
 
 /**
  * Envía las operaciones pendientes en orden. Una operación que el servidor
  * rechaza por regla de negocio (stock, plan, caja cerrada) se descarta para
  * no bloquear la cola, pero se reporta para avisarle al usuario. Los errores
  * de red y de servidor se reintentan más tarde.
+ *
+ * Sin exclusión mutua, dos sincronizaciones concurrentes (dos pestañas del
+ * mismo negocio, o varios eventos 'online' seguidos con una conexión
+ * inestable) podían leer la cola ANTES de que la primera terminara de borrar
+ * lo ya enviado, y reenviar la misma venta/compra/producto dos veces — la
+ * Web Locks API serializa esto entre pestañas del mismo origen; cuando la
+ * segunda llamada por fin corre, ya no encuentra nada pendiente que repetir.
  */
 export async function syncPendingOps(): Promise<SyncResult> {
+  const locks = (navigator as unknown as {
+    locks?: { request: <T>(name: string, fn: () => Promise<T>) => Promise<T> }
+  }).locks
+  const vacio: SyncResult = { sent: { venta: 0, compra: 0, producto: 0 }, rejected: [], remapped: {}, rejectedTempIds: [] }
+  if (locks) {
+    return locks.request(SYNC_LOCK, () => syncPendingOpsInner())
+  }
+  if (syncingLocal) return vacio
+  syncingLocal = true
+  try {
+    return await syncPendingOpsInner()
+  } finally {
+    syncingLocal = false
+  }
+}
+
+async function syncPendingOpsInner(): Promise<SyncResult> {
   const rows = await pendingOps()
-  const result: SyncResult = { sent: { venta: 0, compra: 0, producto: 0 }, rejected: [], remapped: {} }
+  const result: SyncResult = { sent: { venta: 0, compra: 0, producto: 0 }, rejected: [], remapped: {}, rejectedTempIds: [] }
   for (const row of rows) {
     if (row.id === undefined) continue
     const payload = remapPayload(row.payload, result.remapped) ?? row.payload
@@ -194,6 +239,7 @@ export async function syncPendingOps(): Promise<SyncResult> {
         // Rechazo definitivo (stock, plan, caja cerrada): se descarta, pero se avisa
         const body = (await res.json().catch(() => null)) as { error?: string } | null
         result.rejected.push({ tipo: row.tipo, resumen: row.resumen, reason: body?.error ?? 'Rechazada por el servidor' })
+        if (row.tipo === 'producto' && row.tempId) result.rejectedTempIds.push(row.tempId)
         await removeOp(row.id)
       } else {
         break // error de servidor: reintentar más tarde

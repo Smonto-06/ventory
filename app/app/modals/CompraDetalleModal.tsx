@@ -70,6 +70,16 @@ export default function CompraDetalleModal() {
           <span style={{ color: 'var(--muted)' }}>Pago/Abono</span>
           <span style={{ color: '#6366F1', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{s.fmt(compra.paidAmount)}</span>
         </div>
+        {compra.payments.length > 0 && (
+          <div style={{ marginTop: 4, marginBottom: 4 }}>
+            {compra.payments.map((p) => (
+              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--muted)', padding: '3px 0 3px 10px' }}>
+                <span>{fmtDate(p.createdAt)} · {METHOD_LABELS[p.method] ?? p.method}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{s.fmt(p.amount)}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 10, marginTop: 6, borderTop: '1px dashed #E2E5EC' }}>
           <span style={{ fontWeight: 800, fontSize: 14.5 }}>Saldo pendiente</span>
           <span style={{ fontWeight: 800, fontSize: 18, color: '#B4740A', fontVariantNumeric: 'tabular-nums' }}>{s.fmt(compra.balance)}</span>

@@ -45,8 +45,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       data.activatedAt = new Date()
       data.trialEndsAt = null
       data.paidUntil = null
+      data.suspendedByChargeback = false
     } else if (action === 'suspend') {
       data.status = 'SUSPENDED'
+      // Decisión manual: nunca debe poder levantarla un pago por su cuenta
+      // (a diferencia de una suspensión automática por contracargo — ver
+      // Business.suspendedByChargeback).
+      data.suspendedByChargeback = false
     } else if (action === 'extend') {
       // reanuda/alarga la prueba desde hoy o desde el vencimiento futuro
       const base =

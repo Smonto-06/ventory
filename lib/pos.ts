@@ -142,6 +142,31 @@ export function profitReport(salesTotal: number, costOfGoods: number, expenses: 
   return { gross, marginPct, net: gross - expenses }
 }
 
+/**
+ * Rango del día colombiano (UTC-5) que contiene el instante dado, expresado
+ * en UTC. El servidor (Vercel) corre en UTC: usar los getters locales de
+ * Date (getFullYear/getMonth/getDate) para "hoy" da la fecha en UTC, no en
+ * Colombia — una venta después de las 7 p.m. Colombia (medianoche UTC)
+ * aparecía contada en el reporte del día SIGUIENTE.
+ */
+export function diaColombiano(referencia: Date): { desde: Date; hasta: Date; etiqueta: Date } {
+  const OFFSET_MIN = 5 * 60
+  const local = new Date(referencia.getTime() - OFFSET_MIN * 60_000)
+  const inicioLocal = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
+  const desde = new Date(inicioLocal + OFFSET_MIN * 60_000)
+  const hasta = new Date(desde.getTime() + 86_400_000)
+  return { desde, hasta, etiqueta: new Date(inicioLocal) }
+}
+
+/** Igual que diaColombiano(), pero para una fecha calendario explícita "YYYY-MM-DD" (ej. el selector de fecha de Reportes) */
+export function diaColombianoDeFecha(fechaISO: string): { desde: Date; hasta: Date } {
+  const OFFSET_MIN = 5 * 60
+  const [y, m, d] = fechaISO.split('-').map(Number)
+  const desde = new Date(Date.UTC(y, m - 1, d) + OFFSET_MIN * 60_000)
+  const hasta = new Date(desde.getTime() + 86_400_000)
+  return { desde, hasta }
+}
+
 export const CASH_MOVEMENT_DESCRIPTIONS = {
   INCOME: ['Base de caja', 'Abono de cliente', 'Otro ingreso'],
   EXPENSE: [

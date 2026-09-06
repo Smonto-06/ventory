@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { hashToken } from '@/lib/tokens'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,17 +17,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Token requerido' }, { status: 400 })
   }
 
-  const user = await db.user.findUnique({ where: { verifyToken: token } })
+  // Mismo respaldo que /api/auth/reset: cuentas registradas antes de este
+  // cambio tienen su verifyToken en texto plano (y este, a diferencia del de
+  // reset, no vence nunca) — sin el respaldo, cualquier enlace de
+  // verificación pendiente de antes del despliegue quedaría muerto de por
+  // vida en vez de solo hasta que el usuario pida reenviarlo.
+  const hash = hashToken(token)
+  const user = await db.user.findFirst({ where: { OR: [{ verifyToken: hash }, { verifyToken: token }] } })
   if (!user) {
     return NextResponse.json(
       { error: 'El enlace no es válido o ya fue usado. Si ya verificaste, inicia sesión.' },
       { status: 400 },
     )
   }
+  // verifyTokenExpires null = token emitido antes de este cambio (sin
+  // vencimiento en ese entonces): se deja pasar para no invalidar enlaces ya
+  // enviados. Todo token nuevo (registro o reenvío) sí trae vencimiento.
+  if (user.verifyTokenExpires && user.verifyTokenExpires < new Date()) {
+    return NextResponse.json(
+      { error: 'El enlace ya venció. Pide que te reenvíen la verificación.' },
+      { status: 400 },
+    )
+  }
 
   await db.user.update({
     where: { id: user.id },
-    data: { emailVerified: new Date(), verifyToken: null },
+    data: { emailVerified: new Date(), verifyToken: null, verifyTokenExpires: null },
   })
 
   return NextResponse.json({ verified: true, email: user.email })

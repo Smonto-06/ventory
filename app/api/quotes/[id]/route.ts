@@ -58,11 +58,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     if (parsed.data.action === 'cancel') {
       if (cot.status === 'CANCELLED') return badRequest('Ya estaba anulada')
-      const actualizada = await db.quote.update({
-        where: { id: cot.id },
+      // Condicionado a que SIGA abierta al momento de escribir: si justo en
+      // este instante otra caja la está cobrando (POST /api/sales con
+      // quoteId, que marca CONVERTED dentro de su propia transacción), esta
+      // anulación no debe pisar el estado y dejar una cotización marcada
+      // como anulada que en realidad ya generó una venta real.
+      const marcada = await db.quote.updateMany({
+        where: { id: cot.id, status: 'OPEN' },
         data: { status: 'CANCELLED', cancelledAt: new Date() },
-        include: incluir,
       })
+      if (marcada.count === 0) {
+        return badRequest('Esta cotización ya no está abierta (puede que se acabara de convertir en venta)')
+      }
+      const actualizada = await db.quote.findUniqueOrThrow({ where: { id: cot.id }, include: incluir })
       db.auditLog
         .create({
           data: { action: 'UPDATE', entity: 'Quote', entityId: cot.id, payload: { action: 'cancel' }, userId: user.id },

@@ -2,9 +2,19 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
+import { resolveOrCreateSupplier } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
+
+/** Otra petición concurrente ya creó un producto con ese código de barras */
+class BarcodeDuplicateError extends Error {
+  constructor(public productName: string) {
+    super(`El código de barras ya está en uso por "${productName}"`)
+    this.name = 'BarcodeDuplicateError'
+  }
+}
 
 // Los campos de texto opcionales aceptan null (el formulario envía null cuando
 // están vacíos): SKU, código de barras, proveedor, categoría y foto son opcionales.
@@ -45,7 +55,16 @@ const createProductSchema = z.object({
     )
     .max(120)
     .optional(),
+  // Generado por el cliente al crear un producto sin conexión (no en cada
+  // reintento): ver Product.clientOpId en el schema. Solo aplica a productos
+  // simples — variantes/edición no se pueden crear sin conexión.
+  clientOpId: z.string().max(100).nullish(),
 })
+
+const PRODUCT_INCLUDE = {
+  category: { select: { id: true, name: true } },
+  inventory: { select: { quantity: true, minStock: true, branchId: true } },
+} satisfies Prisma.ProductInclude
 
 export async function GET(request: Request) {
   try {
@@ -125,11 +144,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Declarados fuera del try: el catch de abajo los necesita para el atajo de
+  // idempotencia (dos intentos con el mismo clientOpId chocando en la BD), y
+  // una const declarada dentro del try no es visible en su catch.
+  let clientOpId: string | null | undefined
+  let businessId: string | undefined
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
+    businessId = session.user.businessId
 
     if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERVISOR') {
       return NextResponse.json({ error: 'Permisos insuficientes' }, { status: 403 })
@@ -142,6 +167,33 @@ export async function POST(request: Request) {
     }
 
     const { name, description, barcode, sku, price, cost, taxRate, unitOfMeasure, supplier, imageUrl, categoryId, branchId, initialStock, minStock, variantOptions, variantes } = parsed.data
+    clientOpId = parsed.data.clientOpId
+
+    // Un 5xx puede llegar DESPUÉS de que el producto ya comitió — la cola
+    // offline lo reintenta creyendo que nunca se creó. Sin este atajo, el
+    // reintento además fallaría más abajo con "código de barras ya en uso"
+    // contra SU PROPIO producto recién creado. Ver mismo mecanismo en
+    // POST /api/sales.
+    if (clientOpId) {
+      const existente = await db.product.findFirst({
+        where: { businessId: session.user.businessId, clientOpId },
+        include: PRODUCT_INCLUDE,
+      })
+      if (existente) {
+        return NextResponse.json(
+          {
+            product: {
+              ...existente,
+              price: Number(existente.price),
+              cost: existente.cost ? Number(existente.cost) : null,
+              taxRate: Number(existente.taxRate),
+              stock: existente.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0),
+            },
+          },
+          { status: 200 },
+        )
+      }
+    }
 
     if (cost !== undefined && cost > price) {
       return NextResponse.json({ error: 'El precio de venta debe ser mayor o igual al costo' }, { status: 400 })
@@ -149,10 +201,38 @@ export async function POST(request: Request) {
 
     if (categoryId) {
       const cat = await db.category.findFirst({
-        where: { id: categoryId, businessId: session.user.businessId },
+        where: { id: categoryId, businessId: session.user.businessId, isActive: true },
       })
       if (!cat) {
         return NextResponse.json({ error: 'Categoría no encontrada' }, { status: 400 })
+      }
+    }
+
+    // El id de sucursal es un cuid global (no compuesto con businessId): sin
+    // este chequeo se podía crear inventario en una sucursal de OTRO negocio.
+    if (branchId) {
+      const suc = await db.branch.findFirst({
+        where: { id: branchId, businessId: session.user.businessId, isActive: true },
+      })
+      if (!suc) {
+        return NextResponse.json({ error: 'Sucursal no encontrada' }, { status: 400 })
+      }
+    }
+
+    // El código de barras no tiene constraint único en la BD (a diferencia
+    // del SKU) — sin este chequeo se podían crear dos productos activos con
+    // el mismo barcode, y el escáner de cobro (ScannerModal) siempre toma el
+    // primero que encuentre, pudiendo cobrar el precio equivocado.
+    if (barcode?.trim()) {
+      const dupBarcode = await db.product.findFirst({
+        where: { businessId: session.user.businessId, barcode: barcode.trim(), status: 'ACTIVE' },
+        select: { id: true, name: true },
+      })
+      if (dupBarcode) {
+        return NextResponse.json(
+          { error: `El código de barras ya está en uso por "${dupBarcode.name}"` },
+          { status: 400 },
+        )
       }
     }
 
@@ -176,6 +256,18 @@ export async function POST(request: Request) {
       }
 
       const padre = await db.$transaction(async (tx) => {
+        // El campo "proveedor" del formulario es texto libre (legado); se
+        // enlaza con la tabla real Supplier para que la pantalla de
+        // Proveedores pueda listar sus productos. Se resuelve AQUÍ (no antes
+        // de validar variantes, ni con `db` fuera de la transacción): crear o
+        // reactivar el proveedor y luego fallar la creación del producto
+        // (SKU duplicado, etc.) dejaba un proveedor nuevo huérfano en el
+        // catálogo sin ningún producto — al estar en la misma transacción,
+        // un rollback del producto también revierte el proveedor.
+        const supplierId = supplier?.trim()
+          ? await resolveOrCreateSupplier(tx, session.user.businessId, supplier.trim())
+          : null
+
         const p = await tx.product.create({
           data: {
             name,
@@ -187,6 +279,7 @@ export async function POST(request: Request) {
             taxRate: taxRate ?? 0.16,
             unitOfMeasure,
             supplier,
+            supplierId,
             imageUrl,
             businessId: session.user.businessId,
             categoryId: categoryId ?? null,
@@ -208,6 +301,7 @@ export async function POST(request: Request) {
               taxRate: taxRate ?? 0.16,
               unitOfMeasure,
               supplier,
+              supplierId,
               imageUrl,
               businessId: session.user.businessId,
               categoryId: categoryId ?? null,
@@ -243,34 +337,59 @@ export async function POST(request: Request) {
       )
     }
 
-    const product = await db.product.create({
-      data: {
-        name,
-        description,
-        barcode,
-        sku,
-        price,
-        cost,
-        taxRate: taxRate ?? 0.16,
-        unitOfMeasure,
-        supplier,
-        imageUrl,
-        businessId: session.user.businessId,
-        categoryId: categoryId ?? null,
-        ...(branchId && {
-          inventory: {
-            create: {
-              branchId,
-              quantity: initialStock ?? 0,
-              minStock: minStock ?? 0,
+    const product = await db.$transaction(async (tx) => {
+      // Lock consultivo por negocio+barcode: el chequeo de arriba (antes de
+      // abrir la transacción) es solo un atajo — dos peticiones con el mismo
+      // código de barras podían pasarlo ambas antes de que cualquiera
+      // insertara (no hay constraint único de barcode en la BD, a diferencia
+      // del SKU). Se revalida AQUÍ, bajo el lock, justo antes de crear.
+      if (barcode?.trim()) {
+        const key = `barcode:${session.user.businessId}:${barcode.trim().toLowerCase()}`
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
+        const dup = await tx.product.findFirst({
+          where: { businessId: session.user.businessId, barcode: barcode.trim(), status: 'ACTIVE' },
+          select: { id: true, name: true },
+        })
+        if (dup) {
+          throw new BarcodeDuplicateError(dup.name)
+        }
+      }
+
+      // Ver comentario en la rama de variantes: se resuelve dentro de la
+      // misma transacción para que un SKU duplicado (P2002) revierta también
+      // al proveedor recién creado/reactivado, no solo al producto.
+      const supplierId = supplier?.trim()
+        ? await resolveOrCreateSupplier(tx, session.user.businessId, supplier.trim())
+        : null
+
+      return tx.product.create({
+        data: {
+          name,
+          description,
+          barcode,
+          sku,
+          price,
+          cost,
+          taxRate: taxRate ?? 0.16,
+          unitOfMeasure,
+          supplier,
+          supplierId,
+          imageUrl,
+          businessId: session.user.businessId,
+          categoryId: categoryId ?? null,
+          clientOpId: clientOpId ?? undefined,
+          ...(branchId && {
+            inventory: {
+              create: {
+                branchId,
+                quantity: initialStock ?? 0,
+                minStock: minStock ?? 0,
+              },
             },
-          },
-        }),
-      },
-      include: {
-        category: { select: { id: true, name: true } },
-        inventory: { select: { quantity: true, minStock: true, branchId: true } },
-      },
+          }),
+        },
+        include: PRODUCT_INCLUDE,
+      })
     })
 
     return NextResponse.json(
@@ -286,6 +405,41 @@ export async function POST(request: Request) {
       { status: 201 }
     )
   } catch (error) {
+    // Ver mismo mecanismo en POST /api/sales: dos intentos con el mismo
+    // clientOpId casi simultáneos — el que pierde el unique constraint
+    // devuelve el producto que ya ganó la carrera, en vez de fallar.
+    if (
+      clientOpId &&
+      businessId &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      (error.meta?.target as string[] | undefined)?.includes('clientOpId')
+    ) {
+      const existente = await db.product.findFirst({ where: { clientOpId, businessId }, include: PRODUCT_INCLUDE })
+      if (existente) {
+        return NextResponse.json(
+          {
+            product: {
+              ...existente,
+              price: Number(existente.price),
+              cost: existente.cost ? Number(existente.cost) : null,
+              taxRate: Number(existente.taxRate),
+              stock: existente.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0),
+            },
+          },
+          { status: 200 },
+        )
+      }
+    }
+    // SKU sí tiene constraint único en BD (@@unique([businessId, sku])): sin
+    // este catch, un duplicado exacto caía al 500 genérico en vez de un
+    // mensaje claro.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return NextResponse.json({ error: 'Ya existe un producto con ese SKU' }, { status: 400 })
+    }
+    if (error instanceof BarcodeDuplicateError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     console.error('POST /api/products error:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
