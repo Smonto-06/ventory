@@ -17,15 +17,18 @@ export async function POST(req: NextRequest) {
   if (!user) return unauthorized()
   if (!isFullAdmin(user)) return forbidden('Solo el administrador paga el plan')
 
-  // SUSPENDED es una decisión manual del super admin (no un simple vencimiento
-  // de plan/prueba): sin este chequeo, un negocio suspendido podía pagar por
-  // su cuenta y reactivarse solo, saltándose por completo la revisión del
-  // super admin que motivó la suspensión.
+  // SUSPENDED manual es una decisión del super admin (no un simple
+  // vencimiento de plan/prueba): sin este chequeo, un negocio suspendido a
+  // mano podía pagar por su cuenta y reactivarse solo, saltándose por
+  // completo la revisión del super admin que motivó la suspensión. Una
+  // suspensión AUTOMÁTICA por contracargo es distinta — el negocio SÍ debe
+  // poder iniciar un pago de reemplazo, que aplicarPagoAprobado reactiva al
+  // aprobarse (ver Business.suspendedByChargeback).
   const negocioActual = await db.business.findUnique({
     where: { id: user.businessId },
-    select: { status: true },
+    select: { status: true, suspendedByChargeback: true },
   })
-  if (negocioActual?.status === 'SUSPENDED') {
+  if (negocioActual?.status === 'SUSPENDED' && !negocioActual.suspendedByChargeback) {
     return NextResponse.json(
       { error: 'Tu plan está suspendido. Escríbenos a ventorypos@gmail.com para reactivarlo.', code: 'PLAN_BLOCKED' },
       { status: 403 },

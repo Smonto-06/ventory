@@ -234,26 +234,35 @@ export async function revertirPagoAprobado(
         },
         orderBy: { paidAt: 'desc' },
       })
+      // Este pago revertido SÍ había sumado sus propios 30 días a paidUntil
+      // al aprobarse (aplicarPagoAprobado, +30 días sobre lo que hubiera en
+      // ese momento) — sin restarlos aquí, un contracargo sobre un pago
+      // viejo deja el negocio con más días de los que en realidad pagó (p.
+      // ej. dos meses aprobados = 60 días; revertir el primero debería
+      // dejar solo los 30 del segundo, no los 60). Esto aplica SIEMPRE, no
+      // solo cuando otro pago más nuevo evita la suspensión: si se suspende
+      // por no haber ningún otro pago vigente, un pago B que ya estaba en
+      // curso y se aprueba justo después (aplicarPagoAprobado reactiva una
+      // suspensión automática) debe partir de paidUntil YA corregido — de lo
+      // contrario sumaría sus 30 días sobre un valor todavía inflado por
+      // este pago que se está revirtiendo, dejando casi el doble de lo que
+      // B pagó.
+      const DIA = 86400000
+      const paidUntilCorregido = negocio.paidUntil ? new Date(negocio.paidUntil.getTime() - 30 * DIA) : null
+
       if (!masReciente) {
         await tx.business.updateMany({
           where: { id: pago.businessId, status: 'ACTIVE' },
           // Marcada como automática (no manual): un pago nuevo que sí se
           // apruebe después puede reactivar el negocio por su cuenta —
           // ver el guard en aplicarPagoAprobado.
-          data: { status: 'SUSPENDED', suspendedByChargeback: true },
+          data: { status: 'SUSPENDED', suspendedByChargeback: true, paidUntil: paidUntilCorregido },
         })
-      } else if (negocio.paidUntil) {
-        // El negocio sigue activo por el pago más nuevo, pero este que se
-        // revierte SÍ había sumado sus propios 30 días a paidUntil al
-        // aprobarse (aplicarPagoAprobado, +30 días sobre lo que hubiera en
-        // ese momento) — sin restarlos, un contracargo sobre un pago viejo
-        // deja el negocio con más días de los que en realidad pagó (p. ej.
-        // dos meses aprobados = 60 días; revertir el primero debería dejar
-        // solo los 30 del segundo, no los 60).
-        const DIA = 86400000
+      } else if (paidUntilCorregido) {
+        // El negocio sigue activo por el pago más nuevo.
         await tx.business.updateMany({
           where: { id: pago.businessId, status: 'ACTIVE' },
-          data: { paidUntil: new Date(negocio.paidUntil.getTime() - 30 * DIA) },
+          data: { paidUntil: paidUntilCorregido },
         })
       }
     }

@@ -34,23 +34,30 @@ export async function POST(req: Request) {
   const user = await db.user.findUnique({ where: { email } })
   if (!user || user.emailVerified || !mailerConfigured()) return generico
 
-  // Máximo un reenvío por minuto por correo, derivado del propio
-  // verifyTokenExpires (persistido en BD) en vez de un Map en memoria del
-  // proceso: en Vercel cada instancia serverless tiene la suya, así que un
-  // Map no frena nada si dos peticiones caen en instancias distintas.
-  const ultimoEnvio = user.verifyTokenExpires ? user.verifyTokenExpires.getTime() - VERIFY_TTL_MS : 0
-  if (Date.now() - ultimoEnvio < 60_000) return generico
-
-  // En BD solo se guarda el hash del token (lib/tokens.ts), así que si ya
-  // había uno no se puede recuperar el texto plano original para reenviar
-  // el MISMO enlace — se genera uno nuevo y se invalida el anterior (un
-  // enlace viejo sin usar deja de servir, que es lo esperado: solo el
-  // último correo enviado debe ser el válido).
+  // Máximo un reenvío por minuto por correo. El "reclamo" de la ventana tiene
+  // que ser la MISMA operación que lee el estado vigente: leer
+  // verifyTokenExpires y escribir aparte (en vez de un updateMany
+  // condicionado atómico) dejaba a una ráfaga simultánea leer el mismo valor
+  // viejo, pasar todas el chequeo, y mandar varios correos — se salta el
+  // límite en vez de frenarlo (además, un Map en memoria del proceso no
+  // sirve en Vercel: cada instancia serverless tiene la suya).
   const verifyToken = randomBytes(32).toString('hex')
-  await db.user.update({
-    where: { id: user.id },
+  const reclamado = await db.user.updateMany({
+    where: {
+      id: user.id,
+      OR: [
+        { verifyTokenExpires: null },
+        { verifyTokenExpires: { lte: new Date(Date.now() + VERIFY_TTL_MS - 60_000) } },
+      ],
+    },
+    // En BD solo se guarda el hash del token (lib/tokens.ts), así que si ya
+    // había uno no se puede recuperar el texto plano original para reenviar
+    // el MISMO enlace — se genera uno nuevo y se invalida el anterior (un
+    // enlace viejo sin usar deja de servir, que es lo esperado: solo el
+    // último correo enviado debe ser el válido).
     data: { verifyToken: hashToken(verifyToken), verifyTokenExpires: new Date(Date.now() + VERIFY_TTL_MS) },
   })
+  if (reclamado.count === 0) return generico
 
   const base = process.env.NEXTAUTH_URL ?? ''
   try {
