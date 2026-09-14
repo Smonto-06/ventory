@@ -35,7 +35,13 @@ export default function TicketScreen() {
 
   const st = s.settings
   const branchName = sale.branch?.name ?? s.cash.session?.branch.name ?? ''
-  const ivaLabel = st?.ivaPct ? `IVA incluido (${st.ivaPct}%)` : 'IVA incluido'
+  // El % mostrado se deriva de lo que ESTA venta guardó (taxAmount/total),
+  // no del ajuste de IVA vigente en Ajustes: si el dueño cambia la tarifa
+  // después, reimprimir una venta vieja mostraba un % que no correspondía
+  // al monto de IVA ya impreso al lado.
+  const baseSinIva = sale.total - sale.taxAmount
+  const ivaPctVenta = sale.taxAmount > 0 && baseSinIva > 0 ? Math.round((sale.taxAmount * 100) / baseSinIva) : 0
+  const ivaLabel = ivaPctVenta > 0 ? `IVA incluido (${ivaPctVenta}%)` : 'IVA incluido'
 
   const metaRow = (left: string, right: string) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, color: '#6E7280' }}>

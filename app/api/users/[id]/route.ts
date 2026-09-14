@@ -43,6 +43,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       return badRequest('No puedes desactivar ni cambiar el rol de tu propia cuenta')
     }
 
+    // Desactivar a un cajero con un turno de caja ABIERTO lo deja huérfano
+    // para siempre: el usuario queda bloqueado de inmediato (la sesión se
+    // revalida en vivo), pero su CashSession seguía en OPEN sin que nadie
+    // más pudiera cerrarla, distorsionando cualquier reporte que sume
+    // turnos abiertos. Se exige cerrar el turno antes de desactivar.
+    if (parsed.data.isActive === false) {
+      const turnoAbierto = await db.cashSession.findFirst({
+        where: { openedById: params.id, status: 'OPEN' },
+        select: { id: true },
+      })
+      if (turnoAbierto) {
+        return badRequest('Este usuario tiene un turno de caja abierto. Ciérralo antes de desactivarlo.')
+      }
+    }
+
     const email = parsed.data.email?.toLowerCase()
     if (email && email !== target.email) {
       const dup = await db.user.findUnique({ where: { email } })

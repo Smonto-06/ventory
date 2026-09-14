@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
 import { unauthorized, forbidden, badRequest, serverError, isAdmin } from '@/lib/api-helpers'
+import { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,6 +82,13 @@ export async function POST(req: NextRequest) {
         })
     return NextResponse.json({ supplier }, { status: 201 })
   } catch (error) {
+    // El chequeo de arriba es solo un atajo: dos creaciones con el mismo
+    // nombre casi simultáneas podían pasarlo ambas antes de que cualquiera
+    // insertara/reactivara — sin esto, la que perdía la carrera contra el
+    // constraint único (businessId, name) caía a un 500 genérico.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return badRequest('Ya existe un proveedor con ese nombre')
+    }
     return serverError('POST /api/suppliers', error)
   }
 }

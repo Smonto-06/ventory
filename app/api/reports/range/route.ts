@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { profitReport, diaColombianoDeFecha } from '@/lib/pos'
+import { profitReport, diaColombianoDeFecha, netSaleValue, isSaleRefundExpense } from '@/lib/pos'
 import { isAdmin } from '@/lib/api-helpers'
 import type { SessionUser } from '@/lib/get-session'
 
@@ -33,21 +33,26 @@ async function periodStats(businessId: string, from: Date, to: Date): Promise<Pe
         type: { in: ['EXPENSE', 'WITHDRAWAL'] },
         createdAt: { gte: from, lt: to },
       },
-      select: { amount: true },
+      select: { amount: true, description: true },
     }),
   ])
   // Utilidad NETA de lo devuelto: un artículo que volvió no se vendió de
-  // verdad, ni su costo ni su ingreso deberían contar (misma fórmula
-  // proporcional redondeada una vez que usa return/route.ts).
+  // verdad, ni su costo ni su ingreso deberían contar. netSaleValue()
+  // además prorratea el descuento global de la venta (que SaleItem.total no
+  // incluye) — misma fórmula que return/route.ts y /api/reports/daily, para
+  // que una venta con descuento no infle la utilidad reportada.
   const netSales = sales.reduce(
     (s, v) =>
       s +
-      v.items.reduce((a, i) => {
-        const qty = Number(i.quantity)
-        const kept = qty - Number(i.returnedQty)
-        if (kept <= 0) return a
-        return a + (kept >= qty ? Number(i.total) : Math.round((Number(i.total) * kept) / qty))
-      }, 0),
+      netSaleValue({
+        subtotal: Number(v.subtotal),
+        total: Number(v.total),
+        items: v.items.map((i) => ({
+          total: Number(i.total),
+          quantity: Number(i.quantity),
+          returnedQty: Number(i.returnedQty),
+        })),
+      }),
     0,
   )
   const costOfGoods = sales.reduce(
@@ -65,7 +70,12 @@ async function periodStats(businessId: string, from: Date, to: Date): Promise<Pe
     transactionCount: sales.length,
     totalItems: sales.reduce((s, v) => s + v.items.reduce((a, i) => a + Number(i.quantity), 0), 0),
     costOfGoods,
-    expenses: movements.reduce((s, m) => s + Number(m.amount), 0),
+    // Se excluyen "Devolución"/"Anulación de venta": esa venta ya está
+    // neteada o excluida arriba (netSales/costOfGoods), contar también su
+    // reembolso de caja como gasto la restaba dos veces (ver isSaleRefundExpense).
+    expenses: movements
+      .filter((m) => !isSaleRefundExpense(m.description))
+      .reduce((s, m) => s + Number(m.amount), 0),
   }
 }
 

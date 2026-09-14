@@ -313,6 +313,11 @@ export async function POST(request: Request) {
                     branchId,
                     quantity: v.initialStock ?? 0,
                     minStock: v.minStock ?? minStock ?? 0,
+                    // Sin esto, un producto creado ya por debajo de su propio
+                    // mínimo nacía con lowStock=false (el default de la
+                    // columna) y no aparecía en la alerta de bajo stock hasta
+                    // que una venta/compra/ajuste posterior lo recalculara.
+                    lowStock: (v.initialStock ?? 0) <= (v.minStock ?? minStock ?? 0),
                   },
                 },
               }),
@@ -384,6 +389,8 @@ export async function POST(request: Request) {
                 branchId,
                 quantity: initialStock ?? 0,
                 minStock: minStock ?? 0,
+                // Ver comentario equivalente en la creación de variantes, arriba.
+                lowStock: (initialStock ?? 0) <= (minStock ?? 0),
               },
             },
           }),

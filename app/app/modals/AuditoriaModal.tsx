@@ -49,15 +49,15 @@ function label(l: LogRow): string {
   return ACTION_ES[`${l.action}:${l.entity}`] ?? `${l.action} · ${l.entity}`
 }
 
-function detail(l: LogRow): string {
+function detail(l: LogRow, fmt: (n: number) => string): string {
   const p = l.payload
   if (!p) return ''
   const parts: string[] = []
   if (typeof p.folio === 'string') parts.push(p.folio)
   if (typeof p.name === 'string') parts.push(p.name)
-  if (typeof p.amount === 'number') parts.push(`$ ${p.amount.toLocaleString('es-CO')}`)
+  if (typeof p.amount === 'number') parts.push(fmt(p.amount))
   if (typeof p.created === 'number') parts.push(`${p.created} creados`)
-  if (typeof p.difference === 'number') parts.push(`diferencia $ ${p.difference.toLocaleString('es-CO')}`)
+  if (typeof p.difference === 'number') parts.push(`diferencia ${fmt(p.difference)}`)
   if (Array.isArray(p.fields)) parts.push((p.fields as string[]).join(', '))
   return parts.join(' · ')
 }
@@ -105,7 +105,7 @@ export default function AuditoriaModal() {
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
               {l.user}
-              {detail(l) ? ` · ${detail(l)}` : ''}
+              {detail(l, s.fmt) ? ` · ${detail(l, s.fmt)}` : ''}
             </div>
           </div>
         ))}

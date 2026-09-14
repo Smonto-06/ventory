@@ -179,7 +179,11 @@ export async function POST(request: Request) {
               businessId,
               categoryId: r.category?.trim() ? catByName.get(r.category.trim().toLowerCase()) ?? null : null,
               inventory: {
-                create: { branchId: branch.id, quantity: r.stock, minStock: r.minStock },
+                // lowStock explícito: sin esto, una fila importada ya por
+                // debajo de su propio mínimo nacía con lowStock=false (el
+                // default de la columna) y no aparecía en la alerta de bajo
+                // stock hasta que una venta/compra/ajuste la recalculara.
+                create: { branchId: branch.id, quantity: r.stock, minStock: r.minStock, lowStock: r.stock <= r.minStock },
               },
             },
           })

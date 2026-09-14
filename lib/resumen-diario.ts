@@ -5,7 +5,7 @@
 // distintas al entrar al sistema.
 
 import { db } from '@/lib/db'
-import { cashPortion, profitReport, diaColombiano } from '@/lib/pos'
+import { cashPortion, profitReport, diaColombiano, netSaleValue, isSaleRefundExpense } from '@/lib/pos'
 
 export { diaColombiano }
 
@@ -41,6 +41,7 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
       where: { branch: { businessId }, createdAt: enElDia, status: 'COMPLETED' },
       select: {
         total: true,
+        subtotal: true,
         paymentMethod: true,
         cashSessionId: true,
         payments: { select: { method: true, amount: true } },
@@ -48,7 +49,9 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
           select: {
             quantity: true,
             unitPrice: true,
+            total: true,
             costPrice: true,
+            returnedQty: true,
             product: { select: { name: true } },
           },
         },
@@ -68,7 +71,7 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
     }),
     db.cashMovement.findMany({
       where: { cashSession: { branch: { businessId } }, createdAt: enElDia },
-      select: { type: true, amount: true, cashSessionId: true },
+      select: { type: true, amount: true, cashSessionId: true, description: true },
     }),
     db.cashSession.findMany({
       // openedAt: enElDia trae los turnos (abiertos o cerrados) de HOY, pero
@@ -117,18 +120,42 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
     }
   }
 
-  // Costo snapshot de cada línea (SaleItem.costPrice), no el costo ACTUAL del
-  // producto: si el costo cambió el mismo día (p. ej. tras una compra), usar
-  // el valor en vivo desajusta esta utilidad frente a la que ya congelaron
-  // /api/reports/daily y /api/reports/range para el mismo día.
-  const costo = ventas.reduce(
-    (a, v) => a + v.items.reduce((b, i) => b + Number(i.quantity) * Number(i.costPrice ?? 0), 0),
+  // Neto de lo devuelto: un artículo que volvió no se vendió de verdad, ni su
+  // costo ni su ingreso deberían contar en la utilidad. costPrice es el costo
+  // guardado en la venta (no el costo actual del producto, que puede haber
+  // cambiado desde entonces). netSaleValue() además prorratea el descuento
+  // global de la venta (que SaleItem.total no incluye) — misma fórmula que
+  // usan reports/daily y reports/range para que las cifras coincidan.
+  const ventasNeto = ventas.reduce(
+    (a, v) =>
+      a +
+      netSaleValue({
+        subtotal: Number(v.subtotal),
+        total: Number(v.total),
+        items: v.items.map((i) => ({
+          total: Number(i.total),
+          quantity: Number(i.quantity),
+          returnedQty: Number(i.returnedQty),
+        })),
+      }),
     0,
   )
-  // Gastos operativos del día completo (todos los turnos) — es lo que resta
-  // en la utilidad neta del negocio, sin importar en qué cajón se registraron.
+  const costo = ventas.reduce(
+    (a, v) =>
+      a +
+      v.items.reduce((b, i) => {
+        const kept = Number(i.quantity) - Number(i.returnedQty)
+        return b + Number(i.costPrice ?? 0) * Math.max(0, kept)
+      }, 0),
+    0,
+  )
+  // Se excluyen "Devolución"/"Anulación de venta" de la utilidad: esa venta
+  // ya está neteada o excluida arriba (ventasNeto/costo), contar también su
+  // reembolso de caja como gasto restaba la misma plata dos veces (ver
+  // isSaleRefundExpense en lib/pos.ts). El total de "caja.gastos" (más abajo,
+  // para el esperado del cajón) sí sigue contando el movimiento completo.
   const gastos = movimientos
-    .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
+    .filter((m) => (m.type === 'EXPENSE' || m.type === 'WITHDRAWAL') && !isSaleRefundExpense(m.description))
     .reduce((a, m) => a + Number(m.amount), 0)
 
   // "Caja por usuario" (CLAUDE.md) permite varios cajeros con turno propio
@@ -177,7 +204,10 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
     for (const i of v.items) {
       const e = productos.get(i.product.name) ?? { cantidad: 0, total: 0 }
       e.cantidad += Number(i.quantity)
-      e.total += Number(i.quantity) * Number(i.unitPrice)
+      // i.total (no quantity×unitPrice): ya incluye el descuento por
+      // artículo, igual que "top productos" en reports/daily — si no, el
+      // correo mostraba más ingreso del que esa línea realmente dejó.
+      e.total += Number(i.total)
       productos.set(i.product.name, e)
     }
   }
@@ -203,7 +233,7 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
       promedio: ventas.length ? Math.round(total / ventas.length) : 0,
     },
     porMetodo,
-    utilidad: { costo, gastos, neta: profitReport(total, costo, gastos).net },
+    utilidad: { costo, gastos, neta: profitReport(ventasNeto, costo, gastos).net },
     caja: {
       apertura,
       ingresos: ingresosTurno,

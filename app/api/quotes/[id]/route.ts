@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
-import { unauthorized, badRequest, serverError } from '@/lib/api-helpers'
+import { unauthorized, forbidden, badRequest, serverError, isAdmin } from '@/lib/api-helpers'
 import { incluirCotizacion as incluir, serializarCotizacion as serializar } from '@/lib/cotizaciones'
 
 export const dynamic = 'force-dynamic'
@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     const cot = await db.quote.findFirst({
       where: { id: params.id, businessId: user.businessId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, createdById: true },
     })
     if (!cot) return NextResponse.json({ error: 'Cotización no encontrada' }, { status: 404 })
 
@@ -58,6 +58,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     if (parsed.data.action === 'cancel') {
       if (cot.status === 'CANCELLED') return badRequest('Ya estaba anulada')
+      // Anular (a diferencia de extender) borra la cotización de otro
+      // cajero: cualquier usuario con sesión podía anular la de un
+      // compañero sin haberla creado. Extender sigue abierto a cualquiera —
+      // es normal que otro cajero atienda al mismo cliente otro día.
+      if (cot.createdById !== user.id && !isAdmin(user)) {
+        return forbidden('Solo quien la creó, o un encargado, puede anular esta cotización')
+      }
       // Condicionado a que SIGA abierta al momento de escribir: si justo en
       // este instante otra caja la está cobrando (POST /api/sales con
       // quoteId, que marca CONVERTED dentro de su propia transacción), esta

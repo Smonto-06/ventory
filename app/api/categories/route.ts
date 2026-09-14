@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +68,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ category }, { status: 201 })
   } catch (error) {
+    // El chequeo de arriba es solo un atajo: dos creaciones con el mismo
+    // nombre casi simultáneas podían pasarlo ambas antes de que cualquiera
+    // insertara — sin esto, la que perdía la carrera contra el constraint
+    // único (businessId, name) caía a un 500 genérico en vez de este mismo
+    // mensaje claro.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return NextResponse.json({ error: 'Ya existe una categoría con ese nombre' }, { status: 409 })
+    }
     console.error('POST /api/categories error:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }

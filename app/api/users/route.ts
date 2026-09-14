@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
 import { unauthorized, forbidden, badRequest, serverError } from '@/lib/api-helpers'
-import { UserRole } from '@prisma/client'
+import { UserRole, Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -101,6 +101,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ user: created }, { status: 201 })
   } catch (error) {
+    // El chequeo de arriba es solo un atajo: dos altas con el mismo correo
+    // casi simultáneas podían pasarlo ambas antes de que cualquiera
+    // insertara — sin esto, la que perdía la carrera contra el constraint
+    // único de email caía a un 500 genérico en vez de este mismo mensaje.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return badRequest('Ya existe un usuario con ese correo')
+    }
     return serverError('POST /api/users', error)
   }
 }

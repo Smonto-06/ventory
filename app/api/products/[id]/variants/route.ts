@@ -177,11 +177,17 @@ export async function POST(request: Request, { params }: { params: { id: string 
         const v = nuevas[i]
         // el stock que tenía el producto suelto se le queda a la primera
         const heredado = convirtiendo && i === 0 ? stockHeredado : []
-        const inventarios = heredado.length
+        const inventariosBase = heredado.length
           ? heredado
           : branchId
             ? [{ branchId, quantity: v.initialStock ?? 0, minStock: v.minStock ?? 0 }]
             : []
+        // lowStock explícito: sin esto, una variante creada ya por debajo de
+        // su propio mínimo (o que hereda un stock bajo del producto suelto
+        // que se está convirtiendo) nacía con lowStock=false (el default de
+        // la columna) y no aparecía en la alerta de bajo stock hasta que una
+        // venta/compra/ajuste posterior la recalculara.
+        const inventarios = inventariosBase.map((inv) => ({ ...inv, lowStock: inv.quantity <= inv.minStock }))
 
         const creada = await tx.product.create({
           data: {
@@ -201,7 +207,32 @@ export async function POST(request: Request, { params }: { params: { id: string 
             variantLabel: v.label,
             ...(inventarios.length && { inventory: { create: inventarios } }),
           },
+          include: { inventory: true },
         })
+
+        // El stock heredado del producto suelto (arriba: se borró su
+        // inventario y se recreó aquí, sin pasar por moveStock/setStock) es
+        // un cambio de existencias real que, sin esto, no dejaba NINGÚN
+        // rastro en inventory_movements — el kardex mostraba el stock del
+        // padre desapareciendo y el de la variante apareciendo de la nada,
+        // sin ningún movimiento que lo explique.
+        if (convirtiendo && i === 0 && heredado.length) {
+          for (const inv of creada.inventory) {
+            if (Number(inv.quantity) === 0) continue
+            await tx.inventoryMovement.create({
+              data: {
+                type: 'ADJUSTMENT',
+                quantity: inv.quantity,
+                quantityBefore: 0,
+                quantityAfter: inv.quantity,
+                reason: `Heredado de "${padre.name}" al convertir en variantes`,
+                inventoryId: inv.id,
+                createdById: session.user.id,
+              },
+            })
+          }
+        }
+
         salida.push(creada.id)
       }
       return salida

@@ -14,23 +14,33 @@ export default function ClienteModal() {
   const [name, setName] = useState(editing?.name ?? '')
   const [phone, setPhone] = useState(editing?.phone ?? '')
   const [doc, setDoc] = useState(editing?.document ?? '')
+  const [enviando, setEnviando] = useState(false)
 
-  const ok = !!name.trim()
+  const ok = !!name.trim() && !enviando
 
   const save = async () => {
+    // Un doble clic rápido en "Guardar" podía crear DOS clientes idénticos
+    // antes de que la primera petición terminara y cerrara el modal — mismo
+    // patrón que ya bloquean caja, crédito, compras y traslados.
+    if (enviando) return
     if (!name.trim()) {
       s.toast('Escribe el nombre del cliente')
       return
     }
-    const saved = await s.saveCliente(
-      {
-        name: name.trim(),
-        phone: phone.trim() || undefined,
-        document: doc.trim() || undefined,
-      },
-      s.editClientId,
-    )
-    if (saved) s.closeModal()
+    setEnviando(true)
+    try {
+      const saved = await s.saveCliente(
+        {
+          name: name.trim(),
+          phone: phone.trim() || undefined,
+          document: doc.trim() || undefined,
+        },
+        s.editClientId,
+      )
+      if (saved) s.closeModal()
+    } finally {
+      setEnviando(false)
+    }
   }
 
   return (

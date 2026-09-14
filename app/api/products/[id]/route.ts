@@ -207,12 +207,17 @@ export async function PATCH(request: Request, { params }: Params) {
       })
       .catch(() => {})
 
-    // Stock mínimo vive en el inventario por sucursal
+    // Stock mínimo vive en el inventario por sucursal. lowStock se
+    // recalcula en la MISMA sentencia contra la cantidad vigente de cada
+    // fila — un updateMany({data:{minStock}}) sin esto dejaba lowStock
+    // congelado en lo que fuera antes: subir el mínimo por encima del
+    // stock actual no hacía aparecer la alerta de bajo stock hasta que una
+    // venta/compra/ajuste posterior la recalculara por su cuenta.
     if (minStock !== undefined) {
-      await db.inventory.updateMany({
-        where: { productId: params.id },
-        data: { minStock },
-      })
+      await db.$executeRaw`
+        UPDATE "inventory" SET "minStock" = ${minStock}, "lowStock" = ("quantity" <= ${minStock})
+        WHERE "productId" = ${params.id}
+      `
     }
 
     // El nombre de una variante es "Padre · Etiqueta": si cambia el nombre del

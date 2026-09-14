@@ -113,6 +113,63 @@ export function expectedBalance(
   return opening + shiftCashSales + incomes - expenses
 }
 
+/**
+ * Reparte `total` proporcionalmente entre `weights` sin perder ni inventar
+ * un peso: cada parte se redondea hacia abajo y el residuo entero (siempre
+ * menor que la cantidad de partes) se reparte de a un peso a las partes con
+ * mayor resto fraccionario, empate roto por id — así la función es
+ * determinística sin importar el orden de entrada, y la suma de las partes
+ * siempre da exactamente `total`. Se usa para prorratear el descuento
+ * global de una venta entre sus líneas (return/route.ts): sin este reparto,
+ * redondear cada línea por separado podía dejar $1-2 cobrados de más que
+ * nunca quedaban disponibles para devolver, aunque se devolviera TODA la venta.
+ */
+export function allocateProportional(
+  total: number,
+  weights: Array<{ id: string; weight: number }>,
+): Map<string, number> {
+  const totalWeight = weights.reduce((s, w) => s + w.weight, 0)
+  const out = new Map<string, number>()
+  if (totalWeight <= 0) {
+    weights.forEach((w) => out.set(w.id, 0))
+    return out
+  }
+  const parts = weights.map((w) => {
+    const exact = (total * w.weight) / totalWeight
+    const floor = Math.floor(exact)
+    return { id: w.id, floor, remainder: exact - floor }
+  })
+  let leftover = total - parts.reduce((s, p) => s + p.floor, 0)
+  parts.sort((a, b) => b.remainder - a.remainder || (a.id < b.id ? -1 : 1))
+  for (const p of parts) {
+    const extra = leftover > 0 ? 1 : 0
+    if (extra) leftover--
+    out.set(p.id, p.floor + extra)
+  }
+  return out
+}
+
+/**
+ * Valor neto de una venta para reportes de utilidad: lo vendido menos lo
+ * devuelto, CON el descuento global ya prorrateado. SaleItem.total se
+ * guarda antes del descuento global de la venta (solo vive en
+ * Sale.discountAmount/Sale.total) — sumarlo tal cual sobreestima ventas y
+ * utilidad en el monto de cada descuento aplicado. Se prorratea con la
+ * misma razón sale.total/sale.subtotal que usa return/route.ts.
+ */
+export function netSaleValue(sale: {
+  subtotal: number
+  total: number
+  items: Array<{ total: number; quantity: number; returnedQty: number }>
+}): number {
+  const keptSubtotal = sale.items.reduce((a, i) => {
+    const kept = i.quantity - i.returnedQty
+    if (kept <= 0) return a
+    return a + (kept >= i.quantity ? i.total : Math.round((i.total * kept) / i.quantity))
+  }, 0)
+  return sale.subtotal > 0 ? Math.round((keptSubtotal * sale.total) / sale.subtotal) : keptSubtotal
+}
+
 /** Reembolso de una devolución: valor unitario de línea (val/qty redondeado) × cantidad devuelta */
 export function refundForItems(
   items: Array<{ lineTotal: number; quantity: number; returnedQty: number; toReturn: number }>,
@@ -165,6 +222,22 @@ export function diaColombianoDeFecha(fechaISO: string): { desde: Date; hasta: Da
   const desde = new Date(Date.UTC(y, m - 1, d) + OFFSET_MIN * 60_000)
   const hasta = new Date(desde.getTime() + 86_400_000)
   return { desde, hasta }
+}
+
+/**
+ * Gasto de caja que en realidad es el reembolso de una venta ya excluida (o
+ * neteada) del total de ventas del reporte — "Devolución" o "Anulación de
+ * venta" (ver return/route.ts y void/route.ts, únicos lugares que usan
+ * exactamente estas descripciones). Sin filtrarlo, la utilidad neta de
+ * reportes/resumen-diario lo restaba DOS veces: una porque la venta ya no
+ * aporta ingreso/costo (netSaleValue la neta, o el void la excluye entera),
+ * y otra de nuevo como "gasto operativo". Este filtro es solo para la
+ * utilidad del reporte — el arqueo de caja (expectedBalance/cierre de
+ * turno) sigue contando el movimiento completo, porque ese efectivo sí
+ * salió físicamente del cajón.
+ */
+export function isSaleRefundExpense(description: string): boolean {
+  return description === 'Devolución' || description === 'Anulación de venta'
 }
 
 export const CASH_MOVEMENT_DESCRIPTIONS = {

@@ -42,6 +42,12 @@ export default function AbonoModal() {
   if (!c) return null
 
   const ok = amount > 0 && !enviando
+  // Registrar un abono por un monto MAYOR al saldo se recortaba en silencio
+  // antes de esto, sin un solo aviso: ni el campo se ponía en rojo, ni un
+  // toast, ni una marca en el campo — el excedente simplemente no quedaba
+  // registrado en ningún lado (la típica plata de más en caja al cierre que
+  // nadie sabe de dónde salió).
+  const excedente = amount > c.balance ? amount - c.balance : 0
 
   const save = async () => {
     if (!ok) return
@@ -101,6 +107,13 @@ export default function AbonoModal() {
           Saldo total
         </button>
       </div>
+      {excedente > 0 && (
+        <div style={{ marginTop: 10, background: '#FDECEC', border: '1px solid #F5C2C2', borderRadius: 11, padding: '10px 13px', fontSize: 12.5, color: '#9A2E2E', lineHeight: 1.5 }}>
+          El cliente solo debe {s.fmt(c.balance)}. Se registrará ese monto — los {s.fmt(excedente)}{' '}
+          de más no quedan guardados en ningún lado. Si de verdad recibiste ese dinero, devuelve el
+          excedente o corrige el monto.
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
         <button

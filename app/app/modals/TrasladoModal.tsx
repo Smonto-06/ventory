@@ -33,13 +33,15 @@ export default function TrasladoModal() {
   const [prodId, setProdId] = useState('')
   const [qty, setQty] = useState(0)
   const [dir, setDir] = useState<'out' | 'in'>('out')
+  const [enviando, setEnviando] = useState(false)
   const porPeso = s.products.find((p) => p.id === prodId)?.unitOfMeasure === 'kg'
 
-  const ok = !!prodId && qty > 0
+  const ok = !!prodId && qty > 0 && !enviando
 
   const doTraslado = () => {
     if (!ok) return
-    s.doTraslado(prodId, qty, dir)
+    setEnviando(true)
+    s.doTraslado(prodId, qty, dir).finally(() => setEnviando(false))
   }
 
   return (

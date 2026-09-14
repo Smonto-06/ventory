@@ -89,6 +89,7 @@ export default function ProductoModal() {
     return [{ nombre: '', valores: [] }]
   })
   const [filas, setFilas] = useState<FilaVariante[]>([])
+  const [enviando, setEnviando] = useState(false)
   const variantesVisibles = (conVariantes && !s.editProdId) || esAgrupador
 
   const set = (k: keyof FormState) => (v: string) => setF((st) => ({ ...st, [k]: v }))
@@ -132,9 +133,14 @@ export default function ProductoModal() {
   const ok =
     !!f.name &&
     num(f.price) > 0 &&
-    (!variantesVisibles || esAgrupador || filas.length > 0)
+    (!variantesVisibles || esAgrupador || filas.length > 0) &&
+    !enviando
 
   const save = async () => {
+    // Un doble clic rápido en "Guardar" podía crear DOS productos idénticos
+    // antes de que la primera petición terminara y cerrara el modal — mismo
+    // patrón que ya bloquean caja, crédito, compras y traslados.
+    if (enviando) return
     if (!f.name) return s.toast('Escribe el nombre del producto')
     if (num(f.price) <= 0) return s.toast('El precio de venta debe ser mayor a 0')
     const payload: Record<string, unknown> = {
@@ -170,29 +176,34 @@ export default function ProductoModal() {
       delete payload.barcode
     }
 
-    const done = await s.saveProduct(payload, s.editProdId)
-    if (!done) return
+    setEnviando(true)
+    try {
+      const done = await s.saveProduct(payload, s.editProdId)
+      if (!done) return
 
-    // Al editar un agrupador, las combinaciones nuevas se agregan aparte
-    if (esAgrupador && filas.length) {
-      const agregado = await s.addVariants(s.editProdId!, {
-        variantOptions: opciones
-          .filter((o) => o.nombre.trim() && o.valores.length)
-          .map((o) => ({ nombre: o.nombre.trim(), valores: o.valores })),
-        variantes: filas.map((v) => ({
-          label: v.label,
-          sku: v.sku.trim().toUpperCase() || null,
-          barcode: v.barcode.trim() || null,
-          ...(num(v.price) > 0 ? { price: num(v.price) } : {}),
-          initialStock: f.unit === 'kg' ? parseQty(v.stock) : num(v.stock),
-          minStock: f.unit === 'kg' ? parseQty(f.min) : num(f.min),
-        })),
-      })
-      if (!agregado) return
+      // Al editar un agrupador, las combinaciones nuevas se agregan aparte
+      if (esAgrupador && filas.length) {
+        const agregado = await s.addVariants(s.editProdId!, {
+          variantOptions: opciones
+            .filter((o) => o.nombre.trim() && o.valores.length)
+            .map((o) => ({ nombre: o.nombre.trim(), valores: o.valores })),
+          variantes: filas.map((v) => ({
+            label: v.label,
+            sku: v.sku.trim().toUpperCase() || null,
+            barcode: v.barcode.trim() || null,
+            ...(num(v.price) > 0 ? { price: num(v.price) } : {}),
+            initialStock: f.unit === 'kg' ? parseQty(v.stock) : num(v.stock),
+            minStock: f.unit === 'kg' ? parseQty(f.min) : num(f.min),
+          })),
+        })
+        if (!agregado) return
+      }
+
+      s.setEditProdId(null)
+      s.closeModal()
+    } finally {
+      setEnviando(false)
     }
-
-    s.setEditProdId(null)
-    s.closeModal()
   }
 
   return (

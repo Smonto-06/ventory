@@ -116,28 +116,30 @@ export default function VentaDetalleModal() {
             >
               Devolver artículos
             </button>
-            <button
-              onClick={() =>
-                s.askConfirm({
-                  title: '¿Anular esta venta?',
-                  label: `${sale.folio} · ${s.fmt(sale.total)} · Se regresa el stock y se descuenta de caja`,
-                  btnLabel: 'Anular',
-                  onConfirm: () => s.doVoid(sale.id),
-                })
-              }
-              style={{
-                flex: 1,
-                height: 46,
-                borderRadius: 12,
-                background: '#FDECEC',
-                color: '#C9433B',
-                fontWeight: 700,
-                fontSize: 14,
-                cursor: 'pointer',
-              }}
-            >
-              Anular venta
-            </button>
+            {s.isAdmin && (
+              <button
+                onClick={() =>
+                  s.askConfirm({
+                    title: '¿Anular esta venta?',
+                    label: `${sale.folio} · ${s.fmt(sale.total)} · Se regresa el stock y se descuenta de caja`,
+                    btnLabel: 'Anular',
+                    onConfirm: () => s.doVoid(sale.id),
+                  })
+                }
+                style={{
+                  flex: 1,
+                  height: 46,
+                  borderRadius: 12,
+                  background: '#FDECEC',
+                  color: '#C9433B',
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                Anular venta
+              </button>
+            )}
           </div>
           <button
             onClick={() => {

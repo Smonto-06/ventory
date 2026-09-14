@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useApp } from '../store'
 import { Modal, saveBtnStyle, fmtQty, parseQty } from '../ui'
 import TecladoPeso, { aplicarTecla, useTecladoFisico } from './TecladoPeso'
+import { allocateProportional } from '@/lib/pos'
 
 export default function DevolucionModal() {
   const s = useApp()
@@ -24,14 +25,33 @@ export default function DevolucionModal() {
   // dar 1,4999999 y dejar un gramo colgando.
   const aMil = (n: number) => Math.round(n * 1000)
 
+  // Mismo prorrateo de descuento que usa el servidor (return/route.ts): el
+  // total de cada línea (it.total) se guarda ANTES del descuento global de
+  // la venta, así que hay que repartir sale.total entre TODAS las líneas
+  // con allocateProportional() antes de calcular cuánto se reembolsa por
+  // cada una — sin esto, la vista previa mostraba el valor de catálogo
+  // (sin descuento) mientras el servidor sí lo prorrateaba, y el cajero
+  // veía un número distinto al que de verdad se reembolsaba.
+  const discountedTotalByItem = allocateProportional(
+    sale.total,
+    sale.items.map((i) => ({ id: i.id, weight: i.total })),
+  )
+
   const rows = sale.items.map((it) => {
     const porPeso = it.product.unitOfMeasure === 'kg'
-    const availMil = aMil(it.quantity) - aMil(it.returnedQty)
+    const totalMil = aMil(it.quantity)
+    const availMil = totalMil - aMil(it.returnedQty)
     const qMil = Math.min(aMil(qty[it.id] ?? 0), availMil)
-    // Proporcional al valor de la línea y redondeado una sola vez: es la misma
-    // cuenta que hace el servidor, para que lo que se muestra sea lo que se
-    // reembolsa.
-    const refund = qMil > 0 ? Math.round((it.total * qMil) / aMil(it.quantity)) : 0
+    const itemDiscountedTotal = discountedTotalByItem.get(it.id) ?? 0
+    // Telescopado sobre lo ya devuelto: el reembolso de ESTA devolución es
+    // la diferencia entre el acumulado "hasta ahora" y "hasta antes" — igual
+    // que el servidor, para que devoluciones sucesivas de la misma línea no
+    // se desvíen por redondeo independiente en cada una.
+    const prevMil = aMil(it.returnedQty)
+    const nuevoMil = prevMil + qMil
+    const antes = Math.round((itemDiscountedTotal * prevMil) / totalMil)
+    const despues = Math.round((itemDiscountedTotal * nuevoMil) / totalMil)
+    const refund = qMil > 0 ? despues - antes : 0
     return { it, porPeso, avail: availMil / 1000, q: qMil / 1000, refund }
   })
   const devTotal = rows.reduce((a, r) => a + r.refund, 0)
