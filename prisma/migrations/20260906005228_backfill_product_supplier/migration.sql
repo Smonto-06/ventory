@@ -13,14 +13,24 @@
 -- 1) Crea el Supplier que falte para cada (negocio, nombre) usado en el campo
 --    de texto libre de un producto sin supplierId, cuando no exista ya uno con
 --    ese nombre (sin distinguir mayúsculas) para ese negocio.
+--
+--    DISTINCT ON por (negocio, nombre en minúsculas) en vez de DISTINCT plano:
+--    dos productos legado con el mismo proveedor escrito distinto solo en
+--    mayúsculas ("Acme" y "ACME") son el mismo proveedor para el UPDATE de
+--    abajo (que sí compara en minúsculas) y para el índice único de
+--    Supplier — pero el DISTINCT plano anterior los trataba como dos nombres
+--    distintos y creaba un Supplier por cada uno, dejando el UPDATE
+--    enlazando productos a cualquiera de los dos de forma arbitraria.
 INSERT INTO "suppliers" ("id", "businessId", "name", "isActive", "createdAt", "updatedAt")
 SELECT md5(random()::text || clock_timestamp()::text), t."businessId", t."name", true, now(), now()
 FROM (
-  SELECT DISTINCT p."businessId" AS "businessId", trim(p."supplier") AS "name"
+  SELECT DISTINCT ON (p."businessId", lower(trim(p."supplier")))
+    p."businessId" AS "businessId", trim(p."supplier") AS "name"
   FROM "products" p
   WHERE p."supplierId" IS NULL
     AND p."supplier" IS NOT NULL
     AND trim(p."supplier") <> ''
+  ORDER BY p."businessId", lower(trim(p."supplier")), trim(p."supplier")
 ) t
 WHERE NOT EXISTS (
   SELECT 1 FROM "suppliers" s

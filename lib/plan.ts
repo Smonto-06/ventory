@@ -238,51 +238,36 @@ export async function revertirPagoAprobado(
       if (!negocio) return true
       if (negocio.paidUntil === null) return true
 
-      // ¿Sigue vigente el negocio por OTRO pago MÁS NUEVO que este? (p. ej.
-      // ya pagó de nuevo el mes siguiente antes de que este contracargo
-      // viejo llegara) — de ser así, no corresponde suspender por una
-      // disputa sobre un cobro ya superado. No basta con "existe algún otro
-      // pago aprobado": si el contracargo es sobre el pago MÁS RECIENTE (el
-      // que de verdad sostiene paidUntil) y el negocio tiene otro aprobado
-      // más VIEJO, ese viejo no cubre nada — ya se contó dentro de un
-      // paidUntil que este mismo pago revertido extendió.
-      const masReciente = await tx.planPayment.findFirst({
-        where: {
-          businessId: pago.businessId,
-          status: 'APPROVED',
-          ...(pago.paidAt ? { paidAt: { gt: pago.paidAt } } : {}),
-        },
-        orderBy: { paidAt: 'desc' },
-      })
       // Este pago revertido SÍ había sumado sus propios 30 días a paidUntil
       // al aprobarse (aplicarPagoAprobado, +30 días sobre lo que hubiera en
       // ese momento) — sin restarlos aquí, un contracargo sobre un pago
       // viejo deja el negocio con más días de los que en realidad pagó (p.
       // ej. dos meses aprobados = 60 días; revertir el primero debería
-      // dejar solo los 30 del segundo, no los 60). Esto aplica SIEMPRE, no
-      // solo cuando otro pago más nuevo evita la suspensión: si se suspende
-      // por no haber ningún otro pago vigente, un pago B que ya estaba en
-      // curso y se aprueba justo después (aplicarPagoAprobado reactiva una
-      // suspensión automática) debe partir de paidUntil YA corregido — de lo
-      // contrario sumaría sus 30 días sobre un valor todavía inflado por
-      // este pago que se está revirtiendo, dejando casi el doble de lo que
-      // B pagó.
+      // dejar solo los 30 del segundo, no los 60).
       const DIA = 86400000
-      const paidUntilCorregido = negocio.paidUntil ? new Date(negocio.paidUntil.getTime() - 30 * DIA) : null
+      const paidUntilCorregido = new Date(negocio.paidUntil.getTime() - 30 * DIA)
 
-      if (!masReciente) {
+      // Si lo que queda de plazo (después de descontar los 30 días de ESTE
+      // pago) todavía no venció, el negocio sigue vigente por lo que ya
+      // había pagado antes — sin importar si el contracargo cae sobre el
+      // pago más reciente o uno viejo. Antes se decidía la suspensión solo
+      // por "¿hay otro pago más nuevo?": un negocio con dos meses ya
+      // aprobados (60 días) al que le revierten el segundo pago quedaba con
+      // paidUntilCorregido a 30 días en el futuro (todavía vigente) pero se
+      // suspendía de todas formas, porque no había ningún pago "más nuevo"
+      // que ese — sin ver que el saldo restante seguía cubriendo el acceso.
+      if (paidUntilCorregido.getTime() > Date.now()) {
+        await tx.business.updateMany({
+          where: { id: pago.businessId, status: 'ACTIVE' },
+          data: { paidUntil: paidUntilCorregido },
+        })
+      } else {
         await tx.business.updateMany({
           where: { id: pago.businessId, status: 'ACTIVE' },
           // Marcada como automática (no manual): un pago nuevo que sí se
           // apruebe después puede reactivar el negocio por su cuenta —
           // ver el guard en aplicarPagoAprobado.
           data: { status: 'SUSPENDED', suspendedByChargeback: true, paidUntil: paidUntilCorregido },
-        })
-      } else if (paidUntilCorregido) {
-        // El negocio sigue activo por el pago más nuevo.
-        await tx.business.updateMany({
-          where: { id: pago.businessId, status: 'ACTIVE' },
-          data: { paidUntil: paidUntilCorregido },
         })
       }
     }

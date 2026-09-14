@@ -119,7 +119,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // no empezó y esperará este lock).
       const [freshItems, freshReturns] = await Promise.all([
         tx.saleItem.findMany({ where: { saleId: sale.id } }),
-        tx.saleReturn.findMany({ where: { saleId: sale.id }, select: { totalRefund: true } }),
+        tx.saleReturn.findMany({ where: { saleId: sale.id }, select: { totalRefund: true, cashMovementId: true } }),
       ])
 
       // Valor ya devuelto en devoluciones previas: se suma el totalRefund
@@ -164,6 +164,55 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // el efectivo tiene que salir de un cajón DISTINTO al de la venta
       // original (turno ya cerrado, u otro cajero anulando desde su propio
       // turno).
+      //
+      // Pero esa exclusión asume que TODO el efectivo de la venta sigue "sin
+      // devolver" — si ya hubo una o más devoluciones parciales en efectivo
+      // ANTES de anular (mismo turno, todavía abierto), esos gastos de
+      // "Devolución" siguen ahí Y la exclusión resta el total completo de la
+      // venta: el efectivo ya devuelto se restaría dos veces. Se revierte con
+      // un ingreso de ajuste por exactamente lo que ya se había devuelto EN
+      // ESE MISMO turno (no en otro turno de otro cajero, que llevó su propio
+      // efectivo y no depende de esta exclusión).
+      const returnCashMovementIds = freshReturns.map((r) => r.cashMovementId).filter((id): id is string => !!id)
+      if (returnCashMovementIds.length) {
+        const sesionOriginal = await tx.cashSession.findUnique({
+          where: { id: sale.cashSessionId },
+          select: { id: true, status: true },
+        })
+        if (sesionOriginal?.status === 'OPEN') {
+          // Lock consultivo por turno: mismo patrón que el resto de rutas de
+          // caja (serializa contra un cierre concurrente de ESTE turno).
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${sesionOriginal.id}))`
+          const vigente = await tx.cashSession.findUnique({
+            where: { id: sesionOriginal.id },
+            select: { status: true },
+          })
+          if (vigente?.status === 'OPEN') {
+            const devueltoEnEseTurno = await tx.cashMovement.aggregate({
+              where: { id: { in: returnCashMovementIds }, cashSessionId: sesionOriginal.id },
+              _sum: { amount: true },
+            })
+            const monto = Number(devueltoEnEseTurno._sum.amount ?? 0)
+            if (monto > 0) {
+              await tx.cashMovement.create({
+                data: {
+                  type: CashMovementType.INCOME,
+                  amount: monto,
+                  description: 'Ajuste por anulación',
+                  comment: `${sale.folio} · reversa devolución previa de este turno`,
+                  cashSessionId: sesionOriginal.id,
+                  createdById: user.id,
+                },
+              })
+            }
+          }
+        }
+      }
+
+      // Remanente en efectivo que TODAVÍA no se había devuelto: sale del
+      // cajón actual del usuario que anula. Si ese cajón es el mismo turno
+      // (original, todavía abierto) de la venta, la exclusión de arriba ya lo
+      // cubre entero — no hace falta gasto propio.
       if (cashRefund > 0 && !isCredit) {
         const cashSession = await findOpenCashSession(tx, sale.branchId, user.id)
         if (!cashSession) {

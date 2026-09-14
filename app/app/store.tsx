@@ -805,9 +805,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (syncAliveRef.current) toast(msg)
         }, enviadas > 0 ? 2800 : 0)
       }
-      await refreshAll()
+      // NO refreshAll(): reemplaza products con la respuesta cruda del
+      // servidor, perdiendo el ajuste local de stock que refreshProducts()
+      // reaplica para lo que TODAVÍA sigue en cola (si esta pasada solo
+      // sincronizó una parte y el resto quedó pendiente por un 5xx). Cada
+      // refresco puntual sí sabe reaplicar lo que falta.
+      await Promise.all([refreshProducts(), refreshSales(), refreshCash(), refreshCustomers(), refreshAdmin()])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productoDeCola, toast, refreshAll])
+  }, [productoDeCola, toast, refreshProducts, refreshSales, refreshCash, refreshCustomers, refreshAdmin])
 
   useEffect(() => {
     registerServiceWorker()
