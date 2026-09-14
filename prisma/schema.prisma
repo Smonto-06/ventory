@@ -388,6 +388,10 @@ model InventoryMovement {
 
   createdAt DateTime @default(now())
 
+  /// Ver comentario en Sale.clientOpId — misma protección para la cola
+  /// offline (solo se usa en traslados de inventario sin conexión).
+  clientOpId String? @unique
+
   @@index([inventoryId, createdAt])
   @@map("inventory_movements")
 }

@@ -504,7 +504,7 @@ export const api = {
   // Inventario
   adjustInventory: (adjustments: Array<{ productId: string; quantity: number }>) =>
     post<{ adjusted: number }>('/api/inventory/adjust', { adjustments }),
-  transferInventory: (data: { productId: string; quantity: number; direction: 'in' | 'out' }) =>
+  transferInventory: (data: { productId: string; quantity: number; direction: 'in' | 'out'; branchId?: string; clientOpId?: string }) =>
     post<{ before: number; after: number }>('/api/inventory/transfer', data),
 
   // Esperas

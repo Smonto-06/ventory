@@ -594,8 +594,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshCustomers = useCallback(async () => {
-    const r = await api.customers()
-    patch({ customers: r.customers.map((c) => ({ ...c, balance: Number(c.balance) })) })
+    const [r, queued] = await Promise.all([api.customers(), pendingOps()])
+    // Una venta a crédito encolada (sin conexión, o un 5xx transitorio) ya
+    // sumó su valor LOCALMENTE al saldo del cliente al confirmarse (ver
+    // finalizeCredito) — para que un segundo fiado al mismo cliente, antes
+    // de sincronizar, evalúe el aviso de límite de crédito contra el saldo
+    // correcto. El servidor, al no haber recibido todavía esa venta, sigue
+    // devolviendo el saldo de ANTES. Sin reaplicar aquí ese delta, este
+    // refresco (cada 30s, o al volver el foco/la conexión) pisaba el
+    // aumento local con el valor viejo del servidor.
+    const deltas = new Map<string, number>()
+    for (const q of queued) {
+      if (q.tipo !== 'venta') continue
+      const p = q.payload as { paymentMethod?: unknown; customerId?: unknown; creditAmount?: unknown }
+      if (p.paymentMethod !== 'CREDIT' || typeof p.customerId !== 'string') continue
+      const amount = Number(p.creditAmount) || 0
+      if (!amount) continue
+      deltas.set(p.customerId, (deltas.get(p.customerId) ?? 0) + amount)
+    }
+    patch({
+      customers: r.customers.map((c) => ({ ...c, balance: Number(c.balance) + (deltas.get(c.id) ?? 0) })),
+    })
   }, [patch])
 
   const refreshSales = useCallback(
@@ -1169,7 +1188,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Sin conexión: el fiado también se guarda y se envía solo después.
         // Mismo descuento local de stock que la venta de contado.
         if (debeEncolar(e)) {
-          await queueOp({ tipo: 'venta', payload, resumen: `${fmt(total)} a crédito` })
+          // creditAmount viaja SOLO en la copia encolada (el servidor la
+          // ignora, campo desconocido para el schema): es lo que
+          // refreshCustomers() usa para reaplicar el saldo pendiente de
+          // ESTA venta mientras siga en cola, igual que refreshProducts()
+          // ya hace con el stock — sin esto, una SEGUNDA venta a crédito al
+          // mismo cliente (antes de sincronizar la primera) evaluaba el
+          // aviso de límite de crédito contra el saldo viejo.
+          await queueOp({ tipo: 'venta', payload: { ...payload, creditAmount: total }, resumen: `${fmt(total)} a crédito` })
           setPendingCount((n) => n + 1)
           const salidas = new Map<string, number>()
           for (const i of cart) salidas.set(i.productId, (salidas.get(i.productId) ?? 0) + i.qty)
@@ -1177,6 +1203,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...prev,
             products: prev.products.map((p) =>
               salidas.has(p.id) ? { ...p, stock: p.stock - (salidas.get(p.id) ?? 0) } : p,
+            ),
+            customers: prev.customers.map((c) =>
+              c.id === customerId ? { ...c, balance: c.balance + total } : c,
             ),
           }))
           setModal(null)
@@ -1621,17 +1650,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const doTraslado = useCallback(
     async (productId: string, quantity: number, direction: 'in' | 'out') => {
       const p = data.products.find((x) => x.id === productId)
-      const payload = { productId, quantity, direction }
+      // Sin branchId explícito, el servidor asume la sucursal MÁS VIEJA del
+      // negocio (resolveBranchId) — un administrador trabajando en otra
+      // sucursal movía stock silenciosamente en la sucursal equivocada.
+      const sucursal = data.branches.find((b) => b.id === branchId) ?? data.branches[0]
+      const payload = { productId, quantity, direction, branchId: sucursal?.id, clientOpId: nuevoOpId() }
       try {
         await api.transferInventory(payload)
         setModal(null)
         toast(`Traslado registrado · ${quantity} × ${p?.name ?? ''}`)
-        await refreshProducts()
+        // Ya se registró en el servidor: un refresco fallido después no debe
+        // caer en el catch de abajo, que encolaría el traslado para
+        // reenviarlo y lo duplicaría (mismo motivo que en afterSale/
+        // saveNuevaCompra).
+        try {
+          await refreshProducts()
+        } catch {
+          // ignorado a propósito — ver comentario de arriba
+        }
       } catch (e) {
         // Sin conexión: el traslado se guarda y se envía solo al volver el
         // internet. El stock local se ajusta de una (mismo patrón que
         // finalizeSale/saveNuevaCompra) para que el resto de la app no siga
-        // mostrando el stock de antes del traslado.
+        // mostrando el stock de antes del traslado. clientOpId hace que un
+        // 5xx ambiguo (¿comitió o no?) no duplique el movimiento al
+        // reenviarse — el servidor devuelve el ya aplicado en vez de
+        // repetirlo.
         if (debeEncolar(e)) {
           await queueOp({ tipo: 'traslado', payload, resumen: `${quantity} × ${p?.name ?? ''}` })
           setPendingCount((n) => n + 1)
@@ -1642,12 +1686,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }))
           setModal(null)
           toast('Sin conexión — traslado guardado, se enviará al volver el internet')
+          // Ver mismo comentario en finalizeSale.
+          flush()
           return
         }
         onError(e)
       }
     },
-    [data.products, toast, refreshProducts, onError],
+    [data.products, data.branches, branchId, toast, refreshProducts, onError, flush],
   )
 
   // ─── Clientes ─────────────────────────────────────────────────────────────
