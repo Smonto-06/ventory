@@ -28,13 +28,24 @@ export async function GET(req: NextRequest) {
   })
 
   const shifts = sessions.map((s) => {
-    const salesTotal = s.sales.reduce((sum, v) => sum + Number(v.total), 0)
-    const incomes = s.movements
-      .filter((m) => m.type === 'INCOME')
-      .reduce((sum, m) => sum + Number(m.amount), 0)
-    const expenses = s.movements
-      .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
-      .reduce((sum, m) => sum + Number(m.amount), 0)
+    // Se prefiere el total CONGELADO al cerrar (salesTotal/incomesTotal/
+    // expensesTotal): si una venta de este turno se anula después del
+    // cierre, recalcular en vivo la "escondería" del total mientras el
+    // resto del resumen (esperado, contado, diferencia) sigue mostrando el
+    // valor de cuando se cerró — un cierre que ya no cuadra consigo mismo.
+    // Turnos cerrados ANTES de esta migración no tienen el valor congelado
+    // (columna null): se recalcula en vivo para esos, como antes.
+    const salesTotal = s.salesTotal !== null ? Number(s.salesTotal) : s.sales.reduce((sum, v) => sum + Number(v.total), 0)
+    const incomes =
+      s.incomesTotal !== null
+        ? Number(s.incomesTotal)
+        : s.movements.filter((m) => m.type === 'INCOME').reduce((sum, m) => sum + Number(m.amount), 0)
+    const expenses =
+      s.expensesTotal !== null
+        ? Number(s.expensesTotal)
+        : s.movements
+            .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
+            .reduce((sum, m) => sum + Number(m.amount), 0)
     return {
       id: s.id,
       branch: s.branch,

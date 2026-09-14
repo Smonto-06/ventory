@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { profitReport, expectedBalance, cashPortion } from '@/lib/pos'
+import { profitReport, expectedBalance, cashPortion, diaColombiano, diaColombianoDeFecha, netSaleValue, isSaleRefundExpense } from '@/lib/pos'
 import { isAdmin } from '@/lib/api-helpers'
 import type { SessionUser } from '@/lib/get-session'
 
@@ -25,9 +25,13 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const dateParam = searchParams.get('date')
 
-  const targetDate = dateParam ? new Date(`${dateParam}T00:00:00`) : new Date()
-  const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate())
-  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000)
+  // El día calendario es el de COLOMBIA (UTC-5), no el del runtime del
+  // servidor (Vercel corre en UTC): usar getFullYear/getMonth/getDate
+  // locales corría el corte del día 5 horas, y una venta después de las
+  // 7 p.m. Colombia aparecía en el reporte del día SIGUIENTE.
+  const { desde: startOfDay, hasta: endOfDay } = dateParam
+    ? diaColombianoDeFecha(dateParam)
+    : diaColombiano(new Date())
 
   const [sales, movements, activeCashSession] = await Promise.all([
     // Las ventas anuladas se excluyen de totales y reportes
@@ -49,7 +53,7 @@ export async function GET(req: NextRequest) {
         cashSession: { branch: { businessId } },
         createdAt: { gte: startOfDay, lt: endOfDay },
       },
-      select: { type: true, amount: true, cashSessionId: true },
+      select: { type: true, amount: true, cashSessionId: true, description: true },
     }),
 
     // La caja "activa" es la de ESTE usuario (caja por usuario): con más de
@@ -75,10 +79,11 @@ export async function GET(req: NextRequest) {
     0,
   )
 
-  // Ventas por hora (0-23)
+  // Ventas por hora (0-23), en hora Colombia (UTC-5) — getHours() usaría la
+  // hora local del servidor (UTC en Vercel), desfasando el gráfico 5 horas.
   const hourMap = new Map<number, { total: number; count: number }>()
   for (const sale of sales) {
-    const hour = sale.createdAt.getHours()
+    const hour = (sale.createdAt.getUTCHours() + 24 - 5) % 24
     const existing = hourMap.get(hour) ?? { total: 0, count: 0 }
     hourMap.set(hour, { total: existing.total + Number(sale.total), count: existing.count + 1 })
   }
@@ -124,18 +129,22 @@ export async function GET(req: NextRequest) {
 
   // Utilidad: ventas − costo de lo vendido, NETAS de lo devuelto — un
   // artículo que volvió no se vendió de verdad, ni su costo ni su ingreso
-  // deberían contar. returnedQty ya trae el acumulado de devoluciones de
-  // cada línea; se descuenta con la misma fórmula proporcional (redondeada
-  // una vez) que usa return/route.ts para que ambos cálculos coincidan.
+  // deberían contar. netSaleValue() además prorratea el descuento global de
+  // la venta (que SaleItem.total no incluye) — misma fórmula que
+  // return/route.ts, para que "ventas totales" (que sí usa Sale.total) y la
+  // utilidad reportada no se contradigan en una venta con descuento.
   const netSalesTotal = sales.reduce(
     (sum, s) =>
       sum +
-      s.items.reduce((a, i) => {
-        const qty = Number(i.quantity)
-        const kept = qty - Number(i.returnedQty)
-        if (kept <= 0) return a
-        return a + (kept >= qty ? Number(i.total) : Math.round((Number(i.total) * kept) / qty))
-      }, 0),
+      netSaleValue({
+        subtotal: Number(s.subtotal),
+        total: Number(s.total),
+        items: s.items.map((i) => ({
+          total: Number(i.total),
+          quantity: Number(i.quantity),
+          returnedQty: Number(i.returnedQty),
+        })),
+      }),
     0,
   )
   const costOfGoods = sales.reduce(
@@ -149,8 +158,12 @@ export async function GET(req: NextRequest) {
   )
   // Gastos operativos del día completo (todos los turnos/cajeros) — es lo
   // que resta en la utilidad neta del negocio, sin importar en qué cajón.
+  // Se excluyen "Devolución"/"Anulación de venta": esa venta ya está
+  // neteada o excluida arriba (netSalesTotal/costOfGoods), contar también
+  // su reembolso de caja como gasto la restaba dos veces (ver
+  // isSaleRefundExpense en lib/pos.ts).
   const expenses = movements
-    .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
+    .filter((m) => (m.type === 'EXPENSE' || m.type === 'WITHDRAWAL') && !isSaleRefundExpense(m.description))
     .reduce((sum, m) => sum + Number(m.amount), 0)
   const profit = profitReport(netSalesTotal, costOfGoods, expenses)
 

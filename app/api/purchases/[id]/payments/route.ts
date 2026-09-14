@@ -15,6 +15,22 @@ import { CashMovementType } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
+/** Otro abono concurrente ya redujo el saldo pendiente por debajo de lo que este abono necesitaba */
+class BalanceChangedError extends Error {
+  constructor() {
+    super('El saldo de la compra cambió por otra operación simultánea. Vuelve a intentar el abono.')
+    this.name = 'BalanceChangedError'
+  }
+}
+
+/** El turno se cerró justo mientras se registraba el gasto de este abono */
+class CashSessionClosedError extends Error {
+  constructor() {
+    super('La caja se cerró mientras se registraba el abono')
+    this.name = 'CashSessionClosedError'
+  }
+}
+
 const PaymentSchema = z.object({
   amount: z.number().positive('El abono debe ser mayor a 0'),
   method: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
@@ -60,6 +76,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const result = await db.$transaction(async (tx) => {
       let cashMovementId: string | null = null
       if (parsed.data.method === 'CASH' && cashSessionId) {
+        // Lock consultivo por turno — ver mismo comentario en
+        // customers/[id]/payments/route.ts.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSessionId}))`
+        const vigente = await tx.cashSession.findUnique({ where: { id: cashSessionId }, select: { status: true } })
+        if (vigente?.status !== 'OPEN') {
+          throw new CashSessionClosedError()
+        }
         const movement = await tx.cashMovement.create({
           data: {
             type: CashMovementType.EXPENSE,
@@ -83,9 +106,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         },
       })
 
-      const updated = await tx.purchase.update({
+      // Incremento CONDICIONADO al saldo vigente (no al leído antes de abrir
+      // la transacción): dos abonos casi simultáneos por el saldo completo
+      // no deben poder sobrepagar la compra ni duplicar el gasto de caja.
+      const inc = await tx.$queryRaw<Array<{ id: string }>>`
+        UPDATE "purchases"
+        SET "paidAmount" = "paidAmount" + ${amount}
+        WHERE "id" = ${purchase.id} AND "paidAmount" + ${amount} <= "total"
+        RETURNING "id"
+      `
+      if (inc.length === 0) {
+        throw new BalanceChangedError()
+      }
+      const updated = await tx.purchase.findUniqueOrThrow({
         where: { id: purchase.id },
-        data: { paidAmount: { increment: amount } },
         include: { supplier: { select: { id: true, name: true } } },
       })
 
@@ -122,6 +156,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       { status: 201 },
     )
   } catch (error) {
+    if (error instanceof BalanceChangedError) {
+      return badRequest(error.message)
+    }
+    if (error instanceof CashSessionClosedError) {
+      return badRequest('La caja se cerró mientras se registraba el abono. Vuelve a intentar con el turno actual.')
+    }
     return serverError('POST /api/purchases/[id]/payments', error)
   }
 }

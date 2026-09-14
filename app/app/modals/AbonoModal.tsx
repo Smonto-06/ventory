@@ -37,14 +37,26 @@ export default function AbonoModal() {
 
   const [method, setMethod] = useState<Metodo>('CASH')
   const [amount, setAmount] = useState(0)
+  const [enviando, setEnviando] = useState(false)
 
   if (!c) return null
 
-  const ok = amount > 0
+  const ok = amount > 0 && !enviando
+  // Registrar un abono por un monto MAYOR al saldo se recortaba en silencio
+  // antes de esto, sin un solo aviso: ni el campo se ponía en rojo, ni un
+  // toast, ni una marca en el campo — el excedente simplemente no quedaba
+  // registrado en ningún lado (la típica plata de más en caja al cierre que
+  // nadie sabe de dónde salió).
+  const excedente = amount > c.balance ? amount - c.balance : 0
 
-  const save = () => {
+  const save = async () => {
     if (!ok) return
-    s.payClient(c.id, Math.min(amount, c.balance), method)
+    setEnviando(true)
+    try {
+      await s.payClient(c.id, Math.min(amount, c.balance), method)
+    } finally {
+      setEnviando(false)
+    }
   }
 
   return (
@@ -95,6 +107,13 @@ export default function AbonoModal() {
           Saldo total
         </button>
       </div>
+      {excedente > 0 && (
+        <div style={{ marginTop: 10, background: '#FDECEC', border: '1px solid #F5C2C2', borderRadius: 11, padding: '10px 13px', fontSize: 12.5, color: '#9A2E2E', lineHeight: 1.5 }}>
+          El cliente solo debe {s.fmt(c.balance)}. Se registrará ese monto — los {s.fmt(excedente)}{' '}
+          de más no quedan guardados en ningún lado. Si de verdad recibiste ese dinero, devuelve el
+          excedente o corrige el monto.
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
         <button
@@ -104,7 +123,7 @@ export default function AbonoModal() {
           Cancelar
         </button>
         <button onClick={save} style={saveBtnStyle(ok)}>
-          Registrar abono
+          {enviando ? 'Guardando…' : 'Registrar abono'}
         </button>
       </div>
     </Modal>

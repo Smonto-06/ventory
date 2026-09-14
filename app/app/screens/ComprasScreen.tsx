@@ -27,10 +27,6 @@ function fmtDate(iso: string): string {
   })
 }
 
-function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true })
-}
-
 export default function ComprasScreen() {
   const s = useApp()
 
@@ -92,7 +88,7 @@ export default function ComprasScreen() {
                   En espera
                 </span>
                 <span style={{ flex: 1, minWidth: 160, fontSize: 13.5, color: '#7A5E1F', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                  {(h.supplierName || 'Sin proveedor') + ' · ' + n + (n === 1 ? ' prod' : ' prods') + ' · ' + s.fmt(h.total) + ' · ' + fmtTime(h.createdAt)}
+                  {(h.supplierName || 'Sin proveedor') + ' · ' + n + (n === 1 ? ' prod' : ' prods') + ' · ' + s.fmt(h.total) + ' · ' + fmtDate(h.createdAt)}
                 </span>
                 <button
                   onClick={() => s.resumePurchase(h.id)}

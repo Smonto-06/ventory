@@ -88,14 +88,17 @@ export async function POST(request: Request) {
       // PIN en el negocio: ahí el intento es inequívocamente suyo.
       if (users.length === 1) {
         const [u] = users
-        const failedAttempts = u.failedAttempts + 1
-        await db.user.update({
+        // {increment: 1}, no leer-y-sumar en memoria: mismo arreglo que en
+        // el login normal (lib/auth.ts) — una ráfaga de intentos paralelos
+        // podía pisarse entre sí y nunca activar el bloqueo.
+        const actualizado = await db.user.update({
           where: { id: u.id },
-          data: {
-            failedAttempts,
-            ...(failedAttempts >= MAX_FAILED_ATTEMPTS ? { lockedAt: new Date() } : {}),
-          },
+          data: { failedAttempts: { increment: 1 } },
+          select: { failedAttempts: true },
         })
+        if (actualizado.failedAttempts >= MAX_FAILED_ATTEMPTS) {
+          await db.user.update({ where: { id: u.id }, data: { lockedAt: new Date() } })
+        }
       }
 
       return NextResponse.json(
@@ -138,10 +141,18 @@ export async function POST(request: Request) {
       },
     })
 
-    // Set the session cookie
-    response.cookies.set('next-auth.session-token', token, {
+    // El nombre de la cookie tiene que calcularse EXACTAMENTE como lo hace
+    // NextAuth (next-auth/jwt: secureCookie = NEXTAUTH_URL empieza por
+    // https, o si no, si corre en Vercel) — si no coincide, el middleware y
+    // getServerSession/getCurrentUser (que sí usan el cálculo real de
+    // NextAuth) no encuentran esta cookie y el login por PIN queda roto en
+    // producción (HTTPS) aunque funcione perfecto en local (HTTP), donde
+    // los dos nombres coinciden por casualidad.
+    const secureCookie = process.env.NEXTAUTH_URL?.startsWith('https://') ?? !!process.env.VERCEL
+    const cookieName = secureCookie ? '__Secure-next-auth.session-token' : 'next-auth.session-token'
+    response.cookies.set(cookieName, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: secureCookie,
       sameSite: 'lax',
       path: '/',
       maxAge: 8 * 60 * 60,

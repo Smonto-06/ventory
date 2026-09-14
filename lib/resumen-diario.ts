@@ -5,7 +5,9 @@
 // distintas al entrar al sistema.
 
 import { db } from '@/lib/db'
-import { cashPortion, profitReport } from '@/lib/pos'
+import { cashPortion, profitReport, diaColombiano, netSaleValue, isSaleRefundExpense } from '@/lib/pos'
+
+export { diaColombiano }
 
 export interface ResumenDiario {
   businessId: string
@@ -15,23 +17,13 @@ export interface ResumenDiario {
   ventas: { total: number; transacciones: number; promedio: number }
   porMetodo: { efectivo: number; tarjeta: number; transferencia: number; credito: number }
   utilidad: { costo: number; gastos: number; neta: number }
-  caja: { apertura: number; ingresos: number; gastos: number; esperado: number; turnoAbierto: boolean }
+  caja: { apertura: number; ingresos: number; gastos: number; esperado: number; turnoAbierto: boolean; turnosAbiertos: number }
   cierres: Array<{ contado: number; esperado: number; diferencia: number; hora: string }>
   credito: { otorgado: number; abonado: number }
   compras: { total: number; cantidad: number }
   devoluciones: { total: number; cantidad: number }
   topProductos: Array<{ nombre: string; cantidad: number; total: number }>
   agotados: Array<{ nombre: string; stock: number; minimo: number; unidad: string | null }>
-}
-
-/** Inicio y fin del día en Colombia (UTC-5), expresados en UTC */
-export function diaColombiano(referencia: Date): { desde: Date; hasta: Date; etiqueta: Date } {
-  const OFFSET_MIN = 5 * 60
-  const local = new Date(referencia.getTime() - OFFSET_MIN * 60_000)
-  const inicioLocal = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
-  const desde = new Date(inicioLocal + OFFSET_MIN * 60_000)
-  const hasta = new Date(desde.getTime() + 86_400_000)
-  return { desde, hasta, etiqueta: new Date(inicioLocal) }
 }
 
 export async function construirResumen(businessId: string, referencia: Date): Promise<ResumenDiario | null> {
@@ -49,6 +41,7 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
       where: { branch: { businessId }, createdAt: enElDia, status: 'COMPLETED' },
       select: {
         total: true,
+        subtotal: true,
         paymentMethod: true,
         cashSessionId: true,
         payments: { select: { method: true, amount: true } },
@@ -56,7 +49,9 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
           select: {
             quantity: true,
             unitPrice: true,
+            total: true,
             costPrice: true,
+            returnedQty: true,
             product: { select: { name: true } },
           },
         },
@@ -76,10 +71,16 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
     }),
     db.cashMovement.findMany({
       where: { cashSession: { branch: { businessId } }, createdAt: enElDia },
-      select: { type: true, amount: true, cashSessionId: true },
+      select: { type: true, amount: true, cashSessionId: true, description: true },
     }),
     db.cashSession.findMany({
-      where: { branch: { businessId }, openedAt: enElDia },
+      // openedAt: enElDia trae los turnos (abiertos o cerrados) de HOY, pero
+      // por sí solo se le escapa el caso más común de "se quedó la caja
+      // abierta": un turno que un cajero abrió AYER (o antes) y nunca
+      // cerró — sigue OPEN cuando corre el cron, pero openedAt ya no cae en
+      // el día de hoy. El OR con status:'OPEN' lo incluye sin importar
+      // cuándo se abrió.
+      where: { branch: { businessId }, OR: [{ openedAt: enElDia }, { status: 'OPEN' }] },
       select: {
         id: true,
         status: true,
@@ -119,45 +120,94 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
     }
   }
 
-  // Costo snapshot de cada línea (SaleItem.costPrice), no el costo ACTUAL del
-  // producto: si el costo cambió el mismo día (p. ej. tras una compra), usar
-  // el valor en vivo desajusta esta utilidad frente a la que ya congelaron
-  // /api/reports/daily y /api/reports/range para el mismo día.
-  const costo = ventas.reduce(
-    (a, v) => a + v.items.reduce((b, i) => b + Number(i.quantity) * Number(i.costPrice ?? 0), 0),
+  // Neto de lo devuelto: un artículo que volvió no se vendió de verdad, ni su
+  // costo ni su ingreso deberían contar en la utilidad. costPrice es el costo
+  // guardado en la venta (no el costo actual del producto, que puede haber
+  // cambiado desde entonces). netSaleValue() además prorratea el descuento
+  // global de la venta (que SaleItem.total no incluye) — misma fórmula que
+  // usan reports/daily y reports/range para que las cifras coincidan.
+  const ventasNeto = ventas.reduce(
+    (a, v) =>
+      a +
+      netSaleValue({
+        subtotal: Number(v.subtotal),
+        total: Number(v.total),
+        items: v.items.map((i) => ({
+          total: Number(i.total),
+          quantity: Number(i.quantity),
+          returnedQty: Number(i.returnedQty),
+        })),
+      }),
     0,
   )
-  // Gastos operativos del día completo (todos los turnos) — es lo que resta
-  // en la utilidad neta del negocio, sin importar en qué cajón se registraron.
+  const costo = ventas.reduce(
+    (a, v) =>
+      a +
+      v.items.reduce((b, i) => {
+        const kept = Number(i.quantity) - Number(i.returnedQty)
+        return b + Number(i.costPrice ?? 0) * Math.max(0, kept)
+      }, 0),
+    0,
+  )
+  // Se excluyen "Devolución"/"Anulación de venta" de la utilidad: esa venta
+  // ya está neteada o excluida arriba (ventasNeto/costo), contar también su
+  // reembolso de caja como gasto restaba la misma plata dos veces (ver
+  // isSaleRefundExpense en lib/pos.ts). El total de "caja.gastos" (más abajo,
+  // para el esperado del cajón) sí sigue contando el movimiento completo.
   const gastos = movimientos
-    .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
+    .filter((m) => (m.type === 'EXPENSE' || m.type === 'WITHDRAWAL') && !isSaleRefundExpense(m.description))
     .reduce((a, m) => a + Number(m.amount), 0)
 
-  const abierta = sesiones.find((s) => s.status === 'OPEN')
-  const apertura = abierta ? Number(abierta.openingBalance) : 0
-  // El saldo esperado de "caja" sí es de UN cajón físico concreto: solo
-  // cuenta lo de ESE turno — no de todo el día: puede haber turnos ya
-  // cerrados antes (su efectivo ya se contó y se retiró al cerrar) u otros
-  // cajeros con turno propio abierto a la vez ("caja por usuario").
-  const movimientosTurno = abierta ? movimientos.filter((m) => m.cashSessionId === abierta.id) : []
+  // "Caja por usuario" (CLAUDE.md) permite varios cajeros con turno propio
+  // abierto AL MISMO TIEMPO: tomar solo uno con .find() (el primero que
+  // encontrara la consulta) le escondía al dueño el saldo esperado de los
+  // demás cajones abiertos esa noche. Se suman TODOS los turnos abiertos —
+  // no cuenta lo de turnos ya cerrados antes (su efectivo ya se contó y se
+  // retiró al cerrar).
+  const abiertas = sesiones.filter((s) => s.status === 'OPEN')
+  const apertura = abiertas.reduce((a, s) => a + Number(s.openingBalance), 0)
+  const idsAbiertas = abiertas.map((s) => s.id)
+
+  // El saldo esperado de un turno abierto es TODO lo que ha entrado desde que
+  // se abrió, no solo lo de hoy: un turno abierto desde ayer (ver comentario
+  // de `sesiones` arriba) tiene ventas y movimientos de ANTES de medianoche
+  // que siguen físicamente en el cajón. `ventas`/`movimientos` de arriba están
+  // acotados a `enElDia` para las métricas del día — para el esperado de caja
+  // se pide aparte, por sesión completa, sin ese filtro de fecha.
+  const [ventasTurno, movimientosTurno] = idsAbiertas.length
+    ? await Promise.all([
+        db.sale.findMany({
+          where: { cashSessionId: { in: idsAbiertas }, status: 'COMPLETED' },
+          select: {
+            total: true,
+            paymentMethod: true,
+            cashSessionId: true,
+            payments: { select: { method: true, amount: true } },
+          },
+        }),
+        db.cashMovement.findMany({
+          where: { cashSessionId: { in: idsAbiertas } },
+          select: { type: true, amount: true, cashSessionId: true },
+        }),
+      ])
+    : [[], []]
   const ingresosTurno = movimientosTurno
     .filter((m) => m.type === 'INCOME')
     .reduce((a, m) => a + Number(m.amount), 0)
   const gastosTurno = movimientosTurno
     .filter((m) => m.type === 'EXPENSE' || m.type === 'WITHDRAWAL')
     .reduce((a, m) => a + Number(m.amount), 0)
-  const efectivoTurno = abierta
-    ? ventas
-        .filter((v) => v.cashSessionId === abierta.id)
-        .reduce((a, v) => a + cashPortion({ ...v, total: Number(v.total) }), 0)
-    : 0
+  const efectivoTurno = ventasTurno.reduce((a, v) => a + cashPortion({ ...v, total: Number(v.total) }), 0)
 
   const productos = new Map<string, { cantidad: number; total: number }>()
   for (const v of ventas) {
     for (const i of v.items) {
       const e = productos.get(i.product.name) ?? { cantidad: 0, total: 0 }
       e.cantidad += Number(i.quantity)
-      e.total += Number(i.quantity) * Number(i.unitPrice)
+      // i.total (no quantity×unitPrice): ya incluye el descuento por
+      // artículo, igual que "top productos" en reports/daily — si no, el
+      // correo mostraba más ingreso del que esa línea realmente dejó.
+      e.total += Number(i.total)
       productos.set(i.product.name, e)
     }
   }
@@ -183,13 +233,14 @@ export async function construirResumen(businessId: string, referencia: Date): Pr
       promedio: ventas.length ? Math.round(total / ventas.length) : 0,
     },
     porMetodo,
-    utilidad: { costo, gastos, neta: profitReport(total, costo, gastos).net },
+    utilidad: { costo, gastos, neta: profitReport(ventasNeto, costo, gastos).net },
     caja: {
       apertura,
       ingresos: ingresosTurno,
       gastos: gastosTurno,
       esperado: apertura + efectivoTurno + ingresosTurno - gastosTurno,
-      turnoAbierto: !!abierta,
+      turnoAbierto: abiertas.length > 0,
+      turnosAbiertos: abiertas.length,
     },
     cierres: sesiones
       .filter((s) => s.status !== 'OPEN' && s.closedAt)

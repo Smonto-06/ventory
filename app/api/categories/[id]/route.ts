@@ -32,7 +32,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (!category) return NextResponse.json({ error: 'Categoría no encontrada' }, { status: 404 })
 
     const dup = await db.category.findFirst({
-      where: { businessId: user.businessId, name: parsed.data.name, NOT: { id: params.id } },
+      where: {
+        businessId: user.businessId,
+        name: { equals: parsed.data.name, mode: 'insensitive' },
+        NOT: { id: params.id },
+      },
     })
     if (dup) return badRequest('Ya existe una categoría con ese nombre')
 

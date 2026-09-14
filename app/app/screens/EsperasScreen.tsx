@@ -4,6 +4,18 @@
 
 import { useApp } from '../store'
 
+// Antes solo mostraba la hora (sin fecha): una espera de ayer se veía igual
+// que una de hace un minuto.
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleString('es-CO', {
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+
 export default function EsperasScreen() {
   const s = useApp()
 
@@ -30,8 +42,7 @@ export default function EsperasScreen() {
                     <div style={{ flex: 1, minWidth: 150 }}>
                       <div style={{ fontWeight: 700, fontSize: 15 }}>{clientName}</div>
                       <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
-                        {h.itemCount} {h.itemCount === 1 ? 'art.' : 'arts.'} ·{' '}
-                        {new Date(h.createdAt).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                        {h.itemCount} {h.itemCount === 1 ? 'art.' : 'arts.'} · {fmtDate(h.createdAt)}
                       </div>
                     </div>
                     <div style={{ fontWeight: 800, fontSize: 17, fontVariantNumeric: 'tabular-nums' }}>{s.fmt(h.total)}</div>
