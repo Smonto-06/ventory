@@ -12,6 +12,11 @@ import { diaColombiano } from '@/lib/pos'
 
 const GUIA_KEY = 'ventory-guia-oculta'
 
+// "Últimas ventas" siempre son de HOY (viene de todaySales), así que solo se
+// necesita la hora — antes no se mostraba ninguna referencia de tiempo.
+const fmtHora = (iso: string) =>
+  new Date(iso).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true })
+
 // Guía de primeros pasos: aparece hasta que el negocio completa los 4 pasos
 // (o hasta que el usuario la oculta). El progreso sale de los datos reales.
 function GuiaInicio() {
@@ -484,6 +489,7 @@ export default function PanelScreen() {
                 <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {v.customer?.name?.trim() || 'Sin cliente'}
                 </span>
+                <span style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{fmtHora(v.createdAt)}</span>
                 <span style={{ fontWeight: 700, fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{s.fmt(v.total)}</span>
               </button>
             ))

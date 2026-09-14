@@ -8,7 +8,7 @@ import { CSSProperties, useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { api } from '../api'
 import { chipStyle, methodLabel, methodTint } from '../ui'
-import { saldoChipStyle, PayIcon } from './ClientesScreen'
+import { saldoChipStyle, saldoLabel, PayIcon } from './ClientesScreen'
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: 'Efectivo',
@@ -98,9 +98,7 @@ export default function ClientePerfilScreen() {
             {c?.phone ?? '—'} · CC {c?.document ?? '—'}
           </div>
         </div>
-        <span style={saldoChipStyle(!!c && c.balance > 0)}>
-          {c && c.balance > 0 ? `Saldo: ${s.fmt(c.balance)}` : 'Sin saldo'}
-        </span>
+        <span style={saldoChipStyle(c?.balance ?? 0)}>{saldoLabel(c?.balance ?? 0, s.fmt)}</span>
         {c && c.balance > 0 && (
           <button
             onClick={() => {
@@ -142,7 +140,7 @@ export default function ClientePerfilScreen() {
             onClick={() =>
               s.askConfirm({
                 title: '¿Eliminar este cliente?',
-                label: `${c.name}${c.balance > 0 ? ' · Saldo pendiente: ' + s.fmt(c.balance) : ' · Sin saldo pendiente'}`,
+                label: `${c.name} · ${saldoLabel(c.balance, s.fmt)}`,
                 btnLabel: 'Eliminar',
                 onConfirm: () => s.deleteCliente(c.id),
               })

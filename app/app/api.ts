@@ -113,6 +113,8 @@ export interface Customer {
   document: string | null
   address?: string | null
   balance: number
+  /** Tope informativo de crédito (avisa, no bloquea); null = sin límite */
+  creditLimit?: number | null
 }
 
 export interface Supplier {

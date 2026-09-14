@@ -601,6 +601,9 @@ model Customer {
   address  String?
   notes    String?
   balance  Decimal @default(0) @db.Decimal(12, 2)
+  /// Tope informativo de crédito: nulo = sin límite. Solo se usa para avisar
+  /// al cajero antes de fiar más (no bloquea la venta).
+  creditLimit Decimal? @db.Decimal(12, 2)
 
   businessId String
   business   Business @relation(fields: [businessId], references: [id])

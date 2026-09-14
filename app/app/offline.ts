@@ -18,7 +18,7 @@ const DB_NAME = 'ventory-offline'
 const STORE = 'operaciones-pendientes'
 const LEGACY = 'ventas-pendientes'
 
-export type TipoOperacion = 'venta' | 'compra' | 'producto'
+export type TipoOperacion = 'venta' | 'compra' | 'producto' | 'traslado'
 
 export interface PendingOp {
   id?: number
@@ -114,22 +114,28 @@ async function removeOp(id: number): Promise<void> {
   db.close()
 }
 
-/** Reemplaza ids provisionales en items[].productId; null si no había ninguno */
+/** Reemplaza ids provisionales en items[].productId o en el productId de raíz (traslado); null si no había ninguno */
 function remapPayload(
   payload: Record<string, unknown>,
   mapa: Record<string, string>,
 ): Record<string, unknown> | null {
+  let resultado: Record<string, unknown> | null = null
+  if (typeof payload.productId === 'string' && mapa[payload.productId]) {
+    resultado = { ...payload, productId: mapa[payload.productId] }
+  }
   const items = payload.items
-  if (!Array.isArray(items)) return null
-  let cambio = false
-  const nuevos = items.map((it: { productId?: unknown }) => {
-    if (typeof it?.productId === 'string' && mapa[it.productId]) {
-      cambio = true
-      return { ...it, productId: mapa[it.productId] }
-    }
-    return it
-  })
-  return cambio ? { ...payload, items: nuevos } : null
+  if (Array.isArray(items)) {
+    let cambio = false
+    const nuevos = items.map((it: { productId?: unknown }) => {
+      if (typeof it?.productId === 'string' && mapa[it.productId]) {
+        cambio = true
+        return { ...it, productId: mapa[it.productId] }
+      }
+      return it
+    })
+    if (cambio) resultado = { ...(resultado ?? payload), items: nuevos }
+  }
+  return resultado
 }
 
 /** Corrige en disco las operaciones encoladas que mencionan el id provisional */
@@ -156,6 +162,7 @@ const ENDPOINT: Record<TipoOperacion, string> = {
   venta: '/api/sales',
   compra: '/api/purchases',
   producto: '/api/products',
+  traslado: '/api/inventory/transfer',
 }
 
 export interface SyncResult {
@@ -200,7 +207,7 @@ export async function syncPendingOps(): Promise<SyncResult> {
   const locks = (navigator as unknown as {
     locks?: { request: <T>(name: string, fn: () => Promise<T>) => Promise<T> }
   }).locks
-  const vacio: SyncResult = { sent: { venta: 0, compra: 0, producto: 0 }, rejected: [], remapped: {}, rejectedTempIds: [] }
+  const vacio: SyncResult = { sent: { venta: 0, compra: 0, producto: 0, traslado: 0 }, rejected: [], remapped: {}, rejectedTempIds: [] }
   if (locks) {
     return locks.request(SYNC_LOCK, () => syncPendingOpsInner())
   }
@@ -215,7 +222,7 @@ export async function syncPendingOps(): Promise<SyncResult> {
 
 async function syncPendingOpsInner(): Promise<SyncResult> {
   const rows = await pendingOps()
-  const result: SyncResult = { sent: { venta: 0, compra: 0, producto: 0 }, rejected: [], remapped: {}, rejectedTempIds: [] }
+  const result: SyncResult = { sent: { venta: 0, compra: 0, producto: 0, traslado: 0 }, rejected: [], remapped: {}, rejectedTempIds: [] }
   for (const row of rows) {
     if (row.id === undefined) continue
     const payload = remapPayload(row.payload, result.remapped) ?? row.payload

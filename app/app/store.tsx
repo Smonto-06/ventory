@@ -566,6 +566,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // fin se sincronizara.
     const deltas = new Map<string, number>()
     for (const q of queued) {
+      if (q.tipo === 'traslado') {
+        const t = q.payload as { productId?: unknown; quantity?: unknown; direction?: unknown }
+        if (typeof t.productId !== 'string') continue
+        const qty = Number(t.quantity) || 0
+        const signo = t.direction === 'out' ? -1 : 1
+        deltas.set(t.productId, (deltas.get(t.productId) ?? 0) + signo * qty)
+        continue
+      }
       if (q.tipo !== 'venta' && q.tipo !== 'compra') continue
       const items = (q.payload as { items?: unknown }).items
       if (!Array.isArray(items)) continue
@@ -754,7 +762,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       if (!queued.length || !navigator.onLine) return
       const r = await syncPendingOps()
-      const enviadas = r.sent.venta + r.sent.compra + r.sent.producto
+      const enviadas = r.sent.venta + r.sent.compra + r.sent.producto + r.sent.traslado
       if (!syncAliveRef.current || (enviadas === 0 && r.rejected.length === 0)) return
       // Un carrito a medio armar puede tener un producto creado sin conexión:
       // se cambia al id real para que la venta no salga con el provisional.
@@ -780,13 +788,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           r.sent.venta ? `${r.sent.venta} venta${r.sent.venta === 1 ? '' : 's'}` : '',
           r.sent.compra ? `${r.sent.compra} compra${r.sent.compra === 1 ? '' : 's'}` : '',
           r.sent.producto ? `${r.sent.producto} producto${r.sent.producto === 1 ? '' : 's'}` : '',
+          r.sent.traslado ? `${r.sent.traslado} traslado${r.sent.traslado === 1 ? '' : 's'}` : '',
         ].filter(Boolean)
         toast(`Se sincronizó lo guardado sin conexión: ${partes.join(' · ')}`)
       }
       // Una operación encolada que el servidor rechaza no puede desaparecer en
       // silencio: el usuario tiene que enterarse para rehacerla.
       if (r.rejected.length > 0) {
-        const nombres = { venta: 'venta', compra: 'compra', producto: 'producto' } as const
+        const nombres = { venta: 'venta', compra: 'compra', producto: 'producto', traslado: 'traslado' } as const
         const x = r.rejected[0]
         const msg =
           r.rejected.length === 1
@@ -1606,13 +1615,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const doTraslado = useCallback(
     async (productId: string, quantity: number, direction: 'in' | 'out') => {
+      const p = data.products.find((x) => x.id === productId)
+      const payload = { productId, quantity, direction }
       try {
-        const p = data.products.find((x) => x.id === productId)
-        await api.transferInventory({ productId, quantity, direction })
+        await api.transferInventory(payload)
         setModal(null)
         toast(`Traslado registrado · ${quantity} × ${p?.name ?? ''}`)
         await refreshProducts()
       } catch (e) {
+        // Sin conexión: el traslado se guarda y se envía solo al volver el
+        // internet. El stock local se ajusta de una (mismo patrón que
+        // finalizeSale/saveNuevaCompra) para que el resto de la app no siga
+        // mostrando el stock de antes del traslado.
+        if (debeEncolar(e)) {
+          await queueOp({ tipo: 'traslado', payload, resumen: `${quantity} × ${p?.name ?? ''}` })
+          setPendingCount((n) => n + 1)
+          const delta = direction === 'out' ? -quantity : quantity
+          setData((prev) => ({
+            ...prev,
+            products: prev.products.map((pr) => (pr.id === productId ? { ...pr, stock: pr.stock + delta } : pr)),
+          }))
+          setModal(null)
+          toast('Sin conexión — traslado guardado, se enviará al volver el internet')
+          return
+        }
         onError(e)
       }
     },
