@@ -112,8 +112,6 @@ export async function POST(request: Request) {
       catByName.set(key, cat.id)
     }
 
-    let created = 0
-
     // Filtrado + deduplicación (también dentro del propio archivo)
     const toCreate: typeof rows = []
     for (const r of rows) {
@@ -159,37 +157,65 @@ export async function POST(request: Request) {
       supplierIdByName.set(sn.toLowerCase(), id)
     }
 
-    // Creación por lotes (transacciones de 100 para no exceder timeouts)
-    for (let i = 0; i < toCreate.length; i += 100) {
-      const chunk = toCreate.slice(i, i + 100)
-      await db.$transaction(async (tx) => {
-        for (const r of chunk) {
-          const supplierName = r.supplier?.trim() || null
-          await tx.product.create({
-            data: {
-              name: r.name.trim(),
-              sku: r.sku?.trim().toUpperCase() || null,
-              barcode: r.barcode?.trim() || null,
-              price: r.price,
-              cost: r.cost ?? null,
-              unitOfMeasure: r.unit === 'kg' ? 'kg' : null,
-              supplier: supplierName,
-              supplierId: supplierName ? supplierIdByName.get(supplierName.toLowerCase()) ?? null : null,
-              taxRate: 0,
-              businessId,
-              categoryId: r.category?.trim() ? catByName.get(r.category.trim().toLowerCase()) ?? null : null,
-              inventory: {
-                // lowStock explícito: sin esto, una fila importada ya por
-                // debajo de su propio mínimo nacía con lowStock=false (el
-                // default de la columna) y no aparecía en la alerta de bajo
-                // stock hasta que una venta/compra/ajuste la recalculara.
-                create: { branchId: branch.id, quantity: r.stock, minStock: r.minStock, lowStock: r.stock <= r.minStock },
+    // Creación por lotes (transacciones de 100 para no exceder timeouts).
+    // `created` solo suma un lote DESPUÉS de que su transacción comitió —
+    // si un lote falla a mitad de camino, Prisma lo revierte entero, así
+    // que contar fila por fila (dentro del callback) sobrestimaba lo
+    // realmente guardado en ese lote fallido.
+    let created = 0
+    try {
+      for (let i = 0; i < toCreate.length; i += 100) {
+        const chunk = toCreate.slice(i, i + 100)
+        await db.$transaction(async (tx) => {
+          for (const r of chunk) {
+            const supplierName = r.supplier?.trim() || null
+            await tx.product.create({
+              data: {
+                name: r.name.trim(),
+                sku: r.sku?.trim().toUpperCase() || null,
+                barcode: r.barcode?.trim() || null,
+                price: r.price,
+                cost: r.cost ?? null,
+                unitOfMeasure: r.unit === 'kg' ? 'kg' : null,
+                supplier: supplierName,
+                supplierId: supplierName ? supplierIdByName.get(supplierName.toLowerCase()) ?? null : null,
+                taxRate: 0,
+                businessId,
+                categoryId: r.category?.trim() ? catByName.get(r.category.trim().toLowerCase()) ?? null : null,
+                inventory: {
+                  // lowStock explícito: sin esto, una fila importada ya por
+                  // debajo de su propio mínimo nacía con lowStock=false (el
+                  // default de la columna) y no aparecía en la alerta de bajo
+                  // stock hasta que una venta/compra/ajuste la recalculara.
+                  create: { branchId: branch.id, quantity: r.stock, minStock: r.minStock, lowStock: r.stock <= r.minStock },
+                },
               },
-            },
-          })
-          created++
-        }
-      })
+            })
+          }
+        })
+        created += chunk.length
+      }
+    } catch (batchError) {
+      // Un lote posterior puede fallar (error transitorio de BD, etc.) sin
+      // que eso invalide los lotes YA comitidos — perder ese progreso en un
+      // 500 genérico obligaba a adivinar cuánto se alcanzó a crear antes de
+      // reintentar con el archivo completo (y volver a chocar con los
+      // duplicados que sí quedaron creados).
+      console.error('POST /api/products/import (lote) error:', batchError)
+      db.auditLog
+        .create({
+          data: { action: 'IMPORT', entity: 'Product', entityId: businessId, payload: { created, skipped: skipped.length, incompleto: true }, userId: session.user.id },
+        })
+        .catch(() => {})
+      return NextResponse.json(
+        {
+          error:
+            created > 0
+              ? `Se crearon ${created} de ${toCreate.length} productos antes de un error — vuelve a intentar con el mismo archivo (los ya creados se omitirán por duplicado).`
+              : 'Error interno del servidor',
+        },
+        { status: 500 },
+      )
     }
 
     db.auditLog

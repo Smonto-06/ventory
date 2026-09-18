@@ -55,6 +55,8 @@ export interface Product {
   category: { id: string; name: string } | null
   stock: number
   minStock: number
+  /** true si CUALQUIER sucursal está en/bajo su propio mínimo — no derivar de stock/minStock (esos son sumas/máximos entre sucursales, no confiables para esta decisión) */
+  lowStock: boolean
   /** true = producto agrupador: no se vende, solo reúne a sus variantes */
   hasVariants?: boolean
   /** id del producto agrupador, si esto es una variante */
@@ -207,6 +209,7 @@ export interface CashSessionSummary {
 
 export interface Shift {
   id: string
+  branch: { id: string; name: string }
   openedAt: string
   closedAt: string
   openingBalance: number

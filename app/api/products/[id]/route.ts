@@ -125,6 +125,21 @@ export async function PATCH(request: Request, { params }: Params) {
       }
     }
 
+    // Reactivar un producto suele mandar solo status:'ACTIVE' sin tocar
+    // categoryId (mismo caso que ya cubre el barcode arriba) — si la
+    // categoría que ya tenía también quedó archivada mientras tanto, el
+    // producto reactivado queda invisible en cualquier filtro por categoría
+    // (el selector solo lista activas). Se reactiva esa categoría junto con
+    // el producto en vez de dejarla huérfana o bloquear la reactivación.
+    let categoriaArchivadaAReactivar: string | null = null
+    if (categoryId === undefined && (rest.status ?? existing.status) === 'ACTIVE' && existing.categoryId) {
+      const cat = await db.category.findFirst({
+        where: { id: existing.categoryId, businessId: session.user.businessId },
+        select: { id: true, isActive: true },
+      })
+      if (cat && !cat.isActive) categoriaArchivadaAReactivar = cat.id
+    }
+
     // El código de barras no tiene constraint único en BD — sin este chequeo
     // se podían dejar dos productos activos con el mismo barcode (ver mismo
     // comentario en POST /api/products). El barcode EFECTIVO (no solo el que
@@ -175,6 +190,10 @@ export async function PATCH(request: Request, { params }: Params) {
           : rest.supplier?.trim()
             ? await resolveOrCreateSupplier(tx, session.user.businessId, rest.supplier.trim())
             : null
+
+      if (categoriaArchivadaAReactivar) {
+        await tx.category.update({ where: { id: categoriaArchivadaAReactivar }, data: { isActive: true } })
+      }
 
       return tx.product.update({
         where: { id: params.id },

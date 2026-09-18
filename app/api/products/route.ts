@@ -104,7 +104,7 @@ export async function GET(request: Request) {
       include: {
         category: { select: { id: true, name: true } },
         inventory: {
-          select: { quantity: true, minStock: true, branchId: true },
+          select: { quantity: true, minStock: true, branchId: true, lowStock: true },
         },
       },
     })
@@ -131,6 +131,13 @@ export async function GET(request: Request) {
       variantOptions: p.variantOptions ?? null,
       stock: inv.reduce((sum, i) => sum + Number(i.quantity), 0),
       minStock: inv.length > 0 ? Math.max(...inv.map((i) => Number(i.minStock))) : 0,
+      // Bandera real de "stock bajo", NO derivada de sumar cantidades y tomar
+      // el máximo de los mínimos entre sucursales (stock/minStock de arriba
+      // son solo para MOSTRAR un número): con varias sucursales, esa cuenta
+      // podía esconder una sucursal en cero detrás de otra con sobra. Se usa
+      // el flag por fila (Inventory.lowStock, que moveStock() mantiene al
+      // día en cada movimiento) y basta con que UNA sucursal esté baja.
+      lowStock: inv.some((i) => i.lowStock),
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
       }

@@ -106,8 +106,27 @@ export default function NuevaCompraScreen() {
 
   const addItem = () => {
     if (!edit || edit.qty <= 0 || edit.unit <= 0) return
-    s.setNcItems([...s.ncItems.filter((i) => i.productId !== edit.productId), edit])
-    setEdit(null)
+    const item = edit
+    const confirmar = () => {
+      s.setNcItems([...s.ncItems.filter((i) => i.productId !== item.productId), item])
+      setEdit(null)
+    }
+    // Aviso (no bloqueo) si el costo digitado se aleja mucho del costo
+    // actual del producto — riesgo típico de tecleo (ej. un cero de más)
+    // que de otra forma queda fijo como el costo oficial sin que nadie lo
+    // note hasta que ya afectó el margen de muchas ventas.
+    const costoActual = s.products.find((p) => p.id === item.productId)?.cost ?? 0
+    const sospechoso = costoActual > 0 && (item.unit > costoActual * 3 || item.unit < costoActual / 3)
+    if (sospechoso) {
+      s.askConfirm({
+        title: 'Costo muy distinto al actual',
+        label: `El costo actual de "${item.name}" es ${s.fmt(costoActual)}. Vas a registrar ${s.fmt(item.unit)} — revisa que no sea un error de tecleo antes de continuar.`,
+        btnLabel: 'Sí, usar este costo',
+        onConfirm: confirmar,
+      })
+      return
+    }
+    confirmar()
   }
 
   const payBtns: Array<['contado' | 'transferencia' | 'credito', string]> = [

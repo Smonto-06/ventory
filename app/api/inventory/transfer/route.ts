@@ -108,6 +108,14 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ product: product.name, ...result })
   } catch (error) {
+    // Rechazo de negocio (stock insuficiente para la salida), no un error
+    // real del servidor — mismo trato que ya recibe en POST /api/sales.
+    if (error instanceof InsufficientStockError) {
+      return NextResponse.json(
+        { error: error.message, code: 'INSUFFICIENT_STOCK', available: error.available, required: error.required },
+        { status: 422 },
+      )
+    }
     // Dos solicitudes casi simultáneas con el mismo clientOpId (reintento en
     // vuelo + el original llegando tarde): la que pierde la carrera del
     // constraint único no debe duplicar el movimiento de stock, sino

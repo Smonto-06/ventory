@@ -12,6 +12,40 @@ const pinLoginSchema = z.object({
 const LOCK_DURATION_MS = 15 * 60 * 1000
 const MAX_FAILED_ATTEMPTS = 5
 
+// El PIN se compara contra TODOS los usuarios del negocio a la vez, así que
+// el bloqueo por cuenta (más abajo) solo aplica cuando hay un único cajero
+// con PIN — con dos o más, ningún intento fallido queda registrado en
+// ninguna cuenta y no hay freno de fuerza bruta. Este límite por IP cubre
+// ese hueco (y suma una segunda capa incluso cuando sí hay un solo cajero).
+const MAX_INTENTOS_IP = 10
+const VENTANA_IP_MS = 15 * 60 * 1000
+const intentosPorIp = new Map<string, number[]>()
+function limiteIpExcedido(clave: string): boolean {
+  const ahora = Date.now()
+  const previos = (intentosPorIp.get(clave) ?? []).filter((t) => ahora - t < VENTANA_IP_MS)
+  if (previos.length >= MAX_INTENTOS_IP) {
+    intentosPorIp.set(clave, previos)
+    return true
+  }
+  previos.push(ahora)
+  intentosPorIp.set(clave, previos)
+  return false
+}
+
+// El PRIMER valor de X-Forwarded-For lo pone quien hace la petición (se
+// puede falsificar mandando un header propio); el ÚLTIMO es el que agrega
+// el proxy de Vercel a partir de la conexión TCP real, y ese no se puede
+// falsificar — usar el primero dejaba rotar la IP "vista" en cada intento
+// y saltarse el límite de arriba sin ningún esfuerzo.
+function clientIp(request: Request): string {
+  const xff = request.headers.get('x-forwarded-for')
+  if (xff) {
+    const partes = xff.split(',').map((s) => s.trim()).filter(Boolean)
+    if (partes.length) return partes[partes.length - 1]
+  }
+  return request.headers.get('x-real-ip') || 'desconocida'
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
@@ -25,6 +59,14 @@ export async function POST(request: Request) {
     }
 
     const { businessSlug, pin } = parsed.data
+
+    const ip = clientIp(request)
+    if (limiteIpExcedido(`${ip}:${businessSlug}`)) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' },
+        { status: 429 },
+      )
+    }
 
     const business = await db.business.findUnique({
       where: { slug: businessSlug },

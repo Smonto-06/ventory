@@ -290,9 +290,9 @@ export interface AppStore extends AppData {
   renameBranch: (id: string, name: string) => Promise<void>
   cierrePreview: CierrePreview | null
   doCierre: (declared: number) => void
-  confirmApertura: (nextApertura: number) => Promise<void>
+  confirmApertura: (nextApertura: number, notes?: string) => Promise<void>
   /** Cierre del día: cierra el turno SIN abrir uno nuevo */
-  confirmCierreFinal: () => Promise<void>
+  confirmCierreFinal: (notes?: string) => Promise<void>
   lastCierre: CierreResult | null
   addMov: (type: 'INCOME' | 'EXPENSE', description: string, comment: string, amount: number) => Promise<void>
 
@@ -762,6 +762,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       category: null,
       stock: Number(p.initialStock ?? 0),
       minStock: Number(p.minStock ?? 0),
+      lowStock: Number(p.initialStock ?? 0) <= Number(p.minStock ?? 0),
     }
   }, [])
 
@@ -1453,12 +1454,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         } else {
           toast(`Devolución registrada · ${fmt(r.return.totalRefund)}`)
         }
-        await Promise.all([refreshProducts(), refreshSales(), refreshCash()])
+        // refreshCustomers: una devolución de venta a crédito baja el saldo
+        // del cliente en el servidor (return/route.ts) — sin este refresco
+        // la lista/perfil/modal de crédito seguían mostrando el saldo viejo
+        // hasta el refresco silencioso de 30s. Mismo refresco que ya hace
+        // doVoid.
+        await Promise.all([refreshProducts(), refreshSales(), refreshCash(), refreshCustomers()])
       } catch (e) {
         onError(e)
       }
     },
-    [fmt, toast, refreshProducts, refreshSales, refreshCash, onError],
+    [fmt, toast, refreshProducts, refreshSales, refreshCash, refreshCustomers, onError],
   )
 
   const doVoid = useCallback(
@@ -1540,6 +1546,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 category: prev.categories.find((c) => c.id === payload.categoryId) ?? null,
                 stock: Number(payload.initialStock ?? 0),
                 minStock: Number(payload.minStock ?? 0),
+                lowStock: Number(payload.initialStock ?? 0) <= Number(payload.minStock ?? 0),
               },
             ],
           }))
@@ -1805,6 +1812,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!ncProv.trim() || !ncItems.length) return
     const methodMap = { contado: 'CASH', transferencia: 'TRANSFER', credito: 'CREDIT' } as const
     const valor = ncItems.reduce((a, i) => a + (i.total || i.qty * i.unit), 0)
+    // Sin branchId explícito, el servidor asume la sucursal MÁS VIEJA del
+    // negocio (resolveBranchId) — la mercancía entraba siempre ahí en vez de
+    // a la sucursal donde se estaba comprando (mismo bug que ya se corrigió
+    // en doTraslado).
+    const sucursal = data.branches.find((b) => b.id === branchId) ?? data.branches[0]
     const payload = {
       supplierName: ncProv.trim(),
       method: methodMap[ncMethod],
@@ -1816,6 +1828,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         totalCost: i.total || i.qty * i.unit,
         newPrice: i.price || undefined,
       })),
+      branchId: sucursal?.id,
       clientOpId: nuevoOpId(),
     }
     try {
@@ -1854,7 +1867,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       onError(e)
     }
-  }, [ncProv, ncItems, ncMethod, ncAbono, clearNc, toast, fmt, refreshPurchases, refreshProducts, refreshSuppliers, refreshCash, onError, flush])
+  }, [ncProv, ncItems, ncMethod, ncAbono, data.branches, branchId, clearNc, toast, fmt, refreshPurchases, refreshProducts, refreshSuppliers, refreshCash, onError, flush])
 
   const holdPurchase = useCallback(async () => {
     if (!ncItems.length) return
@@ -2023,7 +2036,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const closeShift = useCallback(
-    async (openNext: boolean, nextOpeningAmount?: number) => {
+    async (openNext: boolean, nextOpeningAmount?: number, notes?: string) => {
       const session = data.cash.session
       if (!session || !cierrePreview) return
       // El cierre compara lo contado contra lo que el SERVIDOR tiene registrado;
@@ -2035,7 +2048,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const r = await api.closeCashSession(session.id, {
           closingBalance: cierrePreview.contado,
-          closingNotes: cierrePreview.diff !== 0 ? `Diferencia de cierre: ${cierrePreview.diff}` : undefined,
+          // La explicación del cajero (si la diferencia la exige, el modal ya
+          // bloqueó el envío sin texto) manda sobre el texto automático —
+          // este solo queda como respaldo informativo para diferencias
+          // chicas que no la exigen.
+          closingNotes: notes?.trim() || (cierrePreview.diff !== 0 ? `Diferencia de cierre: ${cierrePreview.diff}` : undefined),
           openNext,
           nextOpeningAmount,
         })
@@ -2068,11 +2085,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const confirmApertura = useCallback(
-    (nextApertura: number) => closeShift(true, nextApertura),
+    (nextApertura: number, notes?: string) => closeShift(true, nextApertura, notes),
     [closeShift],
   )
 
-  const confirmCierreFinal = useCallback(() => closeShift(false), [closeShift])
+  const confirmCierreFinal = useCallback((notes?: string) => closeShift(false, undefined, notes), [closeShift])
 
   const addMov = useCallback(
     async (type: 'INCOME' | 'EXPENSE', description: string, comment: string, amount: number) => {

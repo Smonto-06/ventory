@@ -328,10 +328,10 @@ export default function PanelScreen() {
     padding: 20,
   }
 
-  // Productos por agotarse: en o por debajo del mínimo (o agotados)
-  const lowStock = s.products.filter(
-    (p) => p.status === 'ACTIVE' && (p.stock <= 0 || (p.minStock > 0 && p.stock <= p.minStock)),
-  )
+  // Productos por agotarse: p.lowStock ya viene calculado por sucursal
+  // desde el servidor — no se recalcula sumando stock entre sucursales (esa
+  // suma podía esconder una sucursal en cero detrás de otra con sobra).
+  const lowStock = s.products.filter((p) => p.status === 'ACTIVE' && p.lowStock)
 
   return (
     <div style={{ padding: 'clamp(16px,3vw,30px)', display: 'flex', flexDirection: 'column', gap: 18, animation: 'vfade .3s ease' }}>

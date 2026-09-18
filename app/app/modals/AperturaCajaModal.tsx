@@ -10,14 +10,15 @@ import CampoNumerico from './CampoNumerico'
 
 export default function AperturaCajaModal() {
   const s = useApp()
-  const [amount, setAmount] = useState<number>(() => {
-    const lastShift = s.shifts[0]
-    return lastShift ? lastShift.countedBalance : Number(s.settings?.defaultOpeningAmount ?? 0)
-  })
+  // s.shifts trae el historial de TODAS las sucursales del negocio — sin
+  // filtrar por la que se está abriendo, la sugerencia podía mostrar (y
+  // prellenar) el cierre de una sucursal distinta.
+  const lastShift = s.shifts.find((sh) => sh.branch.id === s.activeBranchId)
+  const [amount, setAmount] = useState<number>(() =>
+    lastShift ? lastShift.countedBalance : Number(s.settings?.defaultOpeningAmount ?? 0),
+  )
   const [counts, setCounts] = useState<Record<number, number>>({})
   const [calcOpen, setCalcOpen] = useState(false)
-
-  const lastShift = s.shifts[0]
   const counted = Object.entries(counts).reduce((a, [v, c]) => a + Number(v) * (c || 0), 0)
 
   const setCount = (denom: number, raw: string) => {
