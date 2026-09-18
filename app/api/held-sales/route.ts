@@ -6,12 +6,19 @@ import { unauthorized, badRequest, serverError, serialize } from '@/lib/api-help
 
 export const dynamic = 'force-dynamic'
 
-// Ventas en espera: el carrito se serializa tal cual para reanudarlo después
+const MAX_ESPERAS = 50
+
+// Ventas en espera: el carrito se serializa tal cual para reanudarlo después.
+// Límite de tamaño en el propio payload (no solo el largo del carrito real,
+// que nunca sería tan grande, sino cualquier cuerpo arbitrario que alguien
+// mande directo a la API).
 const CreateHeldSaleSchema = z.object({
   customerName: z.string().trim().optional(),
   itemCount: z.number().int().nonnegative().default(0),
   total: z.number().nonnegative().default(0),
-  payload: z.record(z.string(), z.unknown()),
+  payload: z.record(z.string(), z.unknown()).refine((p) => JSON.stringify(p).length <= 200_000, {
+    message: 'La venta en espera es demasiado grande',
+  }),
 })
 
 export async function GET(req: NextRequest) {
@@ -40,6 +47,11 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return badRequest(parsed.error.issues[0].message)
 
   try {
+    const enEspera = await db.heldSale.count({ where: { businessId: user.businessId } })
+    if (enEspera >= MAX_ESPERAS) {
+      return badRequest(`Hay demasiadas ventas en espera (${MAX_ESPERAS}). Retoma o descarta alguna antes de poner otra.`)
+    }
+
     const heldSale = await db.heldSale.create({
       data: {
         customerName: parsed.data.customerName || null,

@@ -13,19 +13,40 @@ const cardStyle: CSSProperties = {
   boxShadow: '0 1px 2px rgba(15,23,42,.04),0 8px 24px -18px rgba(15,23,42,.16)',
 }
 
-export function saldoChipStyle(hasSaldo: boolean): CSSProperties {
-  return hasSaldo
-    ? {
-        background: '#FDF4E5',
-        color: '#B4740A',
-        fontWeight: 800,
-        fontSize: 13,
-        padding: '6px 12px',
-        borderRadius: 9,
-        fontVariantNumeric: 'tabular-nums',
-        whiteSpace: 'nowrap',
-      }
-    : { color: 'var(--muted)', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }
+// Saldo negativo = el NEGOCIO le debe al cliente (pagó de más) — antes se
+// mostraba igual que "Sin saldo" y esa plata a favor quedaba invisible.
+export function saldoChipStyle(balance: number): CSSProperties {
+  if (balance > 0) {
+    return {
+      background: '#FDF4E5',
+      color: '#B4740A',
+      fontWeight: 800,
+      fontSize: 13,
+      padding: '6px 12px',
+      borderRadius: 9,
+      fontVariantNumeric: 'tabular-nums',
+      whiteSpace: 'nowrap',
+    }
+  }
+  if (balance < 0) {
+    return {
+      background: '#E7F7EF',
+      color: '#1E8E5A',
+      fontWeight: 800,
+      fontSize: 13,
+      padding: '6px 12px',
+      borderRadius: 9,
+      fontVariantNumeric: 'tabular-nums',
+      whiteSpace: 'nowrap',
+    }
+  }
+  return { color: 'var(--muted)', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }
+}
+
+export function saldoLabel(balance: number, fmt: (n: number) => string): string {
+  if (balance > 0) return `Saldo: ${fmt(balance)}`
+  if (balance < 0) return `A favor: ${fmt(Math.abs(balance))}`
+  return 'Sin saldo'
 }
 
 export function PayIcon({ size = 19 }: { size?: number }) {
@@ -130,9 +151,7 @@ export default function ClientesScreen() {
                   </div>
                 </div>
               </button>
-              <span style={saldoChipStyle(c.balance > 0)}>
-                {c.balance > 0 ? `Saldo: ${s.fmt(c.balance)}` : 'Sin saldo'}
-              </span>
+              <span style={saldoChipStyle(c.balance)}>{saldoLabel(c.balance, s.fmt)}</span>
               {c.balance > 0 && (
                 <button
                   onClick={() => {

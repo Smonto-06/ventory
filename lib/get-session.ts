@@ -10,6 +10,7 @@ export interface SessionUser {
   businessId: string
   businessName: string
   businessSlug: string
+  branchId?: string
 }
 
 export async function getCurrentUser(req: NextRequest): Promise<SessionUser | null> {
@@ -19,18 +20,23 @@ export async function getCurrentUser(req: NextRequest): Promise<SessionUser | nu
   // Igual que en el callback session() de NextAuth: un usuario desactivado a
   // mitad de turno pierde acceso de una, no solo en su próximo login — si no,
   // "Desactivar" (Ajustes → Usuarios) no corta nada mientras la cookie viva.
+  // Se refrescan también role/branchId desde la BD: quedaban "congelados" en
+  // el JWT firmado al iniciar sesión, así que degradar a un ADMIN a CAJERO
+  // (o reasignarlo de sucursal) no le quitaba esos permisos en las rutas de
+  // API hasta que la cookie de 8h expirara por su cuenta.
   const activo = await db.user.findUnique({
     where: { id: token.id as string },
-    select: { isActive: true },
+    select: { isActive: true, role: true, branchId: true },
   })
   if (!activo?.isActive) return null
 
   return {
     id: token.id as string,
     email: token.email as string,
-    role: token.role as UserRole,
+    role: activo.role,
     businessId: token.businessId as string,
     businessName: token.businessName as string,
     businessSlug: token.businessSlug as string,
+    branchId: activo.branchId ?? undefined,
   }
 }

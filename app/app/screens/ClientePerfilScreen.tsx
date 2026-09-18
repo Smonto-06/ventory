@@ -4,10 +4,17 @@
 // (docs/prototype/Ventory POS.dc.html): cabecera con avatar, saldo y acciones,
 // más historial de compras del cliente.
 
-import { CSSProperties } from 'react'
+import { CSSProperties, useEffect, useState } from 'react'
 import { useApp } from '../store'
+import { api } from '../api'
 import { chipStyle, methodLabel, methodTint } from '../ui'
-import { saldoChipStyle, PayIcon } from './ClientesScreen'
+import { saldoChipStyle, saldoLabel, PayIcon } from './ClientesScreen'
+
+const METHOD_LABELS: Record<string, string> = {
+  CASH: 'Efectivo',
+  CARD: 'Tarjeta',
+  TRANSFER: 'Transferencia',
+}
 
 const cardStyle: CSSProperties = {
   background: 'var(--surface)',
@@ -20,10 +27,18 @@ function fechaStr(iso: string): string {
   return new Date(iso).toLocaleString('es-CO', {
     day: 'numeric',
     month: 'numeric',
+    year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
   })
+}
+
+interface AbonoRow {
+  id: string
+  amount: number
+  method: string
+  createdAt: string
 }
 
 export default function ClientePerfilScreen() {
@@ -31,6 +46,23 @@ export default function ClientePerfilScreen() {
   const c = s.customers.find((x) => x.id === s.perfilId)
 
   const ventas = c ? s.sales.filter((v) => v.customer?.id === c.id) : []
+
+  const [abonos, setAbonos] = useState<AbonoRow[]>([])
+  const clienteId = c?.id
+  useEffect(() => {
+    let vivo = true
+    setAbonos([])
+    if (!clienteId) return
+    api
+      .customerDetail(clienteId)
+      .then((r) => {
+        if (vivo) setAbonos(r.customer.payments)
+      })
+      .catch(() => {})
+    return () => {
+      vivo = false
+    }
+  }, [clienteId])
 
   return (
     <div style={{ padding: 'clamp(16px,3vw,28px)', display: 'flex', flexDirection: 'column', gap: 16, animation: 'vfade .3s ease' }}>
@@ -66,9 +98,7 @@ export default function ClientePerfilScreen() {
             {c?.phone ?? '—'} · CC {c?.document ?? '—'}
           </div>
         </div>
-        <span style={saldoChipStyle(!!c && c.balance > 0)}>
-          {c && c.balance > 0 ? `Saldo: ${s.fmt(c.balance)}` : 'Sin saldo'}
-        </span>
+        <span style={saldoChipStyle(c?.balance ?? 0)}>{saldoLabel(c?.balance ?? 0, s.fmt)}</span>
         {c && c.balance > 0 && (
           <button
             onClick={() => {
@@ -110,7 +140,7 @@ export default function ClientePerfilScreen() {
             onClick={() =>
               s.askConfirm({
                 title: '¿Eliminar este cliente?',
-                label: `${c.name}${c.balance > 0 ? ' · Saldo pendiente: ' + s.fmt(c.balance) : ' · Sin saldo pendiente'}`,
+                label: `${c.name} · ${saldoLabel(c.balance, s.fmt)}`,
                 btnLabel: 'Eliminar',
                 onConfirm: () => s.deleteCliente(c.id),
               })
@@ -190,6 +220,28 @@ export default function ClientePerfilScreen() {
         ) : (
           <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>
             Sin compras registradas en esta sesión.
+          </div>
+        )}
+      </div>
+
+      <div style={{ ...cardStyle, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', fontWeight: 800, fontSize: 15, borderBottom: '1px solid #EEF2F7' }}>Abonos del cliente</div>
+        {abonos.length > 0 ? (
+          abonos.map((p) => (
+            <div
+              key={p.id}
+              style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}
+            >
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{fechaStr(p.createdAt)}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{METHOD_LABELS[p.method] ?? p.method}</div>
+              </div>
+              <div style={{ fontWeight: 800, fontSize: 15, fontVariantNumeric: 'tabular-nums', color: '#6366F1' }}>{s.fmt(p.amount)}</div>
+            </div>
+          ))
+        ) : (
+          <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>
+            Sin abonos registrados.
           </div>
         )}
       </div>

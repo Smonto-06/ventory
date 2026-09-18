@@ -55,6 +55,8 @@ export interface Product {
   category: { id: string; name: string } | null
   stock: number
   minStock: number
+  /** true si CUALQUIER sucursal está en/bajo su propio mínimo — no derivar de stock/minStock (esos son sumas/máximos entre sucursales, no confiables para esta decisión) */
+  lowStock: boolean
   /** true = producto agrupador: no se vende, solo reúne a sus variantes */
   hasVariants?: boolean
   /** id del producto agrupador, si esto es una variante */
@@ -113,6 +115,8 @@ export interface Customer {
   document: string | null
   address?: string | null
   balance: number
+  /** Tope informativo de crédito (avisa, no bloquea); null = sin límite */
+  creditLimit?: number | null
 }
 
 export interface Supplier {
@@ -148,9 +152,10 @@ export interface Sale {
   changeGiven: number
   notes: string | null
   createdAt: string
+  voidedAt: string | null
   items: SaleItem[]
   payments: Array<{ id: string; method: string; amount: number }>
-  returns?: Array<{ id: string; type: string; totalRefund: number }>
+  returns?: Array<{ id: string; type: string; totalRefund: number; createdAt: string }>
   cashier: { id: string; name: string | null }
   branch?: { id: string; name: string } | null
   customer: { id: string; name: string } | null
@@ -204,6 +209,7 @@ export interface CashSessionSummary {
 
 export interface Shift {
   id: string
+  branch: { id: string; name: string }
   openedAt: string
   closedAt: string
   openingBalance: number
@@ -277,6 +283,14 @@ export interface AppUser {
   hasPin?: boolean
 }
 
+/** Ventana de horario de trabajo asignada a un empleado (ver Ajustes → Horarios) */
+export interface Schedule {
+  id: string
+  userId: string
+  startsAt: string
+  endsAt: string
+}
+
 export interface PlanInfo {
   status: 'TRIAL' | 'ACTIVE' | 'SUSPENDED'
   trialEndsAt: string | null
@@ -284,6 +298,9 @@ export interface PlanInfo {
   paidUntil: string | null
   daysLeft: number | null
   blocked: boolean
+  /** Solo relevante con status SUSPENDED: true = contracargo/reembolso automático (se
+   *  puede pagar un reemplazo para reactivar); false = decisión manual del super admin. */
+  suspendedByChargeback: boolean
 }
 
 // Conteo + total de una actividad del turno (para el recibo de cierre)
@@ -302,6 +319,8 @@ export interface Settings {
   defaultOpeningAmount: number
   allowNegativeStock: boolean
   barcodeEnabled: boolean
+  /** si está prendido, un empleado que no sea ADMIN solo entra dentro de un horario asignado */
+  scheduleLoginEnforced?: boolean
   // Datos impresos en la factura de venta
   taxId?: string | null
   phone?: string | null
@@ -498,7 +517,7 @@ export const api = {
   // Inventario
   adjustInventory: (adjustments: Array<{ productId: string; quantity: number }>) =>
     post<{ adjusted: number }>('/api/inventory/adjust', { adjustments }),
-  transferInventory: (data: { productId: string; quantity: number; direction: 'in' | 'out' }) =>
+  transferInventory: (data: { productId: string; quantity: number; direction: 'in' | 'out'; branchId?: string; clientOpId?: string }) =>
     post<{ before: number; after: number }>('/api/inventory/transfer', data),
 
   // Esperas
@@ -519,6 +538,12 @@ export const api = {
   /** pin=null quita el PIN de acceso rápido */
   setUserPin: (userId: string, pin: string | null) =>
     post<{ message: string }>('/api/users/set-pin', { userId, pin }),
+
+  // Horarios de trabajo (Ajustes → Usuarios → Horarios)
+  schedules: (userId: string) => get<{ schedules: Schedule[] }>(`/api/schedules?userId=${userId}`),
+  createSchedule: (data: { userId: string; date: string; startTime: string; endTime: string }) =>
+    post<{ schedule: Schedule }>('/api/schedules', data),
+  deleteSchedule: (id: string) => del<{ ok: boolean }>(`/api/schedules/${id}`),
 
   settings: () => get<{ settings: Settings }>('/api/settings'),
   // Pago del plan por Wompi

@@ -31,6 +31,20 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
+  // Mismo chequeo que al crear (POST /api/branches): sin esto se podían
+  // terminar con dos sucursales de igual nombre, confundiendo selectores y
+  // reportes.
+  if (parsed.data.name !== undefined) {
+    const exists = await db.branch.findFirst({
+      where: {
+        businessId: session.user.businessId,
+        name: { equals: parsed.data.name, mode: 'insensitive' },
+        NOT: { id: params.id },
+      },
+    })
+    if (exists) return NextResponse.json({ error: 'Ya existe una sucursal con ese nombre' }, { status: 400 })
+  }
+
   if (parsed.data.isActive === false) {
     const activeCount = await db.branch.count({
       where: { businessId: session.user.businessId, isActive: true },

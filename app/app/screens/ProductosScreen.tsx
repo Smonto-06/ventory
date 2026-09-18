@@ -98,10 +98,13 @@ export default function ProductosScreen() {
   }
 
   const bajoStock = (p: (typeof s.products)[number]) => {
+    if (p.status !== 'ACTIVE') return false
+    // p.lowStock (y v.lowStock por variante) ya viene calculado por
+    // sucursal desde el servidor (Inventory.lowStock) — no se recalcula
+    // aquí sumando stock/minStock entre sucursales: esa suma podía esconder
+    // una sucursal en cero detrás de otra con sobra.
     const g = resumen(p)
-    const stock = g ? g.stock : p.stock
-    const minStock = g ? g.minStock : p.minStock
-    return p.status === 'ACTIVE' && (stock <= 0 || (minStock > 0 && stock <= minStock))
+    return g ? g.variantes.some((v) => v.lowStock) : p.lowStock
   }
 
   const rows = s.products

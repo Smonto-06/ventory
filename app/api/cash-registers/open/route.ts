@@ -4,6 +4,14 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
 import { requireActiveBusiness } from '@/lib/plan'
 
+/** Otra apertura concurrente del mismo usuario ya ganó la carrera */
+class AlreadyOpenError extends Error {
+  constructor(public sessionId: string) {
+    super('Ya tienes una caja abierta en este turno')
+    this.name = 'AlreadyOpenError'
+  }
+}
+
 const openSchema = z.object({
   branchId: z.string().min(1, 'Sucursal requerida'),
   terminal: z.string().optional(),
@@ -42,31 +50,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Sucursal no encontrada' }, { status: 404 })
   }
 
-  const existing = await db.cashSession.findFirst({
-    where: { openedById: user.id, status: 'OPEN' },
-    select: { id: true },
-  })
-  if (existing) {
-    return NextResponse.json(
-      { error: 'Ya tienes una caja abierta en este turno', sessionId: existing.id },
-      { status: 409 },
-    )
+  try {
+    const session = await db.$transaction(async (tx) => {
+      // Lock consultivo de Postgres, propio de esta transacción, con clave
+      // derivada del usuario: serializa dos aperturas casi simultáneas del
+      // MISMO usuario (doble clic) sin necesitar un índice único nuevo en
+      // el schema — la segunda espera a que la primera termine (commit o
+      // rollback) antes de hacer su propio chequeo, así que ya no puede
+      // colarse viendo "sin caja abierta" con datos obsoletos.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))`
+
+      const existing = await tx.cashSession.findFirst({
+        where: { openedById: user.id, status: 'OPEN' },
+        select: { id: true },
+      })
+      if (existing) {
+        throw new AlreadyOpenError(existing.id)
+      }
+
+      return tx.cashSession.create({
+        data: {
+          branchId,
+          openedById: user.id,
+          terminal,
+          openingBalance,
+          notes,
+          status: 'OPEN',
+        },
+        include: {
+          branch: { select: { id: true, name: true } },
+          openedBy: { select: { id: true, name: true, role: true } },
+        },
+      })
+    })
+
+    return NextResponse.json({ session }, { status: 201 })
+  } catch (error) {
+    if (error instanceof AlreadyOpenError) {
+      return NextResponse.json(
+        { error: error.message, sessionId: error.sessionId },
+        { status: 409 },
+      )
+    }
+    throw error
   }
-
-  const session = await db.cashSession.create({
-    data: {
-      branchId,
-      openedById: user.id,
-      terminal,
-      openingBalance,
-      notes,
-      status: 'OPEN',
-    },
-    include: {
-      branch: { select: { id: true, name: true } },
-      openedBy: { select: { id: true, name: true, role: true } },
-    },
-  })
-
-  return NextResponse.json({ session }, { status: 201 })
 }

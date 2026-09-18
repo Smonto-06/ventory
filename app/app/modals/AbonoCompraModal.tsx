@@ -25,12 +25,23 @@ export default function AbonoCompraModal() {
   const s = useApp()
   const [method, setMethod] = useState<MethodKey>('efectivo')
   const [amount, setAmount] = useState(0)
+  const [enviando, setEnviando] = useState(false)
 
   const compra = s.purchases.find((c) => c.id === s.abonoCompraId)
   if (!compra) return null
 
   const saldo = compra.balance
-  const ok = amount > 0
+  const ok = amount > 0 && !enviando
+
+  const pagar = async () => {
+    if (!ok) return
+    setEnviando(true)
+    try {
+      await s.payCompra(compra.id, amount, API_METHOD[method])
+    } finally {
+      setEnviando(false)
+    }
+  }
 
   return (
     <Modal onClose={s.closeModal} maxWidth={420}>
@@ -92,13 +103,8 @@ export default function AbonoCompraModal() {
         >
           Cancelar
         </button>
-        <button
-          onClick={() => {
-            if (ok) s.payCompra(compra.id, amount, API_METHOD[method])
-          }}
-          style={saveBtnStyle(ok)}
-        >
-          Registrar pago
+        <button onClick={pagar} style={saveBtnStyle(ok)}>
+          {enviando ? 'Guardando…' : 'Registrar pago'}
         </button>
       </div>
     </Modal>

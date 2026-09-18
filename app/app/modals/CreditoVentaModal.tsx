@@ -11,6 +11,19 @@ import { Modal, ModalTitle } from '../ui'
 export default function CreditoVentaModal() {
   const s = useApp()
   const [query, setQuery] = useState('')
+  // Evita que un doble toque sobre el mismo cliente mande la venta a
+  // crédito dos veces antes de que la primera cierre el modal.
+  const [enviando, setEnviando] = useState(false)
+
+  const elegir = async (customerId: string) => {
+    if (enviando) return
+    setEnviando(true)
+    try {
+      await s.finalizeCredito(customerId)
+    } finally {
+      setEnviando(false)
+    }
+  }
 
   const q = query.trim().toLowerCase()
   const rows = s.customers.filter(
@@ -20,6 +33,16 @@ export default function CreditoVentaModal() {
       (c.phone ?? '').includes(q) ||
       (c.document ?? '').includes(q),
   )
+
+  // Saldo negativo = el NEGOCIO le debe al cliente (pagó de más) — antes se
+  // mostraba igual que "Sin saldo" y esa plata a favor quedaba invisible.
+  const saldoLabel = (c: (typeof rows)[number]) =>
+    c.balance > 0 ? `Saldo: ${s.fmt(c.balance)}` : c.balance < 0 ? `A favor: ${s.fmt(Math.abs(c.balance))}` : 'Sin saldo'
+
+  // Aviso (no bloqueo) si fiar esta venta deja al cliente por encima de su
+  // límite de crédito configurado — el cajero decide si sigue o no.
+  const superaLimite = (c: (typeof rows)[number]) =>
+    c.creditLimit != null && c.balance + s.total > c.creditLimit
 
   return (
     <Modal onClose={s.closeModal} maxWidth={440}>
@@ -53,49 +76,69 @@ export default function CreditoVentaModal() {
 
       <div style={{ marginTop: 10, border: '1px solid #EEF2F7', borderRadius: 12, overflowY: 'auto', maxHeight: 260 }}>
         {rows.length > 0 ? (
-          rows.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => s.finalizeCredito(c.id)}
-              className="v-hover-bg"
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '12px 14px',
-                borderBottom: '1px solid var(--bg)',
-                cursor: 'pointer',
-                textAlign: 'left',
-                background: 'var(--surface)',
-              }}
-            >
-              <div
+          rows.map((c) => {
+            const sobreLimite = superaLimite(c)
+            return (
+              <button
+                key={c.id}
+                onClick={() => elegir(c.id)}
+                disabled={enviando}
+                className="v-hover-bg"
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: '50%',
-                  background: '#EEF0FE',
-                  color: '#4338CA',
+                  width: '100%',
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 800,
-                  fontSize: 14,
-                  flex: 'none',
+                  flexDirection: 'column',
+                  gap: 4,
+                  padding: '12px 14px',
+                  borderBottom: '1px solid var(--bg)',
+                  cursor: enviando ? 'default' : 'pointer',
+                  textAlign: 'left',
+                  background: sobreLimite ? '#FDECEC' : 'var(--surface)',
+                  opacity: enviando ? 0.6 : 1,
                 }}
               >
-                {c.name[0]}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{c.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>{c.phone ?? '—'}</div>
-              </div>
-              <span style={{ fontSize: 12, color: '#B4740A', fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                {c.balance > 0 ? `Saldo: ${s.fmt(c.balance)}` : 'Sin saldo'}
-              </span>
-            </button>
-          ))
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: '50%',
+                      background: '#EEF0FE',
+                      color: '#4338CA',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: 14,
+                      flex: 'none',
+                    }}
+                  >
+                    {c.name[0]}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{c.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>{c.phone ?? '—'}</div>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: c.balance < 0 ? '#1E8E5A' : '#B4740A',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {saldoLabel(c)}
+                  </span>
+                </div>
+                {sobreLimite && (
+                  <div style={{ fontSize: 11.5, color: '#C9433B', fontWeight: 700, paddingLeft: 48 }}>
+                    ⚠ Con esta venta supera su límite de crédito ({s.fmt(c.creditLimit!)})
+                  </div>
+                )}
+              </button>
+            )
+          })
         ) : (
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13.5 }}>
             Sin resultados. Crea el cliente en la sección Clientes.

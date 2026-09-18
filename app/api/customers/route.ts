@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { isAdmin } from '@/lib/api-helpers'
+import type { SessionUser } from '@/lib/get-session'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +29,7 @@ export async function GET(req: NextRequest) {
           }
         : {}),
     },
-    select: { id: true, name: true, phone: true, email: true, document: true, address: true, balance: true },
+    select: { id: true, name: true, phone: true, email: true, document: true, address: true, balance: true, creditLimit: true },
     take: q.trim() ? 10 : 100,
     orderBy: { name: 'asc' },
   })
@@ -42,6 +44,9 @@ const CreateCustomerSchema = z.object({
   document: z.string().optional(),
   address: z.string().optional(),
   notes: z.string().optional(),
+  // Tope informativo de crédito (avisa, no bloquea) — política del negocio,
+  // por eso solo encargado/administrador lo pueden fijar.
+  creditLimit: z.number().nonnegative().nullable().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -63,7 +68,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
-  const { name, phone, email, document, address, notes } = parsed.data
+  const { name, phone, email, document, address, notes, creditLimit } = parsed.data
+
+  // Documento duplicado (misma regla que ya aplica PUT /api/customers/[id])
+  const doc = document?.trim()
+  if (doc) {
+    const dup = await db.customer.findFirst({ where: { businessId, document: doc } })
+    if (dup) return NextResponse.json({ error: 'Ya existe un cliente con ese documento' }, { status: 400 })
+  }
+
+  const setCreditLimit = creditLimit !== undefined && isAdmin(session.user as unknown as SessionUser)
 
   const customer = await db.customer.create({
     data: {
@@ -74,8 +88,9 @@ export async function POST(req: NextRequest) {
       address: address || null,
       notes: notes || null,
       businessId,
+      ...(setCreditLimit ? { creditLimit } : {}),
     },
-    select: { id: true, name: true, phone: true, email: true, document: true, address: true, balance: true },
+    select: { id: true, name: true, phone: true, email: true, document: true, address: true, balance: true, creditLimit: true },
   })
 
   return NextResponse.json({ customer }, { status: 201 })

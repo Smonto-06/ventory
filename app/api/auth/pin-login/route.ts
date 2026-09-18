@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { encode } from 'next-auth/jwt'
+import { tieneHorarioAhora } from '@/lib/schedules'
 
 const pinLoginSchema = z.object({
   businessSlug: z.string().min(1, 'Negocio requerido'),
@@ -11,6 +12,40 @@ const pinLoginSchema = z.object({
 
 const LOCK_DURATION_MS = 15 * 60 * 1000
 const MAX_FAILED_ATTEMPTS = 5
+
+// El PIN se compara contra TODOS los usuarios del negocio a la vez, así que
+// el bloqueo por cuenta (más abajo) solo aplica cuando hay un único cajero
+// con PIN — con dos o más, ningún intento fallido queda registrado en
+// ninguna cuenta y no hay freno de fuerza bruta. Este límite por IP cubre
+// ese hueco (y suma una segunda capa incluso cuando sí hay un solo cajero).
+const MAX_INTENTOS_IP = 10
+const VENTANA_IP_MS = 15 * 60 * 1000
+const intentosPorIp = new Map<string, number[]>()
+function limiteIpExcedido(clave: string): boolean {
+  const ahora = Date.now()
+  const previos = (intentosPorIp.get(clave) ?? []).filter((t) => ahora - t < VENTANA_IP_MS)
+  if (previos.length >= MAX_INTENTOS_IP) {
+    intentosPorIp.set(clave, previos)
+    return true
+  }
+  previos.push(ahora)
+  intentosPorIp.set(clave, previos)
+  return false
+}
+
+// El PRIMER valor de X-Forwarded-For lo pone quien hace la petición (se
+// puede falsificar mandando un header propio); el ÚLTIMO es el que agrega
+// el proxy de Vercel a partir de la conexión TCP real, y ese no se puede
+// falsificar — usar el primero dejaba rotar la IP "vista" en cada intento
+// y saltarse el límite de arriba sin ningún esfuerzo.
+function clientIp(request: Request): string {
+  const xff = request.headers.get('x-forwarded-for')
+  if (xff) {
+    const partes = xff.split(',').map((s) => s.trim()).filter(Boolean)
+    if (partes.length) return partes[partes.length - 1]
+  }
+  return request.headers.get('x-real-ip') || 'desconocida'
+}
 
 export async function POST(request: Request) {
   try {
@@ -25,6 +60,14 @@ export async function POST(request: Request) {
     }
 
     const { businessSlug, pin } = parsed.data
+
+    const ip = clientIp(request)
+    if (limiteIpExcedido(`${ip}:${businessSlug}`)) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' },
+        { status: 429 },
+      )
+    }
 
     const business = await db.business.findUnique({
       where: { slug: businessSlug },
@@ -88,19 +131,36 @@ export async function POST(request: Request) {
       // PIN en el negocio: ahí el intento es inequívocamente suyo.
       if (users.length === 1) {
         const [u] = users
-        const failedAttempts = u.failedAttempts + 1
-        await db.user.update({
+        // {increment: 1}, no leer-y-sumar en memoria: mismo arreglo que en
+        // el login normal (lib/auth.ts) — una ráfaga de intentos paralelos
+        // podía pisarse entre sí y nunca activar el bloqueo.
+        const actualizado = await db.user.update({
           where: { id: u.id },
-          data: {
-            failedAttempts,
-            ...(failedAttempts >= MAX_FAILED_ATTEMPTS ? { lockedAt: new Date() } : {}),
-          },
+          data: { failedAttempts: { increment: 1 } },
+          select: { failedAttempts: true },
         })
+        if (actualizado.failedAttempts >= MAX_FAILED_ATTEMPTS) {
+          await db.user.update({ where: { id: u.id }, data: { lockedAt: new Date() } })
+        }
       }
 
       return NextResponse.json(
         { error: 'PIN incorrecto' },
         { status: 401 }
+      )
+    }
+
+    // Horario de trabajo asignado, si el negocio lo exige. ADMIN nunca se
+    // restringe; una sesión ya abierta sigue funcionando aunque el horario
+    // termine — esto solo corre al entrar (mismo chequeo que lib/auth.ts).
+    if (
+      matchedUser.role !== 'ADMIN' &&
+      business.scheduleLoginEnforced &&
+      !(await tieneHorarioAhora(matchedUser.id))
+    ) {
+      return NextResponse.json(
+        { error: 'Fuera de tu horario de trabajo asignado. Contacta al administrador si esto es un error.' },
+        { status: 403 },
       )
     }
 
@@ -138,10 +198,18 @@ export async function POST(request: Request) {
       },
     })
 
-    // Set the session cookie
-    response.cookies.set('next-auth.session-token', token, {
+    // El nombre de la cookie tiene que calcularse EXACTAMENTE como lo hace
+    // NextAuth (next-auth/jwt: secureCookie = NEXTAUTH_URL empieza por
+    // https, o si no, si corre en Vercel) — si no coincide, el middleware y
+    // getServerSession/getCurrentUser (que sí usan el cálculo real de
+    // NextAuth) no encuentran esta cookie y el login por PIN queda roto en
+    // producción (HTTPS) aunque funcione perfecto en local (HTTP), donde
+    // los dos nombres coinciden por casualidad.
+    const secureCookie = process.env.NEXTAUTH_URL?.startsWith('https://') ?? !!process.env.VERCEL
+    const cookieName = secureCookie ? '__Secure-next-auth.session-token' : 'next-auth.session-token'
+    response.cookies.set(cookieName, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: secureCookie,
       sameSite: 'lax',
       path: '/',
       maxAge: 8 * 60 * 60,

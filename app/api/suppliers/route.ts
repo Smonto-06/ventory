@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/get-session'
 import { unauthorized, forbidden, badRequest, serverError, isAdmin } from '@/lib/api-helpers'
+import { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,24 +54,41 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return badRequest(parsed.error.issues[0].message)
 
   try {
+    // Se busca SIN filtrar isActive: el nombre tiene constraint único en BD
+    // (@@unique([businessId, name])) que sí incluye archivados — si el
+    // chequeo aquí solo miraba activos, un nombre igual a uno archivado
+    // pasaba este filtro y luego reventaba el create() con un 500 genérico.
     const dup = await db.supplier.findFirst({
       where: {
         businessId: user.businessId,
         name: { equals: parsed.data.name, mode: 'insensitive' },
-        isActive: true,
       },
     })
-    if (dup) return badRequest('Ya existe un proveedor con ese nombre')
+    if (dup?.isActive) return badRequest('Ya existe un proveedor con ese nombre')
 
-    const supplier = await db.supplier.create({
-      data: {
-        name: parsed.data.name,
-        phone: parsed.data.phone || null,
-        businessId: user.businessId,
-      },
-    })
+    // Un proveedor archivado con el mismo nombre se reactiva en vez de
+    // fallar — mismo criterio que ya usa la creación de compras.
+    const supplier = dup
+      ? await db.supplier.update({
+          where: { id: dup.id },
+          data: { isActive: true, phone: parsed.data.phone || dup.phone },
+        })
+      : await db.supplier.create({
+          data: {
+            name: parsed.data.name,
+            phone: parsed.data.phone || null,
+            businessId: user.businessId,
+          },
+        })
     return NextResponse.json({ supplier }, { status: 201 })
   } catch (error) {
+    // El chequeo de arriba es solo un atajo: dos creaciones con el mismo
+    // nombre casi simultáneas podían pasarlo ambas antes de que cualquiera
+    // insertara/reactivara — sin esto, la que perdía la carrera contra el
+    // constraint único (businessId, name) caía a un 500 genérico.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return badRequest('Ya existe un proveedor con ese nombre')
+    }
     return serverError('POST /api/suppliers', error)
   }
 }

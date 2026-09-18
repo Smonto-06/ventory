@@ -39,6 +39,8 @@ export default function NuevaCompraScreen() {
   const [query, setQuery] = useState('')
   const [provOpen, setProvOpen] = useState(false)
   const [edit, setEdit] = useState<NcItem | null>(null)
+  // Evita doble toque en "Guardar compra" mientras la primera petición sigue en vuelo
+  const [guardando, setGuardando] = useState(false)
 
   const openEditor = (p: Product) => {
     const cost = p.cost || 0
@@ -75,7 +77,17 @@ export default function NuevaCompraScreen() {
   const showProvSuggs = provOpen && provSuggs.length > 0
 
   const ncTotal = s.ncItems.reduce((a, i) => a + (i.total || 0), 0)
-  const canSave = !!s.ncProv.trim() && s.ncItems.length > 0
+  const canSave = !!s.ncProv.trim() && s.ncItems.length > 0 && !guardando
+
+  const guardarCompra = async () => {
+    if (!canSave) return
+    setGuardando(true)
+    try {
+      await s.saveNuevaCompra()
+    } finally {
+      setGuardando(false)
+    }
+  }
   // Productos vendidos por peso: cantidades decimales (kg)
   const isKg = (productId: string) => s.products.find((p) => p.id === productId)?.unitOfMeasure === 'kg'
 
@@ -94,8 +106,27 @@ export default function NuevaCompraScreen() {
 
   const addItem = () => {
     if (!edit || edit.qty <= 0 || edit.unit <= 0) return
-    s.setNcItems([...s.ncItems.filter((i) => i.productId !== edit.productId), edit])
-    setEdit(null)
+    const item = edit
+    const confirmar = () => {
+      s.setNcItems([...s.ncItems.filter((i) => i.productId !== item.productId), item])
+      setEdit(null)
+    }
+    // Aviso (no bloqueo) si el costo digitado se aleja mucho del costo
+    // actual del producto — riesgo típico de tecleo (ej. un cero de más)
+    // que de otra forma queda fijo como el costo oficial sin que nadie lo
+    // note hasta que ya afectó el margen de muchas ventas.
+    const costoActual = s.products.find((p) => p.id === item.productId)?.cost ?? 0
+    const sospechoso = costoActual > 0 && (item.unit > costoActual * 3 || item.unit < costoActual / 3)
+    if (sospechoso) {
+      s.askConfirm({
+        title: 'Costo muy distinto al actual',
+        label: `El costo actual de "${item.name}" es ${s.fmt(costoActual)}. Vas a registrar ${s.fmt(item.unit)} — revisa que no sea un error de tecleo antes de continuar.`,
+        btnLabel: 'Sí, usar este costo',
+        onConfirm: confirmar,
+      })
+      return
+    }
+    confirmar()
   }
 
   const payBtns: Array<['contado' | 'transferencia' | 'credito', string]> = [
@@ -333,9 +364,8 @@ export default function NuevaCompraScreen() {
               {(s.ncItems.length ? 'Poner en espera' : 'Ver esperas') + (s.heldPurchases.length ? ' · ' + s.heldPurchases.length : '')}
             </button>
             <button
-              onClick={() => {
-                if (canSave) s.saveNuevaCompra()
-              }}
+              onClick={guardarCompra}
+              disabled={!canSave}
               className={canSave ? 'v-hover-primary' : undefined}
               style={{
                 width: '100%',
@@ -349,7 +379,7 @@ export default function NuevaCompraScreen() {
                 boxShadow: canSave ? '0 8px 18px -8px #6366F1cc' : undefined,
               }}
             >
-              Guardar compra
+              {guardando ? 'Guardando…' : 'Guardar compra'}
             </button>
           </div>
         </aside>

@@ -26,6 +26,22 @@ class QuoteNoConvertible extends Error {
   }
 }
 
+/** El producto se convirtió en agrupador de variantes justo mientras se procesaba esta venta */
+class ProductNoVendibleError extends Error {
+  constructor(public productName: string) {
+    super(`"${productName}" ya no se puede vender directamente: ahora tiene variantes`)
+    this.name = 'ProductNoVendibleError'
+  }
+}
+
+/** El turno se cerró justo mientras se procesaba esta venta */
+class CashSessionClosedError extends Error {
+  constructor() {
+    super('La caja se cerró mientras se registraba la venta')
+    this.name = 'CashSessionClosedError'
+  }
+}
+
 const ItemSchema = z.object({
   productId: z.string().min(1),
   // Decimal para productos vendidos por peso (p. ej. 0.75 kg)
@@ -61,7 +77,18 @@ const CreateSaleSchema = z.object({
   // Cotización de la que sale esta venta: al cobrarla queda marcada como
   // convertida y ligada a la venta, dentro de la misma transacción.
   quoteId: z.string().optional(),
+  // Generado por el cliente al intentar la venta (no en cada reintento): ver
+  // Sale.clientOpId en el schema.
+  clientOpId: z.string().max(100).optional(),
 })
+
+const SALE_INCLUDE = {
+  items: { include: { product: { select: { id: true, name: true, sku: true, unitOfMeasure: true } } } },
+  payments: true,
+  cashier: { select: { id: true, name: true } },
+  branch: { select: { id: true, name: true } },
+  customer: { select: { id: true, name: true } },
+} satisfies Prisma.SaleInclude
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -81,11 +108,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
-  const { cashSessionId, items, paymentMethod, payments, notes, customerId, quoteId } = parsed.data
+  const { cashSessionId, items, paymentMethod, payments, notes, customerId, quoteId, clientOpId } = parsed.data
   const discount = parsed.data.discountAmount ?? parsed.data.discount
   const discountIsPct = parsed.data.discountAmount !== undefined ? false : parsed.data.discountIsPct
   const businessId = session.user.businessId
   const cashierId = session.user.id
+
+  // Un 5xx puede llegar DESPUÉS de que la venta ya comitió (timeout,
+  // despliegue a mitad de respuesta) — la cola offline la reintenta creyendo
+  // que nunca se registró. Si ya existe una venta con este clientOpId, se
+  // devuelve tal cual (sin repetir folio, descuento de inventario, etc.) en
+  // vez de crear una segunda. Debe ir ANTES de cualquier validación que lea
+  // estado que la venta original ya modificó (stock, cotización, saldo del
+  // cliente) — si no, un reintento del ya-exitoso podía fallar esas
+  // validaciones con el estado ya actualizado y nunca llegar a este atajo.
+  if (clientOpId) {
+    const existing = await db.sale.findFirst({
+      where: { clientOpId, branch: { businessId } },
+      include: SALE_INCLUDE,
+    })
+    if (existing) {
+      return NextResponse.json({ sale: serialize(existing) }, { status: 200 })
+    }
+  }
 
   // Prueba vencida o plan suspendido → no se puede vender
   const planBlock = await requireActiveBusiness(businessId)
@@ -241,6 +286,20 @@ export async function POST(req: NextRequest) {
     }
 
     const sale = await db.$transaction(async (tx) => {
+      // Lock consultivo por turno: serializa esta venta contra un cierre de
+      // caja concurrente (POST /api/cash-registers/[id]/close toma el mismo
+      // lock antes de congelar sus totales). Sin esto, una venta que ya pasó
+      // el chequeo OPEN de arriba podía terminar de comitear justo después de
+      // que el cierre leyera "sus" ventas, quedando fuera de los totales
+      // congelados del turno para siempre. Revalida el estado DESPUÉS de
+      // tomar el lock: si el cierre ganó la carrera, esta venta se aborta
+      // entera en vez de registrarse contra un turno ya cerrado.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSessionId}))`
+      const vigente = await tx.cashSession.findUnique({ where: { id: cashSessionId }, select: { status: true } })
+      if (vigente?.status !== CashSessionStatus.OPEN) {
+        throw new CashSessionClosedError()
+      }
+
       // Consecutivo F-XXXXXX realmente atómico: UPDATE … RETURNING toma el
       // lock de la sucursal, así dos cajas vendiendo al mismo tiempo obtienen
       // números distintos en vez de chocar y perder una de las ventas.
@@ -269,6 +328,7 @@ export async function POST(req: NextRequest) {
           cashierId,
           cashSessionId,
           customerId: customerId || undefined,
+          clientOpId: clientOpId ?? undefined,
         },
       })
 
@@ -297,6 +357,24 @@ export async function POST(req: NextRequest) {
             total: lineTotal,
           },
         })
+
+        // Lock consultivo por producto: convertir este producto en agrupador
+        // de variantes (POST /api/products/[id]/variants) toma el mismo lock
+        // antes de borrar su fila de inventario. Sin esto, esta venta podía
+        // mover stock justo después de esa conversión — `moveStock` recrea la
+        // fila de inventario ya borrada y la deja huérfana y en negativo,
+        // colgada de un producto que ya no se vende. Se revalida DESPUÉS del
+        // lock (no solo con el `products.findMany` de arriba, antes de abrir
+        // la transacción) porque la conversión pudo ganar la carrera mientras
+        // se esperaba.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${item.productId}))`
+        const vigente = await tx.product.findFirst({
+          where: { id: item.productId, status: 'ACTIVE', hasVariants: false },
+          select: { id: true },
+        })
+        if (!vigente) {
+          throw new ProductNoVendibleError(product.name)
+        }
 
         // Descuento ATÓMICO: la BD resta sobre el valor real del momento.
         // Si otra caja consumió el stock justo ahora, la venta completa se
@@ -343,13 +421,7 @@ export async function POST(req: NextRequest) {
 
       return tx.sale.findUnique({
         where: { id: newSale.id },
-        include: {
-          items: { include: { product: { select: { id: true, name: true, sku: true, unitOfMeasure: true } } } },
-          payments: true,
-          cashier: { select: { id: true, name: true } },
-          branch: { select: { id: true, name: true } },
-          customer: { select: { id: true, name: true } },
-        },
+        include: SALE_INCLUDE,
       })
     })
 
@@ -367,6 +439,21 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ sale: serialize(sale) }, { status: 201 })
   } catch (error) {
+    // Dos intentos con el MISMO clientOpId llegaron casi simultáneos (dos
+    // pestañas, un reintento que se cruzó con el original): el que pierde la
+    // carrera del unique constraint no debe fallar la venta — ya existe,
+    // ganada por el otro, y es exactamente lo que este reintento quería.
+    if (
+      clientOpId &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      (error.meta?.target as string[] | undefined)?.includes('clientOpId')
+    ) {
+      const existing = await db.sale.findFirst({ where: { clientOpId, branch: { businessId } }, include: SALE_INCLUDE })
+      if (existing) {
+        return NextResponse.json({ sale: serialize(existing) }, { status: 200 })
+      }
+    }
     // Carrera perdida contra otra venta del mismo producto: nada quedó a medias
     if (error instanceof InsufficientStockError) {
       return NextResponse.json(
@@ -384,6 +471,15 @@ export async function POST(req: NextRequest) {
         { error: 'Esa cotización ya no está disponible: puede estar anulada o ya convertida', code: 'QUOTE_UNAVAILABLE' },
         { status: 409 },
       )
+    }
+    if (error instanceof CashSessionClosedError) {
+      return NextResponse.json(
+        { error: 'La caja se cerró mientras se registraba la venta. Abre un turno y vuelve a intentar.' },
+        { status: 409 },
+      )
+    }
+    if (error instanceof ProductNoVendibleError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
     }
     console.error('[POST /api/sales]', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
@@ -419,6 +515,15 @@ export async function GET(req: NextRequest) {
     ]
   }
 
+  // Sin filtro de fecha, el tope de 100 es para la lista de "ventas
+  // recientes" (Panel, pantalla de Ventas) — cuando SÍ hay un rango acotado
+  // (p. ej. el gráfico de 7 días del Panel), un negocio con más de 100
+  // ventas en esos días veía días truncados/subestimados en el gráfico. Un
+  // rango de fechas ya acota el volumen por sí mismo, así que solo cuando
+  // viene explícito se sube el tope (con un techo razonable para no dejar la
+  // consulta sin límite alguno).
+  const take = dateFrom && dateTo ? 5000 : 100
+
   const sales = await db.sale.findMany({
     where,
     include: {
@@ -430,7 +535,7 @@ export async function GET(req: NextRequest) {
       customer: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
-    take: 100,
+    take,
   })
 
   return NextResponse.json({ sales: serialize(sales) })
