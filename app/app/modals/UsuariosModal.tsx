@@ -107,6 +107,18 @@ export default function UsuariosModal() {
               >
                 Editar
               </button>
+              {u.role !== 'ADMIN' && (
+                <button
+                  onClick={() => {
+                    s.setEditUserId(u.id)
+                    s.openModal('horarios')
+                  }}
+                  className="v-hover-underline"
+                  style={{ fontSize: 13, color: '#6366F1', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Horarios
+                </button>
+              )}
               {!isMe && (
                 <button
                   onClick={() => s.toggleUser(u)}

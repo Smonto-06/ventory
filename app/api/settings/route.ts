@@ -16,6 +16,7 @@ const UpdateSettingsSchema = z.object({
   defaultOpeningAmount: z.number().min(0).optional(),
   allowNegativeStock: z.boolean().optional(),
   barcodeEnabled: z.boolean().optional(),
+  scheduleLoginEnforced: z.boolean().optional(),
   // Datos que aparecen en la factura de venta (vacío = no se imprime esa línea)
   taxId: z.string().trim().max(40).optional(),
   phone: z.string().trim().max(40).optional(),
@@ -45,6 +46,7 @@ export async function GET(req: NextRequest) {
       defaultOpeningAmount: true,
       allowNegativeStock: true,
       barcodeEnabled: true,
+      scheduleLoginEnforced: true,
       taxId: true,
       phone: true,
       address: true,
@@ -108,6 +110,7 @@ export async function PUT(req: NextRequest) {
         defaultOpeningAmount: true,
         allowNegativeStock: true,
         barcodeEnabled: true,
+        scheduleLoginEnforced: true,
         taxId: true,
         phone: true,
         address: true,

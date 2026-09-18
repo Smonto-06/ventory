@@ -21,6 +21,7 @@ import ItemPrecioModal from './modals/ItemPrecioModal'
 import CantidadModal from './modals/CantidadModal'
 import UsuariosModal from './modals/UsuariosModal'
 import UsuarioFormModal from './modals/UsuarioFormModal'
+import HorariosModal from './modals/HorariosModal'
 import AjustesModal from './modals/AjustesModal'
 import AperturaCajaModal from './modals/AperturaCajaModal'
 import AperturaModal from './modals/AperturaModal'
@@ -71,6 +72,8 @@ export default function Modals() {
       return <UsuariosModal />
     case 'usuarioForm':
       return <UsuarioFormModal />
+    case 'horarios':
+      return <HorariosModal />
     case 'ajustes':
       return <AjustesModal />
     case 'aperturaCaja':

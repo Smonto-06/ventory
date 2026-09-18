@@ -4,6 +4,7 @@ import { PrismaAdapter } from '@auth/prisma-adapter'
 import bcrypt from 'bcryptjs'
 import { UserRole } from '@prisma/client'
 import { db } from './db'
+import { tieneHorarioAhora } from './schedules'
 
 
 interface VentoryUser extends User {
@@ -107,6 +108,14 @@ export const authOptions: NextAuthOptions = {
 
         if (!user.emailVerified) {
           throw new Error('Confirma tu correo antes de entrar. Revisa tu bandeja (y el spam).')
+        }
+
+        // Horario de trabajo asignado (Ajustes → Usuarios → Horarios), si el
+        // negocio lo exige. ADMIN nunca se restringe (ver comentario en
+        // Business.scheduleLoginEnforced); una sesión ya abierta sigue
+        // funcionando aunque el horario termine — esto solo corre al entrar.
+        if (user.role !== 'ADMIN' && user.business.scheduleLoginEnforced && !(await tieneHorarioAhora(user.id))) {
+          throw new Error('Fuera de tu horario de trabajo asignado. Contacta al administrador si esto es un error.')
         }
 
         if (user.failedAttempts > 0 || user.lockedAt) {

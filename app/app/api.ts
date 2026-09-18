@@ -283,6 +283,14 @@ export interface AppUser {
   hasPin?: boolean
 }
 
+/** Ventana de horario de trabajo asignada a un empleado (ver Ajustes → Horarios) */
+export interface Schedule {
+  id: string
+  userId: string
+  startsAt: string
+  endsAt: string
+}
+
 export interface PlanInfo {
   status: 'TRIAL' | 'ACTIVE' | 'SUSPENDED'
   trialEndsAt: string | null
@@ -311,6 +319,8 @@ export interface Settings {
   defaultOpeningAmount: number
   allowNegativeStock: boolean
   barcodeEnabled: boolean
+  /** si está prendido, un empleado que no sea ADMIN solo entra dentro de un horario asignado */
+  scheduleLoginEnforced?: boolean
   // Datos impresos en la factura de venta
   taxId?: string | null
   phone?: string | null
@@ -528,6 +538,12 @@ export const api = {
   /** pin=null quita el PIN de acceso rápido */
   setUserPin: (userId: string, pin: string | null) =>
     post<{ message: string }>('/api/users/set-pin', { userId, pin }),
+
+  // Horarios de trabajo (Ajustes → Usuarios → Horarios)
+  schedules: (userId: string) => get<{ schedules: Schedule[] }>(`/api/schedules?userId=${userId}`),
+  createSchedule: (data: { userId: string; date: string; startTime: string; endTime: string }) =>
+    post<{ schedule: Schedule }>('/api/schedules', data),
+  deleteSchedule: (id: string) => del<{ ok: boolean }>(`/api/schedules/${id}`),
 
   settings: () => get<{ settings: Settings }>('/api/settings'),
   // Pago del plan por Wompi

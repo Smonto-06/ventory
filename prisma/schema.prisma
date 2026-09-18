@@ -111,6 +111,13 @@ model Business {
   isActive             Boolean @default(true)
   allowNegativeStock   Boolean @default(false)
   barcodeEnabled       Boolean @default(true)
+  /// Si está activo, un empleado que no sea ADMIN solo puede iniciar sesión
+  /// (login normal o por PIN) dentro de un EmployeeSchedule asignado para
+  /// ese momento — ver lib/schedules.ts. Apagado por defecto: no restringe
+  /// nada hasta que un administrador lo prenda en Ajustes. Una sesión ya
+  /// abierta sigue funcionando aunque el horario termine; solo se revisa al
+  /// momento de entrar.
+  scheduleLoginEnforced Boolean @default(false)
   // IVA incluido en el precio: desglose informativo = total × pct / (100 + pct)
   ivaPct               Decimal @default(0) @db.Decimal(5, 2)
   defaultOpeningAmount Decimal @default(0) @db.Decimal(12, 2)
@@ -266,11 +273,30 @@ model User {
   saleReturns        SaleReturn[]
   heldSales          HeldSale[]
   heldPurchases      HeldPurchase[]
+  schedules          EmployeeSchedule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("users")
+}
+
+/// Ventana de horario de trabajo asignada a un empleado (fecha + hora de
+/// entrada/salida, guardadas como el instante UTC real — ver
+/// lib/schedules.ts). Sin relación con CashSession (el "turno" de caja): un
+/// EmployeeSchedule es horario laboral, no un turno de cajón abierto/cerrado.
+model EmployeeSchedule {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startsAt DateTime
+  endsAt   DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, startsAt])
+  @@map("employee_schedules")
 }
 
 // ─── Products & Inventory ───────────────────────────────────────────────────

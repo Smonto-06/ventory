@@ -111,6 +111,7 @@ export type ModalId =
   | 'cantidad'
   | 'usuarios'
   | 'usuarioForm'
+  | 'horarios'
   | 'ajustes'
   | 'aperturaCaja'
   | 'apertura'

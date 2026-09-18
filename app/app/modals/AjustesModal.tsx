@@ -99,6 +99,7 @@ export default function AjustesModal() {
   const [resumenDiario, setResumenDiario] = useState(!!s.settings?.notifyDailySummary)
   const [avisoStock, setAvisoStock] = useState(s.settings?.notifyLowStock !== false)
   const [correoAviso, setCorreoAviso] = useState(s.settings?.notifyEmail ?? '')
+  const [horarioObligatorio, setHorarioObligatorio] = useState(!!s.settings?.scheduleLoginEnforced)
   const [probando, setProbando] = useState(false)
   const [printerState, setPrinterState] = useState<string | null>(printerPref())
   // Gestión de sucursales
@@ -548,6 +549,42 @@ export default function AjustesModal() {
           <button onClick={() => s.openModal('auditoria')} className="v-hover-bg" style={{ ...rowBtnStyle, marginTop: 8 }}>
             Registro de actividad <span style={{ color: '#6366F1' }}>→</span>
           </button>
+          {esDueno && (
+            <button
+              onClick={() => setHorarioObligatorio(!horarioObligatorio)}
+              style={{
+                marginTop: 8,
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '12px 14px',
+                borderRadius: 11,
+                border: `1.5px solid ${horarioObligatorio ? '#6366F1' : 'var(--border)'}`,
+                background: horarioObligatorio ? '#EEF0FE' : 'var(--surface)',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <span
+                style={{
+                  width: 20, height: 20, borderRadius: 6, flex: 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: horarioObligatorio ? '#6366F1' : 'var(--input)',
+                  border: horarioObligatorio ? 'none' : '1.5px solid var(--border)',
+                  color: '#fff', fontSize: 12, fontWeight: 800,
+                }}
+              >
+                {horarioObligatorio ? '✓' : ''}
+              </span>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700 }}>Restringir inicio de sesión por horario</span>
+                <span style={{ display: 'block', fontSize: 12.3, color: 'var(--muted)', marginTop: 2, lineHeight: 1.45 }}>
+                  Un cajero o encargado solo entra dentro de un horario asignado (Usuarios → Horarios). El administrador nunca se restringe, y una sesión ya abierta sigue funcionando aunque el horario termine.
+                </span>
+              </span>
+            </button>
+          )}
         </>
       )}
 
@@ -651,6 +688,7 @@ export default function AjustesModal() {
               notifyDailySummary: resumenDiario,
               notifyLowStock: avisoStock,
               notifyEmail: correoAviso.trim(),
+              scheduleLoginEnforced: horarioObligatorio,
             })
           }
           className="v-hover-primary"

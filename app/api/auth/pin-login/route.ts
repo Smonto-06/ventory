@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { encode } from 'next-auth/jwt'
+import { tieneHorarioAhora } from '@/lib/schedules'
 
 const pinLoginSchema = z.object({
   businessSlug: z.string().min(1, 'Negocio requerido'),
@@ -146,6 +147,20 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'PIN incorrecto' },
         { status: 401 }
+      )
+    }
+
+    // Horario de trabajo asignado, si el negocio lo exige. ADMIN nunca se
+    // restringe; una sesión ya abierta sigue funcionando aunque el horario
+    // termine — esto solo corre al entrar (mismo chequeo que lib/auth.ts).
+    if (
+      matchedUser.role !== 'ADMIN' &&
+      business.scheduleLoginEnforced &&
+      !(await tieneHorarioAhora(matchedUser.id))
+    ) {
+      return NextResponse.json(
+        { error: 'Fuera de tu horario de trabajo asignado. Contacta al administrador si esto es un error.' },
+        { status: 403 },
       )
     }
 
